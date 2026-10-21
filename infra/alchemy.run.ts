@@ -99,6 +99,29 @@ export default Alchemy.Stack(
       AWS.SES.EmailIdentity(`Shared-${domain}`, { emailIdentity: domain }),
     );
 
-    return { apiUrl: api.functionUrl, tableName: table.tableName, spoolBucket: spool.bucketName };
+    // What `Transport.ses` (`@alias/aws`) needs: SESv2 `SendEmail` with raw content, from the shared
+    // domains only. Both actions, as Alchemy's own `SES.SendEmail` binding grants for raw sends.
+    // Roadmap phase 3 attaches it to the inbound Lambda; custom domains add their identity ARNs.
+    const sendMail = yield* AWS.IAM.Policy("SendMail", {
+      description: "Send forwarded mail through SES from the shared domains",
+      policyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Sid: "SendFromSharedDomains",
+            Action: ["ses:SendEmail", "ses:SendRawEmail"],
+            Resource: sharedDomains.map((domain) => `arn:aws:ses:eu-west-1:*:identity/${domain}`),
+          },
+        ],
+      },
+    });
+
+    return {
+      apiUrl: api.functionUrl,
+      tableName: table.tableName,
+      spoolBucket: spool.bucketName,
+      sendMailPolicyArn: sendMail.policyArn,
+    };
   }),
 );

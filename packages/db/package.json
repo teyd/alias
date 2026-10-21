@@ -1,0 +1,29 @@
+{
+  "name": "@alias/db",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/support/index.ts"
+  },
+  "scripts": {
+    "test": "vp test",
+    "test:unit": "vp test --project db:fakecloud",
+    "test:fakecloud": "vp test --project db:fakecloud",
+    "test:dynamodb-local": "vp test --project db:dynamodb-local"
+  },
+  "dependencies": {
+    "@alias/aws": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alias/aws-emulators": "workspace:*",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

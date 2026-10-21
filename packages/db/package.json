@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@alias/aws": "workspace:*",
+    "@alias/core": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "effect": "catalog:"
   },

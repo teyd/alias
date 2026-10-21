@@ -13,6 +13,8 @@ import * as Effect from "effect/Effect";
 
 const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
+// Passkeys are bound to the first shared domain, which serves the web app.
+const appDomain = sharedDomains[0] ?? "alias.test";
 const spoolBucketName = `alias-spool-${stage}`;
 const tableName = `alias-${stage}`;
 // Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
@@ -71,7 +73,11 @@ export default Alchemy.Stack(
       architecture: "arm64",
       memorySize: 256,
       functionUrl: true,
-      env: { ALIAS_TABLE_NAME: table.tableName },
+      env: {
+        ALIAS_TABLE_NAME: table.tableName,
+        ALIAS_RP_ID: appDomain,
+        ALIAS_WEB_ORIGIN: `https://${appDomain}`,
+      },
     });
     yield* api.bind("DataAccess", {
       policyStatements: [

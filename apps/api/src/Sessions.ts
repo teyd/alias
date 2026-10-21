@@ -1,0 +1,80 @@
+import { Authentication, CurrentUser, Unauthenticated, sessionCookie } from "@alias/contracts";
+import { SessionRepo, type UserRepo } from "@alias/db";
+import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { Base64Url, Hex } from "effect/encoding";
+import { HttpApiBuilder } from "effect/http-api";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
+
+const SESSION_LIFETIME = Duration.days(30);
+
+/** `SameSite=Strict` keeps the cookie off cross-site requests, which is the CSRF defence. */
+const cookieOptions = { path: "/", sameSite: "strict", secure: true, httpOnly: true } as const;
+
+/** Sessions are stored under a hash of the token, so the table never holds a usable cookie. */
+const sessionId = (crypto: Crypto.Crypto, token: string) =>
+  crypto.digest("SHA-256", new TextEncoder().encode(token)).pipe(Effect.map(Hex.encode));
+
+/** 256 random bits; the cookie value. */
+const newToken = (crypto: Crypto.Crypto) => Effect.map(crypto.randomBytes(32), Base64Url.encode);
+
+/** Creates a session for the user and sets its cookie on the response being built. */
+export const start = Effect.fn("Sessions.start")(function* (user: UserRepo.User) {
+  const crypto = yield* Crypto.Crypto;
+  const sessions = yield* SessionRepo.SessionRepo;
+  const token = yield* newToken(crypto);
+  const now = yield* DateTime.now;
+  yield* sessions.create({
+    id: yield* sessionId(crypto, token),
+    userId: user.id,
+    username: user.username,
+    createdAt: now,
+    expiresAt: DateTime.addDuration(now, SESSION_LIFETIME),
+  });
+  yield* HttpApiBuilder.securitySetCookie(sessionCookie, Redacted.make(token), {
+    ...cookieOptions,
+    maxAge: SESSION_LIFETIME,
+  });
+  return { userId: user.id, username: user.username };
+});
+
+/** Deletes the request's session, if it has one, and expires the cookie either way. */
+export const end = Effect.fn("Sessions.end")(function* () {
+  const crypto = yield* Crypto.Crypto;
+  const sessions = yield* SessionRepo.SessionRepo;
+  const token = Redacted.value(yield* HttpApiBuilder.securityDecode(sessionCookie));
+  if (Str.isNonEmpty(token)) {
+    yield* sessions.delete(yield* sessionId(crypto, token));
+  }
+  yield* HttpApiBuilder.securitySetCookie(sessionCookie, "", {
+    ...cookieOptions,
+    maxAge: Duration.zero,
+  });
+});
+
+/** The server side of `Authentication`: cookie → live session → `CurrentUser`. */
+export const authenticationLayer = Layer.effect(
+  Authentication,
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const sessions = yield* SessionRepo.SessionRepo;
+    return Authentication.of({
+      session: Effect.fn("Authentication.session")(function* (httpEffect, { credential }) {
+        const token = Redacted.value(credential);
+        if (Str.isEmpty(token)) return yield* new Unauthenticated();
+        const id = yield* Effect.orDie(sessionId(crypto, token));
+        const session = yield* Effect.orDie(sessions.find(id));
+        if (Option.isNone(session)) return yield* new Unauthenticated();
+        return yield* Effect.provideService(httpEffect, CurrentUser, {
+          userId: session.value.userId,
+          username: session.value.username,
+        });
+      }),
+    });
+  }),
+);

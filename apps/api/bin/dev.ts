@@ -1,17 +1,23 @@
 /**
  * The API for `pnpm dev`. It runs the real Lambda handler behind the function URL emulator, on
- * the persistent fakecloud that `scripts/dev.ts` starts, and seeds one demo alias.
+ * the persistent fakecloud that `scripts/dev.ts` starts, and seeds one demo alias. Passkeys are
+ * bound to `localhost` and the Vite dev server's origin, which proxies `/v1` here.
  */
 import { AliasRepo, Dynamo, Table } from "@alias/db";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { makeFunctionUrlHandler } from "../src/index.ts";
+import { makeFunctionUrlHandler, RelyingParty } from "../src/index.ts";
 
 const port = Number(process.env.ALIAS_API_PORT ?? 8787);
 const dynamoUrl = `http://127.0.0.1:${process.env.ALIAS_FAKECLOUD_PORT ?? 4566}`;
 const database = Dynamo.emulator(dynamoUrl, "alias");
+const relyingParty = RelyingParty.layer({
+  id: "localhost",
+  origin: `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`,
+});
 
 const seed = Effect.fn("api.dev.seed")(function* () {
   yield* Table.ensure();
@@ -33,7 +39,7 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
     Effect.provide(database),
   );
-  const { handle } = makeFunctionUrlHandler(database);
+  const { handle } = makeFunctionUrlHandler(Layer.merge(database, relyingParty));
   const server = yield* FunctionUrlServer.make({
     port,
     handler: (event) => Effect.runPromise(handle(event)),

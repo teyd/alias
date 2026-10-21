@@ -1,5 +1,6 @@
-import { makeFunctionUrlHandler } from "@alias/api";
-import { AliasRepo } from "@alias/db";
+import { RelyingParty, makeFunctionUrlHandler } from "@alias/api";
+import { TestAuthenticator } from "@alias/api/testing";
+import { AliasRepo, type Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { AwsClient, Inbound, SesEvent } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
@@ -25,28 +26,25 @@ const aws = Layer.unwrap(
 const spoolBucket = "alias-spool";
 const spool = Layer.effectDiscard(Inbound.ensureSpool(spoolBucket)).pipe(Layer.provide(aws));
 const database = freshTable();
+const origin = "https://alias.test";
 
-const api = Layer.unwrap(
-  Effect.gen(function* () {
-    const context = yield* Layer.build(database);
-    const { handle, dispose } = makeFunctionUrlHandler(Layer.succeedContext(context));
-    yield* Effect.addFinalizer(() => Effect.promise(dispose));
-    yield* AliasRepo.make().pipe(
-      Effect.flatMap((repo) =>
-        repo.insert({
-          id: "al_shop",
-          userId: "usr_1",
-          domain: "user1.alias.test",
-          localPart: "shop",
-          mode: "forward",
-          createdAt: 0,
-        }),
-      ),
-      Effect.provide(context),
-    );
-    return FunctionUrlServer.layer({ handler: (event) => Effect.runPromise(handle(event)) });
-  }),
-);
+/** The real API Lambda behind the function URL emulator. Tests seed aliases through `AliasRepo`. */
+const api = Layer.merge(
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const context = yield* Effect.context<Dynamo.Database>();
+      const { handle, dispose } = makeFunctionUrlHandler(
+        Layer.merge(
+          Layer.succeedContext(context),
+          RelyingParty.layer({ id: "alias.test", origin }),
+        ),
+      );
+      yield* Effect.addFinalizer(() => Effect.promise(dispose));
+      return FunctionUrlServer.layer({ handler: (event) => Effect.runPromise(handle(event)) });
+    }),
+  ),
+  AliasRepo.layer,
+).pipe(Layer.provide(database));
 
 const ses = SesEmulator.layer({
   verifiedDomains: ["alias.test"],
@@ -69,23 +67,64 @@ const stack = Layer.mergeAll(api, ses, aws).pipe(
   Layer.provide([NodeCrypto.layer, FakeCloud.layer()]),
 );
 
-const getJson = (path: string) =>
+/** A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. */
+const call = (path: string, init: { readonly body?: Schema.Json; readonly cookie?: string } = {}) =>
   Effect.gen(function* () {
     const { url } = yield* FunctionUrlServer.FunctionUrlServer;
-    const response = yield* Effect.promise(() => fetch(`${url}${path}`));
-    return { status: response.status, body: yield* Effect.promise(() => response.json()) };
+    const headers = new Headers({ "content-type": "application/json", origin });
+    if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+    const request: RequestInit = { method: init.body === undefined ? "GET" : "POST", headers };
+    if (init.body !== undefined) request.body = JSON.stringify(init.body);
+    const response = yield* Effect.promise(() => fetch(`${url}${path}`, request));
+    const text = yield* Effect.promise(() => response.text());
+    return {
+      status: response.status,
+      body: text === "" ? null : JSON.parse(text),
+      cookies: response.headers.getSetCookie(),
+    };
+  });
+
+/** Signs up with a fresh software passkey and returns the session cookie and user ID. */
+const signUp = (username: string) =>
+  Effect.gen(function* () {
+    const authenticator = TestAuthenticator.make(origin);
+    const started = yield* call("/v1/auth/register/options", { body: { username } });
+    const registered = yield* call("/v1/auth/register", {
+      body: {
+        challengeId: started.body.challengeId,
+        credential: authenticator.create(started.body.options),
+      },
+    });
+    expect(registered.status).toBe(200);
+    const cookie = (registered.cookies[0] ?? "").split(";")[0] ?? "";
+    return { cookie, userId: String(registered.body.userId) };
   });
 
 describe("emulated stack", () => {
   it.layer(stack, { timeout: 30_000 })((it) => {
     it.effect("serves the API over a function URL", () =>
       Effect.gen(function* () {
-        expect(yield* getJson("/health")).toEqual({ status: 200, body: { status: "ok" } });
+        expect(yield* call("/health")).toMatchObject({ status: 200, body: { status: "ok" } });
       }),
     );
 
-    it.effect("receives mail for an alias and resolves it through the API", () =>
+    it.effect("signs up with a passkey, receives mail for an alias and resolves it", () =>
       Effect.gen(function* () {
+        const { cookie, userId } = yield* signUp("shopper");
+        expect(yield* call("/v1/me", { cookie })).toMatchObject({
+          status: 200,
+          body: { userId, username: "shopper" },
+        });
+        const aliases = yield* AliasRepo.AliasRepo;
+        yield* aliases.insert({
+          id: "al_shop",
+          userId,
+          domain: "user1.alias.test",
+          localPart: "shop",
+          mode: "forward",
+          createdAt: 0,
+        });
+
         const emulator = yield* SesEmulator.SesEmulator;
         yield* Effect.tryPromise(() =>
           createTransport({
@@ -110,7 +149,8 @@ describe("emulated stack", () => {
         const raw = yield* Inbound.readMessage(spoolBucket, record?.ses.mail.messageId ?? "");
         expect(new TextDecoder().decode(raw)).toContain("Subject: Order confirmed");
 
-        expect(yield* getJson(`/v1/aliases/${domain}/${local}`)).toEqual({
+        expect(yield* call(`/v1/aliases/${domain}/${local}`)).toMatchObject({ status: 401 });
+        expect(yield* call(`/v1/aliases/${domain}/${local}`, { cookie })).toMatchObject({
           status: 200,
           body: {
             id: "al_shop",
@@ -124,7 +164,8 @@ describe("emulated stack", () => {
 
     it.effect("answers unknown aliases with the typed 404", () =>
       Effect.gen(function* () {
-        const { status, body } = yield* getJson("/v1/aliases/alias.test/nobody");
+        const { cookie } = yield* signUp("visitor");
+        const { status, body } = yield* call("/v1/aliases/alias.test/nobody", { cookie });
         expect(status).toBe(404);
         expect(body).toMatchObject({ _tag: "AliasNotFound" });
       }),

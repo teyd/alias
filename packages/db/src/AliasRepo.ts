@@ -1,9 +1,11 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { DatabaseError, databaseError } from "./DatabaseError.ts";
@@ -21,6 +23,8 @@ export const Alias = Schema.Struct({
   mode: AliasMode,
   isActive: Schema.Boolean,
   createdAt: Schema.Number,
+  forwardedCount: Schema.Number,
+  blockedCount: Schema.Number,
 });
 export type Alias = typeof Alias.Type;
 
@@ -37,6 +41,25 @@ export class AliasTaken extends Schema.TaggedError<AliasTaken>()("AliasTaken", {
   address: Schema.String,
 }) {}
 
+/** An owned alias. Mutations name the owner so they can't touch someone else's alias. */
+interface OwnedAddress {
+  readonly userId: string;
+  readonly domain: string;
+  readonly localPart: string;
+}
+
+interface AliasChanges {
+  readonly mode?: AliasMode;
+  readonly isActive?: boolean;
+}
+
+type Counter = "forwarded" | "blocked";
+
+/** The alias doesn't exist, or (for owned mutations) belongs to another user. */
+export class NoSuchAlias extends Schema.TaggedError<NoSuchAlias>()("NoSuchAlias", {
+  address: Schema.String,
+}) {}
+
 export class AliasRepo extends Context.Service<
   AliasRepo,
   {
@@ -48,6 +71,18 @@ export class AliasRepo extends Context.Service<
     ) => Effect.Effect<Option.Option<Alias>, DatabaseError>;
     /** Oldest first. */
     readonly listByUser: (userId: string) => Effect.Effect<ReadonlyArray<Alias>, DatabaseError>;
+    /** Applies the given changes and returns the alias as stored afterwards. */
+    readonly update: (
+      address: OwnedAddress,
+      changes: AliasChanges,
+    ) => Effect.Effect<Alias, NoSuchAlias | DatabaseError>;
+    readonly delete: (address: OwnedAddress) => Effect.Effect<void, NoSuchAlias | DatabaseError>;
+    /** Atomically adds one to a counter. Never recreates a deleted alias. */
+    readonly increment: (
+      domain: string,
+      localPart: string,
+      counter: Counter,
+    ) => Effect.Effect<void, NoSuchAlias | DatabaseError>;
   }
 >()("@alias/db/AliasRepo") {}
 
@@ -72,7 +107,22 @@ const AliasItem = Schema.Struct({
   mode: Attribute.S,
   isActive: Attribute.BOOL,
   createdAt: Attribute.N,
+  forwardedCount: Attribute.N,
+  blockedCount: Attribute.N,
 });
+
+const counterAttribute = { forwarded: "forwardedCount", blocked: "blockedCount" } as const;
+
+const formatAddress = (domain: string, localPart: string) =>
+  `${localPart.toLowerCase()}@${domain.toLowerCase()}`;
+
+/** Maps a failed condition (missing or not owned) to `NoSuchAlias`. */
+const missingOn =
+  (operation: string, domain: string, localPart: string) =>
+  <E>(error: E) =>
+    P.isTagged(error, "ConditionalCheckFailedException")
+      ? new NoSuchAlias({ address: formatAddress(domain, localPart) })
+      : databaseError(operation)(error);
 
 const decodeItem = Schema.decodeUnknownEffect(AliasItem);
 const decodeFields = Schema.decodeUnknownEffect(Alias);
@@ -104,6 +154,8 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
           mode: { S: alias.mode },
           isActive: { BOOL: true },
           createdAt: { N: String(alias.createdAt) },
+          forwardedCount: { N: "0" },
+          blockedCount: { N: "0" },
         },
         ConditionExpression: "attribute_not_exists(pk)",
       }).pipe(
@@ -147,6 +199,72 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
           Stream.runCollect,
           Effect.provide(client),
         ),
+
+    update: (address, changes) => {
+      const values = R.getSomes<string, DynamoDB.AttributeValue>({
+        mode: Option.map(Option.fromUndefinedOr(changes.mode), (mode) => ({ S: mode })),
+        isActive: Option.map(Option.fromUndefinedOr(changes.isActive), (isActive) => ({
+          BOOL: isActive,
+        })),
+      });
+      const names = R.keys(values);
+      return DynamoDB.updateItem({
+        TableName: table.name,
+        Key: addressKey(address.domain, address.localPart),
+        // With nothing to change, a no-op SET still checks ownership and returns the item.
+        UpdateExpression: Arr.match(names, {
+          onEmpty: () => "SET userId = userId",
+          onNonEmpty: (list) =>
+            `SET ${Arr.join(
+              Arr.map(list, (name) => `#${name} = :${name}`),
+              ", ",
+            )}`,
+        }),
+        ConditionExpression: "userId = :userId",
+        // Placeholders keep attribute names clear of DynamoDB's reserved words.
+        ...Arr.match(names, {
+          onEmpty: () => ({}),
+          onNonEmpty: (list) => ({
+            ExpressionAttributeNames: R.fromEntries(Arr.map(list, (name) => [`#${name}`, name])),
+          }),
+        }),
+        ExpressionAttributeValues: {
+          ":userId": { S: address.userId },
+          ...R.mapKeys(values, (name) => `:${name}`),
+        },
+        ReturnValues: "ALL_NEW",
+      }).pipe(
+        Effect.mapError(missingOn("UpdateItem", address.domain, address.localPart)),
+        Effect.flatMap((result) => decodeAlias({ ...result.Attributes })),
+        Effect.provide(client),
+      );
+    },
+
+    delete: (address) =>
+      DynamoDB.deleteItem({
+        TableName: table.name,
+        Key: addressKey(address.domain, address.localPart),
+        ConditionExpression: "userId = :userId",
+        ExpressionAttributeValues: { ":userId": { S: address.userId } },
+      }).pipe(
+        Effect.asVoid,
+        Effect.mapError(missingOn("DeleteItem", address.domain, address.localPart)),
+        Effect.provide(client),
+      ),
+
+    increment: (domain, localPart, counter) =>
+      DynamoDB.updateItem({
+        TableName: table.name,
+        Key: addressKey(domain, localPart),
+        UpdateExpression: "ADD #counter :one",
+        ConditionExpression: "attribute_exists(pk)",
+        ExpressionAttributeNames: { "#counter": counterAttribute[counter] },
+        ExpressionAttributeValues: { ":one": { N: "1" } },
+      }).pipe(
+        Effect.asVoid,
+        Effect.mapError(missingOn("UpdateItem", domain, localPart)),
+        Effect.provide(client),
+      ),
   });
 });
 

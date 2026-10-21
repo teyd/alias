@@ -1,0 +1,30 @@
+{
+  "name": "@alias/api",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vp test",
+    "test:unit": "vp test",
+    "dev": "node bin/dev.ts"
+  },
+  "dependencies": {
+    "@alias/aws": "workspace:*",
+    "@alias/contracts": "workspace:*",
+    "@alias/db": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alias/aws-emulators": "workspace:*",
+    "@alias/lambda-emulator": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

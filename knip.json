@@ -6,6 +6,9 @@
     ".": {
       "entry": ["scripts/*.ts!"]
     },
+    "apps/api": {
+      "entry": ["src/handler.ts!", "bin/*.ts"]
+    },
     "tools/aws-emulators": {
       "entry": ["bin/*.ts"]
     },

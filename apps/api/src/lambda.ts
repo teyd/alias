@@ -1,0 +1,13 @@
+import type { Dynamo } from "@alias/db";
+import { FunctionUrl } from "@alias/aws";
+import type * as Layer from "effect/Layer";
+import { webHandler } from "./http.ts";
+
+/**
+ * The API as a function URL handler: event in, result out, both as Effects so tests and
+ * emulators can drive it. `handler.ts` is the thin Lambda entrypoint around it.
+ */
+export const makeFunctionUrlHandler = (database: Layer.Layer<Dynamo.Database>) => {
+  const web = webHandler(database);
+  return { handle: FunctionUrl.handle(web.handler), dispose: web.dispose };
+};

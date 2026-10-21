@@ -1,0 +1,46 @@
+/**
+ * The API for `pnpm dev`: the real Lambda handler behind the function URL emulator, on the
+ * persistent fakecloud started by `scripts/dev.ts`. Seeds one demo alias.
+ */
+import { AliasRepo, Dynamo, Table } from "@alias/db";
+import { FunctionUrlServer } from "@alias/lambda-emulator";
+import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import { makeFunctionUrlHandler } from "../src/index.ts";
+
+const port = Number(process.env.ALIAS_API_PORT ?? 8787);
+const dynamoUrl = `http://127.0.0.1:${process.env.ALIAS_FAKECLOUD_PORT ?? 4566}`;
+const database = Dynamo.emulator(dynamoUrl, "alias");
+
+const seed = Effect.fn("api.dev.seed")(function* () {
+  yield* Table.ensure();
+  const repo = yield* AliasRepo.make();
+  yield* repo
+    .insert({
+      id: "al_demo",
+      userId: "usr_demo",
+      domain: "alias.test",
+      localPart: "shop",
+      mode: "forward",
+      createdAt: 0,
+    })
+    .pipe(Effect.catchTag("AliasTaken", () => Effect.void));
+});
+
+const serve = Effect.fn("api.dev")(function* () {
+  yield* seed().pipe(
+    Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
+    Effect.provide(database),
+  );
+  const { handle } = makeFunctionUrlHandler(database);
+  const server = yield* FunctionUrlServer.make({
+    port,
+    handler: (event) => Effect.runPromise(handle(event)),
+    functionName: "alias-api",
+  });
+  yield* Effect.logInfo(`api (function URL emulator) on ${server.url}, DynamoDB at ${dynamoUrl}`);
+  yield* Effect.never;
+});
+
+NodeRuntime.runMain(serve().pipe(Effect.scoped, Effect.provide(NodeCrypto.layer)));

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [".agents/**"],
+  "ignoreBinaries": ["mise"],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.ts!"]
+    }
+  },
+  "includeEntryExports": true
+}

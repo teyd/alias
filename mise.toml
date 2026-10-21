@@ -1,0 +1,10 @@
+# Toolchain for every checkout, CI job and devcontainer: `mise install` (run by `pnpm agent:setup`).
+# Versions are locked with checksums in mise.lock; update both with `mise up --bump && mise lock`.
+[tools]
+node = "24" # matches the Lambda runtime (nodejs24.x); package.json engines: >=24.11
+pnpm = "12.14.0" # must equal devEngines.packageManager in package.json
+java = "temurin-17" # Amazon DynamoDB Local (reference DynamoDB emulator)
+"github:faiscadev/fakecloud" = "0.51.0" # S3 + DynamoDB emulator (single binary, no Docker)
+
+[settings]
+lockfile = true

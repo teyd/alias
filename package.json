@@ -1,0 +1,34 @@
+{
+  "name": "alias",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "agent:setup": "mise trust --yes --quiet && mise exec -- node scripts/agent-setup.ts",
+    "dev": "mise exec -- node scripts/dev.ts",
+    "check": "vp check && knip --no-progress",
+    "test": "mise exec -- vp run --filter '!alias' test",
+    "test:unit": "mise exec -- vp run --filter '!alias' test:unit",
+    "test:affected": "mise exec -- node scripts/affected.ts test",
+    "ready": "pnpm check && mise exec -- vp run --filter '!alias' test && vp run -r build",
+    "prepare": "vp config"
+  },
+  "devDependencies": {
+    "@mpsuesser/oxlint-plugin-effect": "catalog:",
+    "@types/node": "catalog:",
+    "knip": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.14.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  }
+}

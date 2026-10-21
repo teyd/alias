@@ -1,0 +1,23 @@
+{
+  "name": "alias",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "curl -fsSL https://mise.run | sh && echo 'eval \"$(~/.local/bin/mise activate bash)\"' >> ~/.bashrc && ~/.local/bin/mise trust --yes && ~/.local/bin/mise install && ~/.local/bin/mise exec -- pnpm agent:setup",
+  "forwardPorts": [41000, 41001, 41002, 41007],
+  "portsAttributes": {
+    "41000": {
+      "label": "web"
+    },
+    "41001": {
+      "label": "api"
+    },
+    "41002": {
+      "label": "smtp (ses-emulator)"
+    },
+    "41007": {
+      "label": "aws (fakecloud: S3 + DynamoDB)"
+    }
+  }
+}

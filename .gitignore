@@ -1,0 +1,28 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.log
+*.local
+.DS_Store
+.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# env
+.env
+.env.*
+!.env.example
+
+# local runtime state (per worktree)
+.dev/
+.alchemy/
+playwright-report/
+test-results/
+
+# agent worktrees
+.claude/worktrees/
+
+# DynamoDB Local scratch file (tests run it in a temp dir; this catches manual runs)
+dynamodb-local-metadata.json

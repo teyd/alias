@@ -416,9 +416,9 @@ Containers and microVMs remain optional wrappers: the devcontainer as a spec for
 - **Project skills** in `.agents/skills/alias-*`, symlinked into `.claude/skills`:
   - `alias-testing` (tiers, hermetic rules, known issues);
   - `alias-dev-stack` (ports, local D1, sending test mail).
-- **pstack** (vendored at project level, pinned by hash in `skills-lock.json`, MIT) provides 21 workflow skills plus the 24 `principle-*` skills that `/poteto-mode` reads, and the `poteto-agent` subagent.
-  - Kept: `poteto-mode`, `poteto-help`, `setup-pstack`, `how`, `why`, `teach`, `architect`, `sharpen`, `interrogate`, `blast-radius`, `tdd`, `create-/maintain-verification-skill`, `swarm`, `arena`, `reflect`, `correct`, `show-me-your-work`, `unslop`, `technical-writing`, `typescript-best-practices`.
-  - Dropped as personal, Cursor-specific or off-topic: `automate-me`, `make-bot-ui`, `bro`, `ketchup`, `in-your-own-words`, `no-comments`, `benchmark-checklist`, formal verification, `figure-it-out`, `recall`.
+- **pstack** (vendored at project level, pinned by hash in `skills-lock.json`, MIT) provides all 56 upstream skills, including the 24 `principle-*` skills that `/poteto-mode` reads, and the `poteto-agent` subagent. The repo installs the full set because `poteto-mode` routes to skills such as `figure-it-out`, `no-comments`, `benchmark-checklist` and `ketchup`, and the pstack README says it needs most of the others. A partial install broke those routes.
+  - Install or update with `pnpm dlx skills add backnotprop/pstack -a codex -a claude-code`. That puts each skill in `.agents/skills` and links it into `.claude/skills`. With `-a claude-code` alone, the CLI copies every skill into `.claude/skills` instead.
+  - `deslop`, `control-cli` and `control-ui` ship in Cursor's `cursor-team-kit` plugin, not in pstack, so they stay unavailable here.
   - Restore with `pnpm dlx skills experimental_install`.
 - **Lint fence (today).** It bans `any` and bans `console.*` outside scripts, and it prefers Vite+ imports. Planned additions: no `Effect.runPromise` outside entrypoints, no `Date.now`/`Math.random` in `core`, and a `debt.md` ledger.
 - **CI** (`.github/workflows/ci.yml`) runs `check`, a per-package `test` matrix, and a web `build`.

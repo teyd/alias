@@ -1,0 +1,27 @@
+{
+  "name": "@alias/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "test": "vp test",
+    "test:stack": "vp test"
+  },
+  "devDependencies": {
+    "@alias/api": "workspace:*",
+    "@alias/aws": "workspace:*",
+    "@alias/aws-emulators": "workspace:*",
+    "@alias/db": "workspace:*",
+    "@alias/lambda-emulator": "workspace:*",
+    "@alias/ses-emulator": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/nodemailer": "catalog:",
+    "effect": "catalog:",
+    "nodemailer": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

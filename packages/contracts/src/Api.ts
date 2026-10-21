@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { AccountGroup, AuthGroup, Authentication } from "./Auth.ts";
 
 const Health = Schema.Struct({
   status: Schema.Literal("ok"),
@@ -22,6 +23,7 @@ const SystemGroup = HttpApiGroup.make("system").add(
   HttpApiEndpoint.get("health", "/health", { success: Health }),
 );
 
+/** Signed-in only. Other users' aliases answer `AliasNotFound`, so lookups reveal nothing. */
 const AliasesGroup = HttpApiGroup.make("aliases")
   .add(
     HttpApiEndpoint.get("lookup", "/aliases/:domain/:local", {
@@ -30,6 +32,11 @@ const AliasesGroup = HttpApiGroup.make("aliases")
       error: AliasNotFound,
     }),
   )
+  .middleware(Authentication)
   .prefix("/v1");
 
-export const Api = HttpApi.make("alias").add(SystemGroup).add(AliasesGroup);
+export const Api = HttpApi.make("alias")
+  .add(SystemGroup)
+  .add(AuthGroup)
+  .add(AccountGroup)
+  .add(AliasesGroup);

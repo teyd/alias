@@ -4,12 +4,14 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { DynamoDbEndpoint, EmulatorFailure, inRealTime, resolveTool } from "./Emulator.ts";
 
 /**
  * fakecloud (https://github.com/faiscadev/fakecloud) is one binary that speaks the AWS wire
- * protocols, pinned in `mise.toml`. We use it for S3 and DynamoDB. Its SES receiving is too
- * shallow for us (no subdomain rules, verdicts or raw MIME), so `tools/ses-emulator` covers that.
+ * protocols, pinned in `mise.toml`. We use it for S3, DynamoDB and SES sending (SESv2 `SendEmail`).
+ * Its SES receiving is too shallow for us (no subdomain rules, verdicts or raw MIME), so
+ * `tools/ses-emulator` covers that.
  */
 export class FakeCloud extends Context.Service<FakeCloud, { readonly url: string }>()(
   "@alias/aws-emulators/FakeCloud",
@@ -89,3 +91,31 @@ export const layer = (options?: FakeCloudOptions) =>
       ),
     ),
   );
+
+/** A message fakecloud accepted through SES sending. `raw` is set for `Content.Raw` sends. */
+const SentEmail = Schema.Struct({
+  messageId: Schema.String,
+  from: Schema.String,
+  to: Schema.Array(Schema.String),
+  cc: Schema.Array(Schema.String),
+  bcc: Schema.Array(Schema.String),
+  raw: Schema.OptionFromNullOr(Schema.Uint8ArrayFromBase64),
+  timestamp: Schema.String,
+}).pipe(Schema.encodeKeys({ raw: "rawData" }));
+
+const decodeSentEmails = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Struct({ emails: Schema.Array(SentEmail) })),
+);
+
+/** Every message fakecloud has accepted through SES sending. */
+export const sentEmails = Effect.fn("FakeCloud.sentEmails")(function* () {
+  const { url } = yield* FakeCloud;
+  const body = yield* Effect.tryPromise({
+    try: () => fetch(`${url}/_fakecloud/ses/emails`).then((response) => response.text()),
+    catch: (cause) => failure(`cannot read sent emails: ${String(cause)}`),
+  });
+  const { emails } = yield* decodeSentEmails(body).pipe(
+    Effect.mapError((error) => failure(`unexpected sent emails payload: ${error.message}`)),
+  );
+  return emails;
+});

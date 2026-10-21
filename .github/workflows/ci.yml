@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Node, pnpm, Java and fakecloud from mise.toml, verified against mise.lock.
+      - uses: jdx/mise-action@v5
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - "@alias/core"
+          - "@alias/aws"
+          - "@alias/db"
+          - "@alias/api"
+          - "@alias/ses-emulator"
+          - "@alias/aws-emulators"
+          - "@alias/lambda-emulator"
+          - "@alias/e2e"
+    steps:
+      - uses: actions/checkout@v5
+      # Node, pnpm, Java and fakecloud from mise.toml, verified against mise.lock.
+      - uses: jdx/mise-action@v5
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/alias
+          key: dynamodb-local-${{ hashFiles('tools/aws-emulators/src/DynamoDbLocal.ts') }}
+      - run: pnpm install --frozen-lockfile
+      - run: node tools/aws-emulators/bin/install-dynamodb-local.ts
+      - run: pnpm --filter "${{ matrix.package }}" test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Node, pnpm, Java and fakecloud from mise.toml, verified against mise.lock.
+      - uses: jdx/mise-action@v5
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @alias/web build

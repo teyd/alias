@@ -150,7 +150,7 @@ The steps after normalization are shared by every adapter:
 
 `Transport.send(rawMime, {from, to[]})` implementations:
 
-- `ses` (default) calls SESv2 `SendEmail` with `Content.Raw`. It takes up to 40 MB, works for custom domains, and costs $0.10/1k + $0.12/GB.
+- `ses` (default) calls SESv2 `SendEmail` with `Content.Raw`. It takes up to 40 MB, works for custom domains, and costs $0.10/1k + $0.12/GB. Built as `Transport.ses` in `packages/aws` and verified on fakecloud (§20.5).
 - `cf-email-sending` is for self-hosters on CF-owned domains (5 MiB limit, $0.35/1k).
 - `smtp` is generic: Mailpit in dev, or any SMTP relay.
 
@@ -220,12 +220,11 @@ apps/
 packages/
   core/         ✅ pure logic: addressing (done), rewrite, sanitize, trackers, PGP, OTP extract, tokens
   contracts/    ✅ Effect HttpApi + Schemas shared by API, web, CLI, MCP
-  aws/          ✅ AWS boundary: AwsClient (real/emulated), Lambda + SES event schemas, function URL adapter, Inbound spool; fixtures/ = AWS payloads
+  aws/          ✅ AWS boundary: AwsClient (real/emulated), Lambda + SES event schemas, function URL adapter, Inbound spool, Transport (SESv2 sending); fixtures/ = AWS payloads
   db/           ✅ DynamoDB single table (Table.spec) + repositories (tested on fakecloud and DynamoDB Local)
-  transport/       SESv2 sending
 tools/
   ses-emulator/      ✅ SMTP inbound + receipt rules + verdicts + S3 action (fakecloud) + SES Lambda events
-  aws-emulators/     ✅ fakecloud (S3 + DynamoDB, one binary via mise) + Amazon DynamoDB Local (Java)
+  aws-emulators/     ✅ fakecloud (S3 + DynamoDB + SESv2 sending, one binary via mise) + Amazon DynamoDB Local (Java)
   lambda-emulator/   ✅ function URL server (HTTP ⇄ payload 2.0)
 e2e/            ✅ whole emulated stack in one process
 infra/          ✅ alchemy.run.ts: DynamoDB, S3 spool, API Lambda, SES rules (not deployed)
@@ -853,7 +852,8 @@ This setup has already caught two problems. The documented function URL sample u
 
 - **Recorded AWS payloads.** Replace doc samples with recorded ones once a sandbox account exists (phase 2). The doc samples stay as a second source.
 - **TTL.** fakecloud can expire items on demand (`/_fakecloud/dynamodb/ttl-processor/tick`), but DynamoDB Local can't. Use it once temp mail stores TTL items. Readers must still ignore expired items, because AWS deletes them late.
-- **Infra** is only typechecked. The IAM ARN uses a fixed table name, the SES rule has no Lambda action until the inbound handler exists, and the S3 bucket policy has no `aws:SourceAccount` condition yet. Review before the first deploy.
+- **Infra** is only typechecked. The IAM ARN uses a fixed table name, the SES rule has no Lambda action until the inbound handler exists, and the S3 bucket policy has no `aws:SourceAccount` condition yet. The `SendMail` policy covers only the shared domains and is not attached to a function yet. Review before the first deploy.
+- **SES sending error paths fakecloud can't produce** (§20.5). Record them from a sandbox account in phase 2.
 
 ### 20.4 fakecloud replaces dynalite (2026-10-22)
 
@@ -867,6 +867,30 @@ Research on GitHub (2026-10-22) ruled out LocalStack (archived March 2026, commu
 | Lambda        | our `tools/lambda-emulator`      | fakecloud runs Lambda only in Docker                                                                                                                                                                                                                                                                                                        |
 
 The switch also surfaced a bug. `@distilled.cloud/aws` marks DynamoDB `ResourceInUseException` retryable, so `Table.ensure` hung on an existing table on every engine (second `pnpm dev`). `Retry.none` fixes it, and a regression test proves it.
+
+### 20.5 SES sending: fakecloud, not our emulator (2026-10-22)
+
+Phase 3 forwards mail through SESv2 `SendEmail` with `Content.Raw`. Before `Transport.ses` existed, we read the fakecloud v0.51.0 source (`crates/fakecloud-ses/src/service/sending.rs`) and probed it with `@distilled.cloud/aws`. **fakecloud is the emulator for SES sending.** `tools/ses-emulator` stays receive-only.
+
+| Check                                                                                                                   | fakecloud v0.51.0                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request                                                                                                                 | `POST /v2/email/outbound-emails`, SigV4 required. Needs `Content` with `Raw.Data` as base64. `Destination` overrides the raw `To`/`Cc`/`Bcc`, as AWS documents. |
+| Response                                                                                                                | `{"MessageId": "<uuid>"}`. It decodes with the schema production uses.                                                                                          |
+| Unverified sender                                                                                                       | `MessageRejected` (400). The sender passes when its address or its domain is a verified identity.                                                               |
+| Sandbox recipient                                                                                                       | `MessageRejected` when `PutAccountDetails` turns production access off. The default is production access **on**, while new AWS accounts start in the sandbox.   |
+| Suppressed recipient                                                                                                    | `MessageRejected`, with the `SuppressedReasons` filter applied                                                                                                  |
+| Sending paused                                                                                                          | `SendingPausedException` (account or configuration set)                                                                                                         |
+| Inspection                                                                                                              | `GET /_fakecloud/ses/emails` lists each sent message with its envelope (`from`, `to`, `cc`, `bcc`) and the raw MIME, byte for byte                              |
+| 40 MB size limit, 50 recipients                                                                                         | **Not enforced.** AWS documents both limits but not which error each one raises                                                                                 |
+| `AccountSuspendedException`, `MailFromDomainNotVerifiedException`, `TooManyRequestsException`, `LimitExceededException` | **Never raised**                                                                                                                                                |
+
+**Why not extend `tools/ses-emulator`?** fakecloud already gets the documented paths right, and its inspection endpoint shows the exact bytes. The paths it misses have no documented error code, so our own emulator would have to guess those codes. A guessed error would look verified without being verified. We take documented behaviour from fakecloud and leave the rest as an open gap until recorded payloads exist (§20.3).
+
+**How it is verified.** The documented `SendEmail` request and response live in `packages/aws/fixtures` (`sesv2-*`). The response fixture and fakecloud's responses decode with the same `Transport` schema. `Transport.send` sends the documented raw message on fakecloud, and the inspection endpoint shows the documented envelope and exactly the same bytes. Each error fakecloud can produce is tested through `Transport`. A dead endpoint covers network failure.
+
+**Error policy.** `Transport.send` fails with one of two errors. The pipeline drops on `TransportRejected` (`MessageRejected`, `BadRequestException`), because only the message's own content is at fault. Every other failure (account paused or suspended, MAIL FROM, quotas, throttling, network, unknown) becomes `TransportRetryable`. The mail stays queued, and alerting watches for it.
+
+**Dev.** `pnpm dev` verifies the dev domains as SES identities on fakecloud. Sent mail is listed at `http://localhost:$ALIAS_FAKECLOUD_PORT/_fakecloud/ses/emails`.
 
 ## Sources
 

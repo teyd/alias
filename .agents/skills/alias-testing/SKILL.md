@@ -26,6 +26,7 @@ Prefer the lowest tier that can observe the behaviour, but every new path throug
 | DynamoDB | `FakeCloud.layer()` and `DynamoDbLocal.layer()` (AWS's own, Java) | the same repository suite passing on both |
 | S3 | `FakeCloud.layer()` | `tools/aws-emulators/test`; production code (`Inbound.readMessage`) reads what the SES emulator wrote |
 | SES receiving | `SesEmulator.layer(config)` (SMTP, receipt rules, verdicts, S3 action, Lambda events) | `SesEvent` schema decodes the AWS-documented event and the emulator's events |
+| SES sending (SESv2 `SendEmail`) | `FakeCloud.layer()`; read sent mail with `FakeCloud.sentEmails` | `Transport` decodes the AWS-documented response and fakecloud's; the documented raw message arrives byte for byte (PLAN.md §20.5) |
 | Lambda function URLs | `FunctionUrlServer.layer({ handler })` | `FunctionUrl` schemas decode AWS-documented payloads; emulator events decode with them |
 
 Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. A new AWS dependency needs an emulator and a contract test before any feature uses it.

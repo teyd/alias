@@ -11,9 +11,9 @@ Everything runs against emulators. There is no AWS account and no Docker in any 
 
 | Tier | Runs | Use for | Example |
 |---|---|---|---|
-| unit | Node | Pure logic; emulator behaviour | `packages/core/test`, `tools/*/test` |
+| unit | Node | Pure logic and emulator behaviour | `packages/core/test`, `tools/*/test` |
 | repository | Node + **fakecloud and DynamoDB Local** | Anything that reads or writes DynamoDB | `packages/db/test/support/aliasRepoSuite.ts` |
-| contract | Node | AWS payloads (docs now, recorded later) vs the schemas production parses with, and vs emulator output | `packages/aws/test`, `tools/ses-emulator/test/Headers.test.ts` |
+| contract | Node | Checking AWS payloads (from docs now, recorded later) and emulator output against the schemas production parses with | `packages/aws/test`, `tools/ses-emulator/test/Headers.test.ts` |
 | handler | Node + fakecloud | A Lambda handler called with real-shaped events | `apps/api/test/api.test.ts` |
 | stack | Node + one fakecloud | Paths across services: SMTP → SES emulator → S3, HTTP → function URL emulator → handler → DynamoDB | `e2e/test/stack.test.ts` |
 
@@ -33,13 +33,13 @@ Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. 
 ## Hermetic rules
 
 1. Port `0` only. Read the bound port back from the service (`FakeCloud.url`, `emulator.smtpPort`, `FunctionUrlServer.url`).
-2. One emulator process per test file is fine; one **table per test** (`freshTable()` from `@alias/db/testing`).
+2. One emulator process per test file is fine. Use one **table per test** (`freshTable()` from `@alias/db/testing`).
 3. No Docker, no network, no cloud credentials.
 4. Time and randomness come from Effect services (`TestClock`, `Crypto`), not `Date.now()`. Emulators that wait for a real process use `inRealTime`.
 
 ## Write once, run on many backends
 
-For anything behind a service interface, put the behaviour in `test/support/<name>Suite.ts` taking the backend as a layer, then add one tiny runner file per backend (`*.fakecloud.test.ts`, `*.dynamodb-local.test.ts`).
+For anything behind a service interface, put the behaviour in `test/support/<name>Suite.ts`, which takes the backend as a layer. Then add one tiny runner file per backend (`*.fakecloud.test.ts`, `*.dynamodb-local.test.ts`).
 
 ## Commands
 
@@ -53,6 +53,6 @@ pnpm --filter @alias/api test -- -t "404"           # one test by name
 
 ## Known issues
 
-- `@distilled.cloud/aws` treats some "already exists" errors as retryable (e.g. DynamoDB `ResourceInUseException`). Idempotent create helpers pass `Retry.none`; see `Table.ensure`.
-- DynamoDB Local rejects port 0; `DynamoDbLocal.ts` picks a free port first.
+- `@distilled.cloud/aws` treats some "already exists" errors as retryable (for example, DynamoDB `ResourceInUseException`). Idempotent create helpers pass `Retry.none`. See `Table.ensure`.
+- DynamoDB Local rejects port 0, so `DynamoDbLocal.ts` picks a free port first.
 - The AWS doc samples contain placeholders (`<url-id>`); tests substitute realistic values where an invalid URL would otherwise be built.

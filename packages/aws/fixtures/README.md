@@ -1,8 +1,9 @@
 # AWS payload fixtures
 
-Copied from the AWS documentation on 2026-10-21. Line breaks inside long header values in the docs were
-joined with a single space; nothing else was changed. Contract tests decode these with the schemas in
-`src/`, and the emulators in `tools/` must produce payloads the same schemas accept.
+We copied these files from the AWS documentation on 2026-10-21. Where the docs break a long header
+value across lines, the copies join the lines with a single space. Nothing else changed. Contract tests
+decode these with the schemas in `src/`, and the emulators in `tools/` must produce payloads the same
+schemas accept.
 
 | File                         | Source                                                                               |
 | ---------------------------- | ------------------------------------------------------------------------------------ |

@@ -1,6 +1,6 @@
 # Alias: agent guide
 
-Open-source (AGPL-3.0) email alias service. Production target: AWS eu-west-1 (SES for all mail, S3, Lambda, DynamoDB); Cloudflare only for DNS. **Development and every test run against emulators**: no AWS account, no Docker. Read `PLAN.md` (§15, §19, §20) for the architecture and the reasons behind it.
+Open-source (AGPL-3.0) email alias service. The production target is AWS eu-west-1 (SES for all mail, S3, Lambda, DynamoDB), with Cloudflare used only for DNS. **Development and every test run against emulators**, with no AWS account and no Docker. Read `PLAN.md` (§15, §19, §20) for the architecture and the reasons behind it.
 
 ## Stack
 
@@ -21,7 +21,7 @@ TypeScript 7 · Effect v4 · Vite+ (`vp`) · React 19 · TanStack Router/Query/F
 | `tools/lambda-emulator` | Function URL server: HTTP ⇄ payload-2.0 events, as AWS documents                                                                             | unit + contract                               |
 | `e2e`                   | Whole emulated stack (SMTP → SES → S3, HTTP → function URL → DynamoDB) on one fakecloud                                                      | stack                                         |
 | `infra/alchemy.run.ts`  | Production AWS resources (not deployed yet)                                                                                                  | typecheck                                     |
-| `scripts/*.ts`          | Repo tooling, run with plain `node` (no build step)                                                                                          | —                                             |
+| `scripts/*.ts`          | Repo tooling, run with plain `node` (no build step)                                                                                          | none                                          |
 
 ## Commands
 
@@ -38,27 +38,26 @@ Definition of done: `pnpm check` and `pnpm test:affected` both pass.
 
 ## Rules
 
-- **No dead or duplicate code.** `pnpm check` runs knip with `includeEntryExports`: an unused file, export, dependency or catalog entry fails the build. Delete it instead of keeping it "for later"; export only what another package imports. Required entry exports (Lambda handler, Alchemy stack) carry `/** @public */`.
-- **Toolchain comes from `mise.toml`** (locked with checksums in `mise.lock`): Node 24 (the Lambda runtime), pnpm, Java 17, fakecloud. mise is required; root scripts run under `mise exec`. Don't install these another way or add `.node-version`/`.nvmrc`; bump with `mise up --bump && mise lock`.
-
-- **Emulators only, and every emulator is verified.** Code talks to AWS through `@distilled.cloud/aws` via `AwsClient` (the one place that picks real AWS or an emulator URL). Never mock an AWS client. Each emulator is pinned to AWS's documented behaviour: payloads in `packages/aws/fixtures` (from AWS docs; recorded ones later) must decode with the schemas production uses, emulator output must decode with them too, and DynamoDB behaviour must agree with AWS's own DynamoDB Local. A new AWS dependency needs an emulator and a contract test before features use it. fakecloud's SES receiving is too shallow (no subdomain rules, verdicts or raw MIME), so `tools/ses-emulator` owns SES receiving.
+- **No dead or duplicate code.** `pnpm check` runs knip with `includeEntryExports`, so an unused file, export, dependency, or catalog entry fails the build. Delete it instead of keeping it "for later". Export only what another package imports. Required entry exports (the Lambda handler and the Alchemy stack) carry `/** @public */`.
+- **Toolchain comes from `mise.toml`**, locked with checksums in `mise.lock`. It pins Node 24 (the Lambda runtime), pnpm, Java 17, and fakecloud. mise is required, and root scripts run under `mise exec`. Don't install these tools another way, and don't add `.node-version` or `.nvmrc`. Bump versions with `mise up --bump && mise lock`.
+- **Emulators only, and every emulator is verified.** Code talks to AWS through `@distilled.cloud/aws` via `AwsClient`, the one place that picks real AWS or an emulator URL. Never mock an AWS client. Each emulator must match AWS's documented behaviour. The payloads in `packages/aws/fixtures` (from AWS docs now, recorded ones later) must decode with the schemas production uses. Emulator output must decode with the same schemas. DynamoDB behaviour must agree with AWS's own DynamoDB Local. A new AWS dependency needs an emulator and a contract test before features use it. fakecloud's SES receiving is too shallow (it has no subdomain rules, verdicts, or raw MIME), so `tools/ses-emulator` owns SES receiving.
 - **Two DynamoDB engines, never skipped.** Repository suites live in `packages/db/test/support` and run on fakecloud **and** DynamoDB Local (AWS's own reference). Both always run, locally and in CI.
-- **One table spec.** `packages/db/src/Table.ts` is the only definition of keys and indexes. Infra deploys it, emulators create it. Don't create tables any other way.
-- **Tests are hermetic.** Port `0` only, a fresh table per test (`freshTable()`), no shared state between files, no Docker, no cloud account. This is what lets many agents run every suite at once.
-- **Emulators run in real time.** `@effect/vitest` uses a `TestClock`; code that waits on a real process must provide the live clock (see `DynamoDbLocal.ts`).
-- **Effect at the edges only.** `Effect.runPromise` / `runSync` belong in entrypoints (`apps/api/src/handler.ts`, `bin/`, React query functions) and tests. Everything else returns Effects and declares its services.
-- **Parse at the boundary.** Lambda events go through `FunctionUrl.decode` / `SesEvent` schemas; DynamoDB items through `Attribute` schemas. Inner code takes parsed types, never `unknown`.
+- **One table spec.** `packages/db/src/Table.ts` is the only definition of keys and indexes. Infra deploys it, and the emulators create it. Don't create tables any other way.
+- **Tests are hermetic.** Bind only port `0`, create a fresh table per test with `freshTable()`, and share no state between files. Tests need no Docker and no cloud account. These rules let many agents run every suite at once.
+- **Emulators run in real time.** `@effect/vitest` uses a `TestClock`, so code that waits on a real process must provide the live clock (see `DynamoDbLocal.ts`).
+- **Effect at the edges only.** `Effect.runPromise` and `runSync` belong in entrypoints (`apps/api/src/handler.ts`, `bin/`, React query functions) and tests. Everything else returns Effects and declares its services.
+- **Parse at the boundary.** Lambda events go through `FunctionUrl.decode` or the `SesEvent` schemas. DynamoDB items go through the `Attribute` schemas. Inner code takes parsed types, never `unknown`.
 - **No `console.*` in app code** (lint-enforced). Scripts and `bin/` are exempt.
 - **Effect lint (`@mpsuesser/oxlint-plugin-effect`, all 73 rules as errors).** Key conventions:
   - Namespace imports from submodules: `import * as Effect from "effect/Effect"` (`R` for `effect/Record`, `P` for `effect/Predicate`).
   - Errors are `Schema.TaggedError`, never `new Error` or `Data.TaggedError`.
   - Use `Effect.fn("Name")` instead of assigning `Effect.gen` to a variable.
-  - No loops; use `Arr.*` or `Effect.forEach` with an explicit `concurrency`.
+  - No loops. Use `Arr.*` or `Effect.forEach` with an explicit `concurrency`.
   - Use `DateTime`/`Clock` and the `Crypto` service instead of `Date`/`randomUUID`.
   - Use `Option` instead of null checks, and boolean schema fields start with `is`/`has`/`can`.
-  - Scoped exemptions in `vite.config.ts`: composition roots may run Effects and read `process.env`; emulators (`tools/*/src`) may use Node servers, processes and files; tests may use `fetch` and JSON. Tooling (`scripts/`, configs, `infra/`) is exempt.
-- **Imports:** test APIs come from `vite-plus/test` or `@effect/vitest`, never from `vitest` directly.
-- **Vendored skills** in `.agents/skills` come from pstack (see `skills-lock.json`). Don't edit them; add project skills with an `alias-` prefix.
+  - `vite.config.ts` scopes some exemptions. Composition roots may run Effects and read `process.env`. Emulators (`tools/*/src`) may use Node servers, processes, and files. Tests may use `fetch` and JSON. Tooling (`scripts/`, configs, `infra/`) is exempt.
+- **Import test APIs from `vite-plus/test` or `@effect/vitest`**, never from `vitest` directly.
+- **Vendored skills** in `.agents/skills` come from pstack (see `skills-lock.json`). Don't edit them. Add project skills with an `alias-` prefix.
 - Scripts are `.ts` run by Node's type stripping: erasable syntax only (no enums or namespaces), relative imports with `.ts` extensions.
 
 ## Skills

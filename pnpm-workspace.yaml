@@ -17,6 +17,8 @@ catalog:
   # effect
   effect: 4.0.5
   "@effect/vitest": 4.0.5
+  # aws (Effect-native SDK, the same one Alchemy uses) and local emulators
+  "@distilled.cloud/aws": 1.0.0-rc.15
 
 overrides:
   vite@*: "catalog:"

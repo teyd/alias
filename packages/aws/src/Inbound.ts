@@ -1,0 +1,64 @@
+import * as S3 from "@distilled.cloud/aws/s3";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { region } from "./Client.ts";
+
+/**
+ * Where SES receiving puts mail. Shared by `infra/alchemy.run.ts`, the SES emulator and the
+ * inbound Lambda so the three can't drift.
+ *
+ * An S3 receipt action stores the raw message at `objectKeyPrefix + messageId`; the Lambda event
+ * carries the message ID but not the body.
+ * https://docs.aws.amazon.com/ses/latest/dg/receiving-email-action-s3.html
+ */
+export const spoolPrefix = "inbound/";
+
+export const objectKey = (objectKeyPrefix: string, messageId: string): string =>
+  `${objectKeyPrefix}${messageId}`;
+
+const spoolObjectKey = (messageId: string): string => objectKey(spoolPrefix, messageId);
+
+class SpoolError extends Schema.TaggedError<SpoolError>()("SpoolError", {
+  key: Schema.String,
+  reason: Schema.String,
+}) {}
+
+const concat = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
+  const total = Arr.reduce(chunks, 0, (size, chunk) => size + chunk.byteLength);
+  const bytes = new Uint8Array(total);
+  Arr.reduce(chunks, 0, (offset, chunk) => {
+    bytes.set(chunk, offset);
+    return offset + chunk.byteLength;
+  });
+  return bytes;
+};
+
+/** The raw RFC 5322 message SES stored for `messageId`, byte for byte. */
+export const readMessage = Effect.fn("Inbound.readMessage")(function* (
+  bucket: string,
+  messageId: string,
+) {
+  const key = spoolObjectKey(messageId);
+  const fail = (cause: unknown) => new SpoolError({ key, reason: String(cause) });
+  const object = yield* S3.getObject({ Bucket: bucket, Key: key }).pipe(Effect.mapError(fail));
+  const chunks = yield* Option.match(Option.fromUndefinedOr(object.Body), {
+    onNone: () => Effect.succeed<ReadonlyArray<Uint8Array>>([]),
+    onSome: (body) => Stream.runCollect(body).pipe(Effect.mapError(fail)),
+  });
+  return concat(chunks);
+});
+
+/** Creates the spool bucket if it doesn't exist. Emulators and dev only; real stages are deployed by Alchemy. */
+export const ensureSpool = Effect.fn("Inbound.ensureSpool")(function* (bucket: string) {
+  yield* S3.createBucket({
+    Bucket: bucket,
+    CreateBucketConfiguration: { LocationConstraint: region },
+  }).pipe(
+    Effect.asVoid,
+    Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
+    Effect.mapError((cause) => new SpoolError({ key: bucket, reason: String(cause) })),
+  );
+});

@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - tools/*
+  - infra
   - e2e
 
 catalogMode: prefer
@@ -19,6 +20,7 @@ catalog:
   effect: 4.0.5
   "@effect/vitest": 4.0.5
   "@effect/platform-node": 4.0.5
+  alchemy: 2.0.0-beta.83
   # aws (Effect-native SDK, the same one Alchemy uses) and local emulators
   "@distilled.cloud/aws": 1.0.0-rc.15
   # web
@@ -53,3 +55,10 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
     vitest: "*"
+
+allowBuilds:
+  # transitive via alchemy's Cloudflare provider; we don't run workerd
+  workerd: false
+
+minimumReleaseAgeExclude:
+  - "@cloudflare/workers-types@5.20261021.1"

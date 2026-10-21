@@ -9,6 +9,9 @@
     "apps/api": {
       "entry": ["src/handler.ts!", "bin/*.ts"]
     },
+    "infra": {
+      "entry": ["alchemy.run.ts!"]
+    },
     "tools/aws-emulators": {
       "entry": ["bin/*.ts"]
     },

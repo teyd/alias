@@ -5,6 +5,9 @@
   "workspaces": {
     ".": {
       "entry": ["scripts/*.ts!"]
+    },
+    "tools/aws-emulators": {
+      "entry": ["bin/*.ts"]
     }
   },
   "includeEntryExports": true

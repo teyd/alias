@@ -20,6 +20,10 @@ catalog:
   "@effect/platform-node": 4.0.5
   # aws (Effect-native SDK, the same one Alchemy uses) and local emulators
   "@distilled.cloud/aws": 1.0.0-rc.15
+  # mail
+  smtp-server: 3.20.2
+  nodemailer: 10.1.7
+  "@types/nodemailer": 8.0.2
 
 overrides:
   vite@*: "catalog:"

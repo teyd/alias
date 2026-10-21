@@ -22,11 +22,11 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
 ];
 
 const ASSUME = {
-  /** Catch-all spam / unknown recipients, as a share of real mail. SES bills it; CF Email Routing doesn't. */
+  /** Catch-all spam and mail to unknown recipients, as a share of real mail. SES bills it; Cloudflare Email Routing doesn't. */
   junkShare: 0.3,
   /** Average inbound size. SES bills chunks by volume: size ÷ 256 KB × $0.09/1k (AWS pricing example 3). */
   avgInboundKb: 50,
-  /** Attachment GB per 1,000 outbound mails (≈30 KB average). */
+  /** Attachment GB per 1,000 outbound mails (about 30 KB average). */
   attachmentGbPer1k: 0.03,
   lambdaGbSecondsPerMail: 0.25 * 0.4,
   lambdaGbSecondsPerApi: 0.25 * 0.1,
@@ -89,10 +89,10 @@ const cloudflareOnly = (s: Scenario) =>
   workersPlatform(s) +
   (over(s.mails, PRICE.cfEmailSending.includedPerMonth) / 1000) * PRICE.cfEmailSending.perThousand;
 
-/** B: Cloudflare for inbound + compute + storage; SES only for outbound. */
+/** B: Cloudflare for inbound, compute and storage; SES only for outbound. */
 const cloudflarePlusSesOut = (s: Scenario) => workersPlatform(s) + sesOutbound(s);
 
-/** D: SES for all mail (in + out), compute + DB + storage on Cloudflare (SES → S3 + SNS → Worker). */
+/** D: SES for all mail in and out, with compute, database and storage on Cloudflare (SES → S3 + SNS → Worker). */
 const sesAllCloudflareCompute = (s: Scenario) => {
   const rx = received(s);
   const sesIn =
@@ -105,7 +105,7 @@ const sesAllCloudflareCompute = (s: Scenario) => {
   return workersPlatform(s) + sesIn + spool + sns + egress + sesOutbound(s);
 };
 
-/** C: all AWS. SES in/out, S3 spool, Lambda, DynamoDB, CloudFront. */
+/** C: all AWS. SES in and out, S3 spool, Lambda, DynamoDB, CloudFront. */
 const awsOnly = (s: Scenario) => {
   const rx = received(s);
   const sesIn =

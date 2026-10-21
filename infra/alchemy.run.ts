@@ -1,6 +1,6 @@
 /**
- * Production infrastructure (AWS eu-west-1). Not deployed yet: development and every test run
- * against emulators (see AGENTS.md), and this file is typechecked by `pnpm check`.
+ * Production infrastructure (AWS eu-west-1). Not deployed yet. Development and every test run
+ * against emulators (see AGENTS.md), and `pnpm check` typechecks this file.
  *
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `tools/ses-emulator/bin/serve.ts` evaluates.
@@ -42,7 +42,8 @@ export default Alchemy.Stack(
       timeToLiveSpecification: { AttributeName: Table.spec.timeToLiveAttribute, Enabled: true },
     });
 
-    // Raw inbound mail, written by SES and deleted after processing; the lifecycle rule is the backstop.
+    // Raw inbound mail. SES writes it and processing deletes it; the lifecycle rule expires anything
+    // processing misses.
     const spool = yield* AWS.S3.Bucket("Spool", {
       bucketName: spoolBucketName,
       lifecycleRules: [

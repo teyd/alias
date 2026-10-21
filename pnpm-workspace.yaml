@@ -21,7 +21,7 @@ catalog:
   "@effect/vitest": 4.0.5
   "@effect/platform-node": 4.0.5
   alchemy: 2.0.0-beta.83
-  # aws (Effect-native SDK, the same one Alchemy uses) and local emulators
+  # aws (Effect-native SDK, the same one Alchemy uses)
   "@distilled.cloud/aws": 1.0.0-rc.15
   # web
   react: 19.3.1
@@ -57,7 +57,7 @@ peerDependencyRules:
     vitest: "*"
 
 allowBuilds:
-  # transitive via alchemy's Cloudflare provider; we don't run workerd
+  # alchemy's Cloudflare provider pulls this in transitively, and we don't run workerd
   workerd: false
 
 minimumReleaseAgeExclude:

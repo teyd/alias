@@ -18,7 +18,7 @@ import * as Schema from "effect/Schema";
  * https://docs.aws.amazon.com/lambda/latest/dg/urls-invocation.html
  *
  * It shares no conversion code with the production adapter (`@alias/aws` FunctionUrl), so the
- * two check each other; both are pinned to the documented payloads by contract tests.
+ * two check each other. Contract tests pin both to the documented payloads.
  */
 export interface FunctionUrlServerConfig {
   readonly handler: LambdaHandler<FunctionUrl.FunctionUrlEvent, Schema.Json>;
@@ -127,8 +127,8 @@ const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
 const decodeResult = Schema.decodeUnknownOption(FunctionUrl.FunctionUrlResult);
 
 /**
- * Interprets whatever the handler returned. A value without the result fields is sent as a JSON
- * body with status 200, as Lambda does.
+ * Interprets whatever the handler returned. Like Lambda, it sends a value without the result
+ * fields as a JSON body with status 200.
  */
 const fromResult = (returned: FunctionUrlReturn): OutgoingHttp =>
   Option.match(decodeResult(returned.value), {

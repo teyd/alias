@@ -7,16 +7,16 @@ import { databaseError } from "./DatabaseError.ts";
 import { DynamoTable } from "./Dynamo.ts";
 
 /**
- * Single-table design. This spec is the one source of truth: `infra/alchemy.run.ts` deploys it and
+ * Single-table design. This spec is the one source of truth. `infra/alchemy.run.ts` deploys it and
  * the emulators create it with {@link ensure}, so tests run against the table production gets.
  *
  * | Item  | pk                          | sk      | gsi1pk         | gsi1sk                    |
  * | ----- | --------------------------- | ------- | -------------- | ------------------------- |
  * | Alias | `ALIAS#<domain>#<localPart>` | `ALIAS` | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |
  *
- * Access patterns: address → alias (GetItem, strongly consistent), user → aliases (gsi1 Query).
- * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and isn't emulated, so
- * readers must still ignore expired items.
+ * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
+ * aliases (gsi1 Query). `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late
+ * and the emulators don't run it at all, so readers must still ignore expired items.
  */
 export const spec = {
   partitionKey: "pk",
@@ -47,7 +47,7 @@ const createTableInput = (tableName: string): DynamoDB.CreateTableInput => ({
   })),
 });
 
-/** Creates the table if it doesn't exist. Emulators and dev only; real stages are deployed by Alchemy. */
+/** Creates the table if it doesn't exist. Emulators and dev only; Alchemy deploys real stages. */
 export const ensure = Effect.fn("Table.ensure")(function* () {
   const table = yield* DynamoTable;
   yield* DynamoDB.createTable(createTableInput(table.name)).pipe(

@@ -59,7 +59,7 @@ describe("SesEmulator (in-process SMTP on port 0, S3 on fakecloud)", () => {
         yield* send(ses.smtpPort, "shop@user1.alias.test");
         const event = yield* Queue.take(ses.events);
 
-        // Contract: the same schema decodes the payload documented by AWS (see @alias/aws).
+        // As a contract check, the same schema decodes the payload AWS documents (see @alias/aws).
         expect(Schema.is(SesEvent.SesEvent)(event)).toBe(true);
         const record = event.Records[0];
         expect(record?.ses.receipt.recipients).toEqual(["shop@user1.alias.test"]);

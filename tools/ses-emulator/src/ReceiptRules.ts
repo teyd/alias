@@ -14,7 +14,7 @@ export interface ReceiptRule {
   readonly name: string;
   readonly enabled: boolean;
   readonly recipients: ReadonlyArray<string>;
-  /** S3 action: stores the raw message at `objectKeyPrefix + messageId`. */
+  /** The S3 action stores the raw message at `objectKeyPrefix + messageId`. */
   readonly s3: { readonly bucket: string; readonly objectKeyPrefix: string };
   /** Lambda action after the S3 action. Its event carries headers and verdicts, not the body. */
   readonly lambda?: {

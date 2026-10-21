@@ -5,7 +5,7 @@ import { gitCommonDir } from "./worktree.ts";
 
 /**
  * Every worktree gets a block of consecutive ports so parallel agents can run the
- * interactive stack side by side. Blocks are recorded in the git common dir, which
+ * interactive stack side by side. This module records blocks in the git common dir, which
  * all worktrees of the repo share, so two worktrees never get the same block.
  */
 const PORTS = {

@@ -1,6 +1,7 @@
 /**
- * Prepares a worktree for an agent (or a human): installs deps and DynamoDB Local, claims a port
- * block, and writes `.dev/env`. Safe to re-run; T3 Code runs it when it creates a worktree.
+ * Prepares a worktree for an agent (or a human). It installs dependencies and DynamoDB Local,
+ * claims a port block, and writes `.dev/env`. Safe to re-run; T3 Code runs it when it creates a
+ * worktree.
  * `pnpm agent:setup` runs it under `mise exec`, so Node, pnpm and Java come from mise.toml.
  */
 import { execFileSync } from "node:child_process";

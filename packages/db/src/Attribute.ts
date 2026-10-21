@@ -2,8 +2,8 @@ import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
 /**
- * DynamoDB attribute values as schemas: decoding turns `{ S: "x" }` into `"x"`, so items read from
- * the table are parsed at the boundary instead of trusted.
+ * DynamoDB attribute values as schemas. Decoding turns `{ S: "x" }` into `"x"`, so repositories
+ * parse the items they read from the table at the boundary instead of trusting them.
  */
 export const S = Schema.Struct({ S: Schema.String }).pipe(
   Schema.decodeTo(

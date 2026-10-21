@@ -62,7 +62,8 @@ const hasCommits = (() => {
   }
 })();
 
-// Without a first commit there is nothing to diff against, so `base` stays undefined (run all).
+// Without a first commit there is nothing to diff against, so `base` stays undefined and the task
+// runs everywhere.
 const base = hasCommits ? resolveBase() : undefined;
 const changed = new Set<string>(
   hasCommits

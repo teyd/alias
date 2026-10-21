@@ -24,7 +24,6 @@ export const layer = (config: DynamoConfig): Layer.Layer<Database> =>
     AwsClient.layer(config),
   );
 
-/** The table on an emulator endpoint. */
 export const emulator = (url: string, tableName: string): Layer.Layer<Database> =>
   Layer.merge(
     Layer.succeed(DynamoTable, DynamoTable.of({ name: tableName })),

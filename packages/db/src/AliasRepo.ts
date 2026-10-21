@@ -51,7 +51,7 @@ export class AliasRepo extends Context.Service<
   }
 >()("@alias/db/AliasRepo") {}
 
-/** Addresses are case-insensitive, so keys are built from the lowercased address. */
+/** Addresses are case-insensitive, so keys use the lowercased address. */
 const addressKey = (domain: string, localPart: string) => ({
   pk: { S: `ALIAS#${domain.toLowerCase()}#${localPart.toLowerCase()}` },
   sk: { S: "ALIAS" },
@@ -63,7 +63,7 @@ const userKey = (userId: string) => `USER#${userId}`;
 const userSortKey = (alias: NewAlias) =>
   `ALIAS#${String(alias.createdAt).padStart(15, "0")}#${alias.id}`;
 
-/** An alias item as stored; key attributes are not read back. */
+/** An alias item as stored. The repository doesn't read key attributes back. */
 const AliasItem = Schema.Struct({
   id: Attribute.S,
   userId: Attribute.S,

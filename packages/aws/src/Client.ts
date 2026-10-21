@@ -42,5 +42,4 @@ export const layer = (config: ClientConfig): Layer.Layer<AwsClient> =>
 /** The service runs in eu-west-1 only. */
 export const region: Region.RegionName = "eu-west-1";
 
-/** Shorthand for an emulator endpoint. */
 export const emulator = (url: string) => layer({ region, endpoint: Option.some(url) });

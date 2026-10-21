@@ -1,6 +1,6 @@
 /**
  * Downloads Amazon DynamoDB Local into the per-user cache and verifies its SHA-256.
- * Idempotent: does nothing when the pinned version is already installed.
+ * Idempotent. It does nothing when the pinned version is already installed.
  * Usage: node bin/install-dynamodb-local.ts
  */
 import { execFileSync } from "node:child_process";

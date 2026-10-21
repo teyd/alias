@@ -8,9 +8,9 @@ const devEnv = readDevEnv(root);
 
 const env = { ...process.env, ...devEnv, FORCE_COLOR: "1" };
 
-// Everything is emulated: no cloud account, no Docker. fakecloud (from mise.toml; `pnpm dev`
-// runs under `mise exec`) is S3 + DynamoDB with state in .dev/fakecloud. The API is the real
-// Lambda handler behind the function URL emulator; it seeds a demo alias.
+// Everything is emulated, with no cloud account and no Docker. fakecloud (from mise.toml, since
+// `pnpm dev` runs under `mise exec`) serves S3 and DynamoDB, with state in .dev/fakecloud. The API
+// is the real Lambda handler behind the function URL emulator, and it seeds a demo alias.
 const services: Array<{ name: string; cwd: string; command: string; args: Array<string> }> = [
   {
     name: "fakecloud",

@@ -7,7 +7,7 @@ import * as Option from "effect/Option";
 import { DynamoDbEndpoint, EmulatorFailure, inRealTime, resolveTool } from "./Emulator.ts";
 
 /**
- * fakecloud (https://github.com/faiscadev/fakecloud): one binary that speaks the AWS wire
+ * fakecloud (https://github.com/faiscadev/fakecloud) is one binary that speaks the AWS wire
  * protocols, pinned in `mise.toml`. We use it for S3 and DynamoDB. Its SES receiving is too
  * shallow for us (no subdomain rules, verdicts or raw MIME), so `tools/ses-emulator` covers that.
  */
@@ -80,7 +80,7 @@ const make = Effect.fn("FakeCloud.make")(function* (options: FakeCloudOptions = 
   return { url: `http://127.0.0.1:${port}` };
 });
 
-/** One process serving both: `FakeCloud` for S3 and friends, `DynamoDbEndpoint` for repositories. */
+/** One process serving both: `FakeCloud` for S3 and other services, `DynamoDbEndpoint` for repositories. */
 export const layer = (options?: FakeCloudOptions) =>
   Layer.effectContext(
     Effect.map(make(options), ({ url }) =>

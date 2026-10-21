@@ -1,6 +1,6 @@
 /**
- * The API for `pnpm dev`: the real Lambda handler behind the function URL emulator, on the
- * persistent fakecloud started by `scripts/dev.ts`. Seeds one demo alias.
+ * The API for `pnpm dev`. It runs the real Lambda handler behind the function URL emulator, on
+ * the persistent fakecloud that `scripts/dev.ts` starts, and seeds one demo alias.
  */
 import { AliasRepo, Dynamo, Table } from "@alias/db";
 import { FunctionUrlServer } from "@alias/lambda-emulator";

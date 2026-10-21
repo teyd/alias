@@ -134,7 +134,7 @@ const make = Effect.fn("SesEmulator.make")(function* (config: SesEmulatorConfig)
           verdicts,
           scanEnabled: rule.scanEnabled,
         });
-        // Bytes, not text: the message may carry 8-bit content that must reach S3 unchanged.
+        // Bytes, not text, because the message may carry 8-bit content that must reach S3 unchanged.
         const stored = new Uint8Array(Buffer.concat([new TextEncoder().encode(prepended), raw]));
         yield* S3.putObject({
           Bucket: rule.s3.bucket,

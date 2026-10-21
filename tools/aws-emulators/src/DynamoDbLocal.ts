@@ -11,9 +11,9 @@ import * as Schema from "effect/Schema";
 import { DynamoDbEndpoint, EmulatorFailure, inRealTime, resolveTool } from "./Emulator.ts";
 
 /**
- * Amazon DynamoDB Local: AWS's own emulator (Java 17+), the reference that fakecloud's DynamoDB
- * is checked against. Installed once per machine by `pnpm agent:setup`
- * (see `bin/install-dynamodb-local.ts`), verified by SHA-256; Java comes from `mise.toml`.
+ * Amazon DynamoDB Local is AWS's own emulator (Java 17+) and the reference we check fakecloud's
+ * DynamoDB against. `pnpm agent:setup` installs it once per machine and verifies its SHA-256
+ * (see `bin/install-dynamodb-local.ts`). Java comes from `mise.toml`.
  * https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html
  */
 export const RELEASE = {
@@ -32,7 +32,7 @@ const failure = (reason: string) => new EmulatorFailure({ engine: "dynamodb-loca
 
 const dir = join(homedir(), ".cache", "alias", `dynamodb-local-${RELEASE.version}`);
 
-/** Shared by every worktree and clone on the machine. */
+/** Every worktree and clone on the machine shares this directory. */
 export const installation: Installation = {
   dir,
   jar: join(dir, "DynamoDBLocal.jar"),

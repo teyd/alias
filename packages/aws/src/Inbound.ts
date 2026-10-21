@@ -7,8 +7,8 @@ import * as Stream from "effect/Stream";
 import { region } from "./Client.ts";
 
 /**
- * Where SES receiving puts mail. Shared by `infra/alchemy.run.ts`, the SES emulator and the
- * inbound Lambda so the three can't drift.
+ * Where SES receiving puts mail. `infra/alchemy.run.ts`, the SES emulator and the inbound Lambda
+ * share it so the three can't drift.
  *
  * An S3 receipt action stores the raw message at `objectKeyPrefix + messageId`; the Lambda event
  * carries the message ID but not the body.
@@ -51,7 +51,7 @@ export const readMessage = Effect.fn("Inbound.readMessage")(function* (
   return concat(chunks);
 });
 
-/** Creates the spool bucket if it doesn't exist. Emulators and dev only; real stages are deployed by Alchemy. */
+/** Creates the spool bucket if it doesn't exist. Emulators and dev only; Alchemy deploys real stages. */
 export const ensureSpool = Effect.fn("Inbound.ensureSpool")(function* (bucket: string) {
   yield* S3.createBucket({
     Bucket: bucket,

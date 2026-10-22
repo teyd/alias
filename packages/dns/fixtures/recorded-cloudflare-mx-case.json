@@ -1,0 +1,16 @@
+{
+  "Status": 0,
+  "TC": false,
+  "RD": true,
+  "RA": true,
+  "AD": false,
+  "CD": false,
+  "Question": [{ "name": "GMail.com", "type": 15 }],
+  "Answer": [
+    { "name": "GMail.com", "type": 15, "TTL": 3130, "data": "40 alt4.gmail-smtp-in.l.google.com." },
+    { "name": "GMail.com", "type": 15, "TTL": 3130, "data": "5 gmail-smtp-in.l.google.com." },
+    { "name": "GMail.com", "type": 15, "TTL": 3130, "data": "30 alt3.gmail-smtp-in.l.google.com." },
+    { "name": "GMail.com", "type": 15, "TTL": 3130, "data": "20 alt2.gmail-smtp-in.l.google.com." },
+    { "name": "GMail.com", "type": 15, "TTL": 3130, "data": "10 alt1.gmail-smtp-in.l.google.com." }
+  ]
+}

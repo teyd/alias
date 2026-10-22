@@ -1,0 +1,10 @@
+{
+  "Status": 0,
+  "TC": false,
+  "RD": true,
+  "RA": true,
+  "AD": false,
+  "CD": false,
+  "Question": [{ "name": "www.github.com", "type": 5 }],
+  "Answer": [{ "name": "www.github.com", "type": 5, "TTL": 3600, "data": "github.com." }]
+}

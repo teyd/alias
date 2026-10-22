@@ -188,6 +188,11 @@ describe("MCP endpoint (API handler on fakecloud)", () => {
       expect(disabled.body).toMatchObject({
         result: { structuredContent: { isActive: false } },
       });
+      // Outside the fence, summaries name no stored text: local parts can be a sender's.
+      const outside = (body: Schema.Json) =>
+        textOf(body).content[0].text.split("<untrusted-mail-data>")[0];
+      expect(outside(own.body)).toBe("Created the alias; its address is in the data.\n");
+      expect(outside(disabled.body)).toBe("The alias is now disabled.\n");
 
       const listed = yield* Mcp.callTool(api, token, "list_aliases");
       expect(listed.body).toMatchObject({

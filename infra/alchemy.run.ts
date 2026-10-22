@@ -24,6 +24,9 @@ const tableName = `alias-${stage}`;
 const configurationSetName = `alias-events-${stage}`;
 /** Where SES stores received mail; `Inbound.spoolPrefix` in `@alias/aws`. */
 const spoolPrefix = "inbound/";
+/** Fixed names, so policies can name the receipt rule before it exists (`receiptRuleArn`). */
+const receiptRuleSetName = `alias-inbound-${stage}`;
+const receiptRuleName = "all-verified";
 
 /**
  * Reverse-alias signing keys for the inbound Lambda: `<version>:<base64url secret>` entries, the
@@ -53,6 +56,10 @@ export default Alchemy.Stack(
     const spoolObjects = `arn:aws:s3:::${spoolBucketName}/${spoolPrefix}*`;
     // Sending through a configuration set is authorized on the set as well as on the identity.
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
+    // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
+    // both name it, and SES checks both when the rule is created, before it exists. The format is
+    // the one the SES receiving docs give for these conditions.
+    const receiptRuleArn = `arn:aws:ses:eu-west-1:${accountId}:receipt-rule-set/${receiptRuleSetName}:receipt-rule/${receiptRuleName}`;
 
     const table = yield* AWS.DynamoDB.Table("Data", {
       tableName,
@@ -89,8 +96,10 @@ export default Alchemy.Stack(
           Principal: { Service: "ses.amazonaws.com" },
           Action: ["s3:PutObject"],
           Resource: spoolObjects,
-          // Only SES acting for this account, not another account's receipt rule.
-          Condition: { StringEquals: { "aws:SourceAccount": accountId } },
+          // Only SES acting for this account's receipt rule, not another account's or rule's.
+          Condition: {
+            StringEquals: { "aws:SourceAccount": accountId, "aws:SourceArn": receiptRuleArn },
+          },
         },
       ],
     });
@@ -211,19 +220,21 @@ export default Alchemy.Stack(
     });
     yield* inbound.bind("SendMail", { policyStatements: [sendFromSharedDomains] });
     // SES checks that it may invoke the function when the rule is created, so the rule waits for
-    // this permission (it takes the function ARN from it).
+    // this permission (it takes the function ARN from it). Only this rule may invoke it.
     const sesInvoke = yield* AWS.Lambda.Permission("SesInvokesInbound", {
       action: "lambda:InvokeFunction",
       functionName: inbound.functionArn,
       principal: "ses.amazonaws.com",
       sourceAccount: accountId,
+      sourceArn: receiptRuleArn,
     });
 
-    const ruleSet = yield* AWS.SES.ReceiptRuleSet("Inbound", {});
+    const ruleSet = yield* AWS.SES.ReceiptRuleSet("Inbound", { ruleSetName: receiptRuleSetName });
     // No recipient condition: every verified domain, shared and custom, and their subdomains.
     // SES stores the message first, then invokes the inbound Lambda with the event (no body).
     yield* AWS.SES.ReceiptRule("AllVerified", {
       ruleSetName: ruleSet.ruleSetName,
+      ruleName: receiptRuleName,
       enabled: true,
       scanEnabled: true,
       tlsPolicy: "Optional",

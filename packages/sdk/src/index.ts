@@ -11,4 +11,5 @@
  * ```
  */
 export * as AliasClient from "./AliasClient.ts";
+export * as DeviceLogin from "./DeviceLogin.ts";
 export * from "@alias/contracts";

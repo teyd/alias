@@ -1,4 +1,4 @@
-import { AwsClient, Inbound } from "@alias/aws";
+import { AwsClient, Inbound, Objects } from "@alias/aws";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect, it } from "@effect/vitest";
@@ -71,6 +71,57 @@ describe("fakecloud (separate process, port 0)", () => {
         expect(yield* Effect.flip(Inbound.messageSize("spool", "m2"))).toEqual(
           new Inbound.MessageGone({ key: "inbound/m2" }),
         );
+      }),
+    );
+
+    // The inbox store (PLAN.md §20.22) puts, reads, deletes and lists objects by prefix. AWS
+    // documents ListObjectsV2 as returning at most `MaxKeys` keys in UTF-8 binary order with
+    // `IsTruncated` and a `NextContinuationToken` for the next page, and only keys that start
+    // with `Prefix`.
+    it.effect("lists keys by prefix across pages, for the inbox store's purge", () =>
+      Effect.gen(function* () {
+        yield* Objects.ensureBucket("inbox");
+        yield* Objects.ensureBucket("inbox");
+        const keys = ["inbox/1d/al_a/m3", "inbox/1d/al_a/m1", "inbox/1d/al_a/m2"];
+        yield* Effect.forEach(
+          [...keys, "inbox/1d/al_ab/m1", "inbox/7d/al_a/m4"],
+          (key) => Objects.put("inbox", key, new TextEncoder().encode(key)),
+          { concurrency: 1, discard: true },
+        );
+        const first = yield* S3.listObjectsV2({
+          Bucket: "inbox",
+          Prefix: "inbox/1d/al_a/",
+          MaxKeys: 2,
+        });
+        expect(first.IsTruncated).toBe(true);
+        expect(first.KeyCount).toBe(2);
+        expect(first.Contents?.map((object) => object.Key)).toEqual([
+          "inbox/1d/al_a/m1",
+          "inbox/1d/al_a/m2",
+        ]);
+        const second = yield* S3.listObjectsV2({
+          Bucket: "inbox",
+          Prefix: "inbox/1d/al_a/",
+          MaxKeys: 2,
+          ContinuationToken: first.NextContinuationToken ?? "",
+        });
+        expect(second.IsTruncated).toBe(false);
+        expect(second.Contents?.map((object) => object.Key)).toEqual(["inbox/1d/al_a/m3"]);
+
+        expect(yield* Objects.keys("inbox", "inbox/1d/al_a/")).toEqual([
+          "inbox/1d/al_a/m1",
+          "inbox/1d/al_a/m2",
+          "inbox/1d/al_a/m3",
+        ]);
+        expect(new TextDecoder().decode(yield* Objects.get("inbox", "inbox/7d/al_a/m4"))).toBe(
+          "inbox/7d/al_a/m4",
+        );
+        yield* Objects.remove("inbox", "inbox/7d/al_a/m4");
+        yield* Objects.remove("inbox", "inbox/7d/al_a/m4");
+        expect(yield* Effect.flip(Objects.get("inbox", "inbox/7d/al_a/m4"))).toEqual(
+          new Objects.NoSuchObject({ key: "inbox/7d/al_a/m4" }),
+        );
+        expect(yield* Objects.keys("inbox", "inbox/none/")).toEqual([]);
       }),
     );
   });

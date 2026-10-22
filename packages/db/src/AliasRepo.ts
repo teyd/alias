@@ -13,7 +13,7 @@ import { DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Attribute from "./Attribute.ts";
 import * as Item from "./Item.ts";
-import { aliasKey, contactsPartition } from "./Keys.ts";
+import { aliasKey, contactsPartition, inboxPartition } from "./Keys.ts";
 import * as Purge from "./Purge.ts";
 import * as Quota from "./Quota.ts";
 
@@ -30,6 +30,13 @@ export const Alias = Schema.Struct({
   createdAt: Schema.Number,
   forwardedCount: Schema.Number,
   blockedCount: Schema.Number,
+  /**
+   * When a temporary inbox stops taking mail (epoch milliseconds). Not the table's TTL
+   * attribute: the item outlives it, so the address is never given out again.
+   */
+  inboxExpiresAt: Schema.Option(Schema.Number),
+  /** How many days stored messages are kept, when the owner chose; none means the default. */
+  retentionDays: Schema.Option(Schema.Number),
 });
 export type Alias = typeof Alias.Type;
 
@@ -40,6 +47,8 @@ export interface NewAlias {
   readonly localPart: string;
   readonly mode: AliasMode;
   readonly createdAt: number;
+  readonly inboxExpiresAt?: number;
+  readonly retentionDays?: number;
 }
 
 export class AliasTaken extends Schema.TaggedError<AliasTaken>()("AliasTaken", {
@@ -56,6 +65,7 @@ interface OwnedAddress {
 interface AliasChanges {
   readonly mode?: AliasMode;
   readonly isActive?: boolean;
+  readonly retentionDays?: number;
 }
 
 type Counter = "forwarded" | "blocked";
@@ -130,6 +140,15 @@ export class AliasRepo extends Context.Service<
       now: DateTime.Utc,
       maxPerDay: number,
     ) => Effect.Effect<boolean, DatabaseError>;
+    /**
+     * Counts one temporary inbox created through the API against the user's allowance of
+     * `maxPerDay` for the UTC day `now` falls in. False when it is used up.
+     */
+    readonly reserveTemporary: (
+      userId: string,
+      now: DateTime.Utc,
+      maxPerDay: number,
+    ) => Effect.Effect<boolean, DatabaseError>;
   }
 >()("@alias/db/AliasRepo") {}
 
@@ -151,6 +170,12 @@ const creationQuotaKey = (userId: string, day: string) => ({
   sk: { S: `ALIASES#${day}` },
 });
 
+/** The user's count of temporary inboxes created in one UTC day, in their partition. */
+const temporaryQuotaKey = (userId: string, day: string) => ({
+  pk: { S: userPartition(userId) },
+  sk: { S: `TEMP-INBOXES#${day}` },
+});
+
 /** Zero-padded so string order on the index matches creation order. */
 const userSortKey = (alias: NewAlias) =>
   `ALIAS#${String(alias.createdAt).padStart(15, "0")}#${alias.id}`;
@@ -166,6 +191,8 @@ const AliasItem = Schema.Struct({
   createdAt: Attribute.N,
   forwardedCount: Attribute.N,
   blockedCount: Attribute.N,
+  inboxExpiresAt: Schema.OptionFromOptionalKey(Attribute.N),
+  retentionDays: Schema.OptionFromOptionalKey(Attribute.N),
 });
 
 const counterAttribute = { forwarded: "forwardedCount", blocked: "blockedCount" } as const;
@@ -224,7 +251,8 @@ export const retire = Effect.fn("AliasRepo.retire")(function* (
     Key: key,
     UpdateExpression:
       "SET deletedAt = :deletedAt, gsi1pk = :deleted, gsi1sk = :address " +
-      "REMOVE #domain, #localPart, #mode, #isActive, #createdAt, #forwarded, #blocked",
+      "REMOVE #domain, #localPart, #mode, #isActive, #createdAt, #forwarded, #blocked, " +
+      "#inboxExpiresAt, #retentionDays",
     ConditionExpression: "userId = :userId AND attribute_not_exists(deletedAt)",
     ExpressionAttributeNames: {
       "#domain": "domain",
@@ -234,6 +262,8 @@ export const retire = Effect.fn("AliasRepo.retire")(function* (
       "#createdAt": "createdAt",
       "#forwarded": "forwardedCount",
       "#blocked": "blockedCount",
+      "#inboxExpiresAt": "inboxExpiresAt",
+      "#retentionDays": "retentionDays",
     },
     ExpressionAttributeValues: {
       ":userId": { S: address.userId },
@@ -267,8 +297,10 @@ export const retire = Effect.fn("AliasRepo.retire")(function* (
 
 /**
  * Deletes everything a deleted alias left besides its tombstone: its contacts (partition
- * `CONTACTS#<aliasId>`, both the contacts and their id pointers) and its forward counters, then
- * marks the tombstone done by dropping the alias id. Safe to run again.
+ * `CONTACTS#<aliasId>`, both the contacts and their id pointers), its stored messages' metadata
+ * (partition `INBOX#<aliasId>`, which holds the only copies of their wrapped keys, so the bodies
+ * left in S3 can't be decrypted any more) and its forward counters, then marks the tombstone
+ * done by dropping the alias id. Safe to run again.
  */
 export const purge = Effect.fn("AliasRepo.purge")(function* (
   table: typeof DynamoTable.Service,
@@ -278,6 +310,10 @@ export const purge = Effect.fn("AliasRepo.purge")(function* (
   yield* Purge.deleteAll(
     table,
     yield* Purge.partitionKeys(table, contactsPartition(aliasId), Option.none()),
+  );
+  yield* Purge.deleteAll(
+    table,
+    yield* Purge.partitionKeys(table, inboxPartition(aliasId), Option.none()),
   );
   yield* Purge.deleteAll(
     table,
@@ -324,6 +360,16 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
           createdAt: { N: String(alias.createdAt) },
           forwardedCount: { N: "0" },
           blockedCount: { N: "0" },
+          ...R.getSomes({
+            inboxExpiresAt: Option.map(
+              Option.fromUndefinedOr(alias.inboxExpiresAt),
+              (at): DynamoDB.AttributeValue => ({ N: String(at) }),
+            ),
+            retentionDays: Option.map(
+              Option.fromUndefinedOr(alias.retentionDays),
+              (days): DynamoDB.AttributeValue => ({ N: String(days) }),
+            ),
+          }),
         },
         // A tombstone whose contacts are purged gives the address back to the user who deleted it.
         ConditionExpression:
@@ -393,6 +439,9 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         mode: Option.map(Option.fromUndefinedOr(changes.mode), (mode) => ({ S: mode })),
         isActive: Option.map(Option.fromUndefinedOr(changes.isActive), (isActive) => ({
           BOOL: isActive,
+        })),
+        retentionDays: Option.map(Option.fromUndefinedOr(changes.retentionDays), (days) => ({
+          N: String(days),
         })),
       });
       const names = R.keys(values);
@@ -509,6 +558,13 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
     reserveCreation: (userId, now, maxPerDay) => {
       const day = Quota.window(now, "day");
       return Quota.reserve(table, creationQuotaKey(userId, day.label), day, maxPerDay).pipe(
+        Effect.provide(client),
+      );
+    },
+
+    reserveTemporary: (userId, now, maxPerDay) => {
+      const day = Quota.window(now, "day");
+      return Quota.reserve(table, temporaryQuotaKey(userId, day.label), day, maxPerDay).pipe(
         Effect.provide(client),
       );
     },

@@ -6,7 +6,7 @@ import {
   Transport,
 } from "@alias/aws";
 import type { WebhookEvent } from "@alias/contracts";
-import { Address, Mail, Pgp, ReverseToken, SharedDomains } from "@alias/core";
+import { Address, Mail, Pgp, ReverseToken, SharedDomains, TempDomains } from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
@@ -14,9 +14,11 @@ import {
   DeliveryRepo,
   DomainRepo,
   type Dynamo,
+  MessageRepo,
   RecipientRepo,
   UserRepo,
 } from "@alias/db";
+import { Inbox } from "@alias/inbox";
 import { Publisher } from "@alias/webhooks";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
@@ -38,13 +40,16 @@ import { Spool } from "./Spool.ts";
 
 /**
  * The inbound pipeline (PLAN.md §3.2): one SES Lambda event in, for each recipient resolve →
- * policy → rewrite → send, then the spool object is deleted. Nothing about a message is stored
- * except its idempotency claims and the alias counters.
+ * policy → rewrite → send, then the spool object is deleted. Nothing about a forwarded message is
+ * stored except its idempotency claims and the alias counters; inbox aliases keep mail encrypted
+ * (`Inbox` in `@alias/inbox`, PLAN.md §20.22).
  */
 
 /** What happened to one recipient of one message. Carries no address or content. */
 const Outcome = Schema.TaggedUnion({
   Forwarded: {},
+  /** Kept in the alias's inbox (inbox mode). */
+  Stored: {},
   Replied: {},
   Dropped: { reason: Policy.DropReason },
   /** An earlier or concurrent invocation already handled this recipient. */
@@ -55,6 +60,7 @@ const Outcome = Schema.TaggedUnion({
 type Outcome = typeof Outcome.Type;
 
 const forwarded = Outcome.cases.Forwarded.make({});
+const stored = Outcome.cases.Stored.make({});
 const replied = Outcome.cases.Replied.make({});
 const duplicate = Outcome.cases.Duplicate.make({});
 const dropped = (reason: Policy.DropReason) => Outcome.cases.Dropped.make({ reason });
@@ -88,12 +94,14 @@ interface Send {
 
 type Plan = Data.TaggedEnum<{
   Send: Send;
+  /** Keep the message in the alias's inbox, then forward it too when `forward` says so (`both`). */
+  Store: { readonly alias: AliasRepo.Alias; readonly forward: Option.Option<Send> };
   /** Refused mail to an existing alias: counted as blocked. */
   Block: { readonly alias: AliasRepo.Alias; readonly reason: Policy.DropReason };
   Drop: { readonly reason: Policy.DropReason };
 }>;
 const Plan = Data.taggedEnum<Plan>();
-type Refusal = Exclude<Plan, { readonly _tag: "Send" }>;
+type Refusal = Exclude<Plan, { readonly _tag: "Send" | "Store" }>;
 
 /** The spooled message, read lazily and at most once per record. */
 interface Spooled {
@@ -159,7 +167,6 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   record: Record,
   alias: AliasRepo.Alias,
 ) {
-  if (alias.mode === "inbox") return Plan.Drop({ reason: "inbox-mode" });
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
   const target = Policy.forwardTarget(recipients);
   if (Option.isNone(target)) return Plan.Drop({ reason: "no-recipient" });
@@ -373,7 +380,11 @@ const customDomain = Effect.fn("Pipeline.customDomain")(function* (domain: strin
 
 /** Decides what to do for one recipient. Reads the table, never the message. */
 const plan = Effect.fn("Pipeline.plan")(function* (record: Record, recipient: string) {
-  const routed = yield* route(recipient, yield* SharedDomains.SharedDomains);
+  const routed = yield* route(
+    recipient,
+    yield* SharedDomains.SharedDomains,
+    yield* TempDomains.TempDomains,
+  );
   if (Route.$is("Unroutable")(routed)) return Plan.Drop({ reason: "unroutable" });
   const domain = routed.isCustomDomain
     ? Result.map(yield* customDomain(routed.alias.domain), Option.some)
@@ -410,12 +421,22 @@ const plan = Effect.fn("Pipeline.plan")(function* (record: Record, recipient: st
   });
   if (Result.isFailure(resolved)) return Plan.Drop({ reason: resolved.failure });
   const alias = resolved.success;
+  const now = DateTime.toEpochMillis(yield* DateTime.now);
+  if (Option.exists(alias.inboxExpiresAt, (at) => at <= now)) {
+    return Plan.Drop({ reason: "expired-inbox" });
+  }
   if (!alias.isActive) return Plan.Block({ alias, reason: "inactive-alias" });
   const screened = Policy.screen(record.ses.receipt, Policy.spamAction(alias));
   if (Option.isSome(screened)) return Plan.Block({ alias, reason: screened.value });
-  return Route.$is("Forward")(routed)
-    ? yield* planForward(record, alias)
-    : yield* planReply(record, alias, routed.token);
+  if (Route.$is("Reply")(routed)) return yield* planReply(record, alias, routed.token);
+  if (alias.mode === "inbox") return Plan.Store({ alias, forward: Option.none() });
+  const forwarding = yield* planForward(record, alias);
+  if (alias.mode === "forward" || Plan.$is("Block")(forwarding)) return forwarding;
+  // Both: kept in any case, forwarded when it can be.
+  return Plan.Store({
+    alias,
+    forward: Plan.$is("Send")(forwarding) ? Option.some(forwarding) : Option.none(),
+  });
 });
 
 /** Counters are statistics: an alias deleted meanwhile, or a failed write, loses one count. */
@@ -494,6 +515,40 @@ const send = Effect.fn("Pipeline.send")(function* (
   return forwarded;
 });
 
+/**
+ * Inbox mode: size and daily allowance first, then the message is sealed and stored. For `both`,
+ * the forward follows; if it is deferred, Lambda's retry stores the message a second time,
+ * which beats forwarding it twice.
+ */
+const store = Effect.fn("Pipeline.store")(function* (
+  delivery: DeliveryRepo.Delivery,
+  planned: { readonly alias: AliasRepo.Alias; readonly forward: Option.Option<Send> },
+  message: Spooled,
+) {
+  const { maxStoredBytes, storedPerDay } = yield* Limits.Limits;
+  const alias = planned.alias;
+  if ((yield* message.size) > maxStoredBytes) {
+    return yield* refuse(delivery, Plan.Block({ alias, reason: "too-large" }));
+  }
+  const messages = yield* MessageRepo.MessageRepo;
+  if (!(yield* messages.reserveStorage(alias.userId, yield* DateTime.now, storedPerDay))) {
+    return yield* refuse(delivery, Plan.Block({ alias, reason: "storage-limited" }));
+  }
+  const kept = yield* (yield* Inbox.Inbox).store(alias, yield* message.raw).pipe(
+    Effect.as(Option.none<Outcome>()),
+    Effect.catchTags({
+      NoSuchAlias: () => Effect.succeed(Option.some(dropped("unknown-alias"))),
+      UnreadableMessage: () => Effect.succeed(Option.some(dropped("malformed-message"))),
+    }),
+  );
+  if (Option.isSome(kept)) return kept.value;
+  yield* Effect.logInfo("inbound stored");
+  return yield* Option.match(planned.forward, {
+    onNone: () => Effect.succeed(stored),
+    onSome: (forward) => send(delivery, forward, message),
+  });
+});
+
 /** Carries out one recipient's plan, at most once per message (see `DeliveryRepo`). */
 const execute = Effect.fn("Pipeline.execute")(function* (
   delivery: DeliveryRepo.Delivery,
@@ -507,8 +562,13 @@ const execute = Effect.fn("Pipeline.execute")(function* (
   if (Plan.$is("Block")(planned)) return yield* refuse(delivery, planned);
   // Temporary failures give the claim back so Lambda's retry can send it.
   const defer = (code: string) => Effect.as(deliveries.release(delivery), deferred(code));
-  return yield* send(delivery, planned, message).pipe(
+  return yield* (
+    Plan.$is("Store")(planned)
+      ? store(delivery, planned, message)
+      : send(delivery, planned, message)
+  ).pipe(
     Effect.catchTags({
+      InboxUnavailable: (error) => defer(error._tag),
       TransportRejected: () => Effect.succeed(dropped("rejected")),
       MessageGone: () => Effect.succeed(dropped("spool-missing")),
       MalformedMessage: () => Effect.succeed(dropped("malformed-message")),
@@ -524,6 +584,7 @@ const execute = Effect.fn("Pipeline.execute")(function* (
 const log = (outcome: Outcome) =>
   Outcome.match(outcome, {
     Forwarded: () => Effect.logInfo("inbound forwarded"),
+    Stored: () => Effect.void,
     Replied: () => Effect.logInfo("inbound replied"),
     Duplicate: () => Effect.logInfo("inbound duplicate"),
     Dropped: ({ reason }) => Effect.logInfo("inbound dropped", reason),
@@ -583,7 +644,9 @@ export type Services =
   | Spool
   | SharedDomains.SharedDomains
   | ReverseKeys
-  | ImageProxySigner;
+  | ImageProxySigner
+  | TempDomains.TempDomains
+  | Inbox.Inbox;
 
 /**
  * Everything {@link handle} needs, from {@link Services}: real AWS in Lambda, emulators elsewhere.
@@ -599,6 +662,7 @@ export const layer = <E, R>(
     RecipientRepo.layer,
     DeliveryRepo.layer,
     DomainRepo.layer,
+    MessageRepo.layer,
     UserRepo.layer,
     NodeCrypto.layer,
     Publisher.layer.pipe(Layer.provide(NodeCrypto.layer)),

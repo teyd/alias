@@ -23,13 +23,15 @@ import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
 import type { Identities, MessageQueue, Transport } from "@alias/aws";
-import type { SharedDomains } from "@alias/core";
+import type { SharedDomains, TempDomains } from "@alias/core";
 import type { Doh } from "@alias/dns";
+import type { Inbox } from "@alias/inbox";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
 import { ContactsLive } from "./contacts.ts";
 import { DeviceLive, OAuthLive } from "./device.ts";
 import { DomainsLive } from "./domains.ts";
+import { InboxesLive } from "./inboxes.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { ConsentLive } from "./consent.ts";
 import * as Mcp from "./mcp/Endpoint.ts";
@@ -72,13 +74,16 @@ const Repositories = Layer.mergeAll(
 );
 
 /**
- * What callers provide: the database, the WebAuthn relying party, the shared domains, outgoing
- * mail, the webhook queue and URL policy, SES identities and a DNS resolver (custom domains).
+ * What callers provide: the database, the WebAuthn relying party, the shared and temp-mail
+ * domains, outgoing mail, the webhook queue and URL policy, SES identities and a DNS resolver
+ * (custom domains), and the inbox store.
  */
 export type Services =
   | Dynamo.Database
   | RelyingParty
   | SharedDomains.SharedDomains
+  | TempDomains.TempDomains
+  | Inbox.Inbox
   | Transport.Transport
   | MailSettings
   | MessageQueue.MessageQueue
@@ -102,6 +107,7 @@ const ApiLive = Layer.mergeAll(
     AccountLive,
     AliasesLive,
     ContactsLive,
+    InboxesLive,
     RecipientsLive,
     SettingsLive,
     TokensLive,

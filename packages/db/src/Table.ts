@@ -16,10 +16,13 @@ import { DynamoTable } from "./Dynamo.ts";
  * | AliasTombstone    | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `DELETED-ALIASES#<userId>` | the item's pk             |             |
  * | ForwardQuota      | `ALIAS#<domain>#<localPart>` | `FORWARDS#<hour>`      |                            |                           | `expiresAt` |
  * | Contact           | `CONTACTS#<aliasId>`         | `CONTACT#<address>`    |                            |                           |             |
+ * | Message           | `INBOX#<aliasId>`            | `MESSAGE#<messageId>`  |                            |                           | `expiresAt` |
  * | ContactId         | `CONTACTS#<aliasId>`         | `CONTACT-ID#<id>`      |                            |                           |             |
  * | User              | `USER#<userId>`              | `USER`                 |                            |                           |             |
  * | UserSettings      | `USER#<userId>`              | `SETTINGS`             |                            |                           |             |
  * | AliasQuota        | `USER#<userId>`              | `ALIASES#<date>`       |                            |                           | `expiresAt` |
+ * | TemporaryQuota    | `USER#<userId>`              | `TEMP-INBOXES#<date>`  |                            |                           | `expiresAt` |
+ * | StorageQuota      | `USER#<userId>`              | `STORED#<date>`        |                            |                           | `expiresAt` |
  * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                            |                           |             |
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                            |                           |             |
  * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                            |                           | `expiresAt` |
@@ -99,6 +102,16 @@ import { DynamoTable } from "./Dynamo.ts";
  * GetItem each) and DomainCount (the per-user cap, atomic). Every domain shares the gsi1
  * partition `DOMAIN-CHECKS`, sorted by when the verification cron should look at it next
  * (zero-padded epoch millis), so the cron finds due domains with one Query.
+ *
+ * A Message is the metadata of mail stored for an inbox alias (PLAN.md §20.22), keyed by the
+ * alias's id like contacts: listing an inbox is one Query on `INBOX#<aliasId>`, newest first, and
+ * a long poll asks for ids after the last one seen (ids are ULIDs, so they sort by time). The
+ * body is encrypted in S3; the item holds its wrapped data key and the encrypted summary, so
+ * deleting the item (or purging the partition with the alias) leaves the body unreadable.
+ * `expiresAt` is the message's retention; readers ignore it from then on. A temporary inbox is an
+ * alias with `inboxExpiresAt`, deliberately not the TTL attribute: the alias item stays after it
+ * expires, so the address is never handed out again. TemporaryQuota and StorageQuota count
+ * temporary inboxes created and messages stored per user and UTC day.
  *
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing

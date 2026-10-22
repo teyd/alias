@@ -5,19 +5,21 @@ import {
   Identities,
   Inbound,
   type MessageQueue,
+  Objects,
   Parameters,
   SesEvent,
   SqsEvent,
   Transport,
 } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains } from "@alias/core";
+import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
 import { Proxy } from "@alias/image-proxy";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
+import { Inbox } from "@alias/inbox";
 import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
 import { Delivery, Egress, UrlPolicy } from "@alias/webhooks";
@@ -28,10 +30,12 @@ import * as SSM from "@distilled.cloud/aws/ssm";
 import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as TestClock from "effect/testing/TestClock";
 import { createTransport } from "nodemailer";
 
 /**
@@ -83,6 +87,35 @@ const feedbackTopic = Layer.effect(
 ).pipe(Layer.provide(aws));
 
 /**
+ * The inbox store (PLAN.md §20.22) as production runs it: its keys a SecureString in Parameter
+ * Store, its bodies in their own bucket, on the shared table. The API and the inbound Lambda use
+ * the same one, as both Lambdas would.
+ */
+export const inboxBucket = "alias-inbox";
+const inboxKeysParameter = "/alias/e2e/inbox-keys";
+const inboxStore = Layer.unwrap(
+  Effect.gen(function* () {
+    yield* SSM.putParameter({
+      Name: inboxKeysParameter,
+      Type: "SecureString",
+      Value: `1:${Buffer.alloc(32, 13).toString("base64url")}`,
+    });
+    yield* Objects.ensureBucket(inboxBucket);
+    const { url } = yield* FakeCloud.FakeCloud;
+    return Inbox.fromConfig(
+      {
+        bucket: inboxBucket,
+        endpoint: Option.some(url),
+        keys: Parameters.keyring(inboxKeysParameter).pipe(Effect.provide(AwsClient.emulator(url))),
+      },
+      database,
+    );
+  }),
+).pipe(Layer.provide(aws));
+/** Temporary inboxes live on their own registrable domain. */
+const tempDomains = TempDomains.layer("tmp.test").pipe(Layer.provide(sharedDomains));
+
+/**
  * The real API Lambda handler on the stack's table, queue and SES, for passkeys bound to
  * `relyingParty`. Serve it with `FunctionUrlServer`.
  */
@@ -106,7 +139,12 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty:
         Layer.provideMerge(sharedDomains),
       ),
       Layer.succeedContext(yield* Effect.context<MessageQueue.MessageQueue>()),
+      Layer.succeedContext(yield* Effect.context<Inbox.Inbox>()),
+      tempDomains,
       urlPolicy,
+      // The contexts above carry the test's clock; the Lambda runs in real time, which its long
+      // poll (PLAN.md §20.22) sleeps on.
+      Layer.succeed(Clock.Clock, yield* TestClock.withLive(Effect.clockWith(Effect.succeed))),
     ),
   );
   yield* Effect.addFinalizer(() => Effect.promise(dispose));
@@ -156,6 +194,8 @@ const imageProxy = Layer.unwrap(
 const inbound = Pipeline.layer(
   Layer.mergeAll(
     database,
+    inboxStore,
+    tempDomains,
     webhookQueue,
     sending,
     Spool.layer(spoolBucket).pipe(Layer.provide(aws)),
@@ -177,12 +217,19 @@ const passing: Verdicts = { spam: "PASS", virus: "PASS", spf: "PASS", dkim: "PAS
 /** What SES will stamp on the next received message; a test sets it before sending. */
 const verdicts = { next: passing };
 
-/** The shared domain's SES identity, which SES receives for and sends from. */
-const sharedIdentity = Layer.effectDiscard(Transport.ensureIdentity("alias.test")).pipe(
-  Layer.provide(aws),
-);
+/**
+ * The shared domain's SES identity, which SES receives for and sends from, and the temp-mail
+ * domain's, which it only receives for.
+ */
+const sharedIdentity = Layer.effectDiscard(
+  Effect.forEach(["alias.test", "tmp.test"], Transport.ensureIdentity, {
+    concurrency: 1,
+    discard: true,
+  }),
+).pipe(Layer.provide(aws));
 
-// Like SES, receives for the account's verified domain identities: the shared domain and each
+// Like SES, receives for the account's verified domain identities: the shared and temp-mail
+// domains, and each
 // custom domain once the API created its identity.
 const ses = SesEmulator.layer({
   verifiedDomains: "identities",
@@ -232,7 +279,7 @@ const delivery = Layer.effect(
 /** Everything, with `api` (a layer that serves `apiHandler`) on the same table, queue and fakecloud. */
 export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
   Layer.mergeAll(
-    api.pipe(Layer.provide(Layer.merge(database, webhookQueue))),
+    api.pipe(Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore))),
     inbound,
     feedback,
     delivery,

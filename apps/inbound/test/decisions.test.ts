@@ -42,6 +42,8 @@ const alias: AliasRepo.Alias = {
   createdAt: 0,
   forwardedCount: 0,
   blockedCount: 0,
+  inboxExpiresAt: Option.none(),
+  retentionDays: Option.none(),
 };
 
 const recipient = (

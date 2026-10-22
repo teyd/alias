@@ -9,7 +9,9 @@ import {
   type NewAlias,
 } from "@alias/contracts";
 import { AliasRepo, DomainRepo } from "@alias/db";
+import { Inbox } from "@alias/inbox";
 import { Publisher } from "@alias/webhooks";
+import { deleteWithMail } from "./inboxes.ts";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -28,6 +30,7 @@ const view = (alias: AliasRepo.Alias): AliasView => ({
   isActive: alias.isActive,
   forwardedCount: alias.forwardedCount,
   blockedCount: alias.blockedCount,
+  retentionDays: Inbox.retentionOf(alias),
 });
 
 const invalid = (address: string, reason: InvalidAlias["reason"]) =>
@@ -54,6 +57,8 @@ const insert = Effect.fn("aliases.insert")(function* (address: Address.MailAddre
     isActive: true,
     forwardedCount: 0,
     blockedCount: 0,
+    inboxExpiresAt: Option.none(),
+    retentionDays: Option.none(),
   });
   const publisher = yield* Publisher.Publisher;
   yield* publisher.publish(
@@ -122,7 +127,8 @@ type AliasServices =
   | AliasRepo.AliasRepo
   | DomainRepo.DomainRepo
   | SharedDomains.SharedDomains
-  | Publisher.Publisher;
+  | Publisher.Publisher
+  | Inbox.Inbox;
 
 interface AliasParams {
   readonly domain: string;
@@ -143,33 +149,27 @@ export const ownedAlias = Effect.fn("aliases.ownedAlias")(function* (params: Ali
   );
 });
 
-/** Deletes the caller's alias and tells their webhooks. */
+/** Deletes the caller's alias with any mail it stored, and tells their webhooks. */
 const remove = Effect.fn("aliases.remove")(function* (params: AliasParams) {
   const alias = yield* ownedAlias(params);
-  const repo = yield* AliasRepo.AliasRepo;
-  yield* repo.delete(alias).pipe(
+  yield* deleteWithMail(alias).pipe(
     Effect.catchTags({
       NoSuchAlias: () => Effect.fail(notFound(params)),
       DatabaseError: Effect.die,
     }),
   );
-  const publisher = yield* Publisher.Publisher;
-  yield* publisher.publish(
-    alias.userId,
-    {
-      type: "alias.deleted",
-      timestamp: DateTime.formatIso(yield* DateTime.now),
-      data: { aliasId: alias.id, address: `${alias.localPart}@${alias.domain}` },
-    },
-    alias.id,
-  );
 });
 
-/** The caller's aliases, oldest first. */
+/** The caller's aliases, oldest first. Temporary inboxes are listed under /v1/inboxes. */
 export const list = Effect.fn("aliases.list")(function* () {
   const user = yield* CurrentUser;
   const repo = yield* AliasRepo.AliasRepo;
-  return Arr.map(yield* Effect.orDie(repo.listByUser(user.userId)), view);
+  return Arr.map(
+    Arr.filter(yield* Effect.orDie(repo.listByUser(user.userId)), (alias) =>
+      Option.isNone(alias.inboxExpiresAt),
+    ),
+    view,
+  );
 });
 
 /** Where the caller may create aliases. */
@@ -197,7 +197,11 @@ export const create = (payload: NewAlias) =>
 /** Changes the caller's alias; only what's given changes. */
 export const update = Effect.fn("aliases.update")(function* (
   params: AliasParams,
-  changes: { readonly mode?: Mode; readonly isActive?: boolean },
+  changes: {
+    readonly mode?: Mode;
+    readonly isActive?: boolean;
+    readonly retentionDays?: AliasView["retentionDays"];
+  },
 ) {
   const user = yield* CurrentUser;
   const repo = yield* AliasRepo.AliasRepo;

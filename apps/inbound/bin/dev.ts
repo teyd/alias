@@ -19,10 +19,11 @@
  * `ALIAS_IMAGE_PROXY_PORT`, which reads that parameter.
  */
 import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
-import { SharedDomains } from "@alias/core";
+import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo, Table } from "@alias/db";
 import { SnsSubscriber } from "@alias/lambda-emulator";
 import { SesEmulator } from "@alias/ses-emulator";
+import { Inbox } from "@alias/inbox";
 import { WebhookQueue } from "@alias/webhooks";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -79,9 +80,17 @@ const imageProxySigner = Layer.unwrap(
 /** The webhook queue the pipeline and the feedback handler publish to (`apps/webhooks`). */
 const webhookQueue = WebhookQueue.dev.pipe(Layer.provide(awsClient));
 
+const database = Dynamo.emulator(fakecloudUrl, "alias");
+/** Temporary inboxes on `ALIAS_TEMP_DOMAINS` (`tmp.test` in dev), never one of the shared domains. */
+const tempDomains = TempDomains.layer(process.env.ALIAS_TEMP_DOMAINS ?? "tmp.test").pipe(
+  Layer.provide(sharedDomains),
+);
+
 const pipeline = Pipeline.layer(
   Layer.mergeAll(
-    Dynamo.emulator(fakecloudUrl, "alias"),
+    database,
+    Inbox.dev(fakecloudUrl, database),
+    tempDomains,
     sending,
     webhookQueue,
     Spool.layer(spoolBucket).pipe(Layer.provide(awsClient)),
@@ -91,8 +100,8 @@ const pipeline = Pipeline.layer(
   ),
 );
 
-// Like SES, the emulator receives for the account's verified domain identities: the shared ones
-// verified below, and each custom domain from the moment the API creates its identity (the
+// Like SES, the emulator receives for the account's verified domain identities: the shared and
+// temp-mail ones verified below, and each custom domain from the moment the API creates its identity (the
 // pipeline then drops mail to it as `unverified-domain` until it is verified, PLAN.md §20.18.2).
 const emulator = SesEmulator.layer({
   smtpPort: Number(process.env.ALIAS_SMTP_PORT ?? 2525),
@@ -114,7 +123,7 @@ const emulator = SesEmulator.layer({
 
 const prepare = Effect.fn("inbound.dev.prepare")(function* () {
   yield* untilFakeCloudIsUp(Inbound.ensureSpool(spoolBucket)).pipe(Effect.provide(awsClient));
-  const domains = yield* SharedDomains.SharedDomains;
+  const domains = [...(yield* SharedDomains.SharedDomains), ...(yield* TempDomains.TempDomains)];
   // fakecloud only accepts senders on an exactly verified domain, while AWS also accepts the
   // subdomains (PLAN.md §20.5). `apps/api/bin/dev.ts` verifies each user's subdomains when they
   // sign up, so mail to `<user>.alias.test` aliases can be sent.
@@ -178,5 +187,8 @@ const serve = Effect.fn("inbound.dev")(function* () {
 });
 
 NodeRuntime.runMain(
-  serve().pipe(Effect.scoped, Effect.provide(Layer.mergeAll(emulator, pipeline, sharedDomains))),
+  serve().pipe(
+    Effect.scoped,
+    Effect.provide(Layer.mergeAll(emulator, pipeline, sharedDomains, tempDomains)),
+  ),
 );

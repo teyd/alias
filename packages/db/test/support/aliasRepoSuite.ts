@@ -52,6 +52,8 @@ export const aliasRepoSuite = (
                 createdAt: 1,
                 forwardedCount: 0,
                 blockedCount: 0,
+                inboxExpiresAt: Option.none(),
+                retentionDays: Option.none(),
               }),
             );
           }),
@@ -387,6 +389,56 @@ export const aliasRepoSuite = (
               expect(yield* repo.listByUser("usr_1")).toEqual([]);
             }),
           ),
+      );
+
+      it.effect("stores a temporary inbox's expiry and retention, and changes the retention", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            yield* repo.insert(alias());
+            yield* repo.insert(
+              alias({
+                id: "al_temp",
+                domain: "tmp.test",
+                localPart: "k7m2qx9pzr",
+                mode: "inbox",
+                inboxExpiresAt: 86_400_000,
+                retentionDays: 1,
+              }),
+            );
+            const shop = yield* repo.findByAddress("alias.test", "shop");
+            expect(
+              Option.map(shop, (found) => [found.inboxExpiresAt, found.retentionDays]),
+            ).toEqual(Option.some([Option.none(), Option.none()]));
+            const temporary = yield* repo.findByAddress("tmp.test", "k7m2qx9pzr");
+            expect(
+              Option.map(temporary, (found) => [found.inboxExpiresAt, found.retentionDays]),
+            ).toEqual(Option.some([Option.some(86_400_000), Option.some(1)]));
+            const changed = yield* repo.update(
+              { userId: "usr_1", domain: "alias.test", localPart: "shop" },
+              { mode: "inbox", retentionDays: 30 },
+            );
+            expect([changed.mode, changed.retentionDays]).toEqual(["inbox", Option.some(30)]);
+          }),
+        ),
+      );
+
+      it.effect("caps temporary inboxes per user and UTC day", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const morning = at("2026-10-22T00:00:00Z");
+            const results = yield* Effect.all(
+              Arr.replicate(repo.reserveTemporary("usr_1", morning, 3), 5),
+              { concurrency: "unbounded" },
+            );
+            expect(results.filter((isReserved) => isReserved)).toHaveLength(3);
+            expect(yield* repo.reserveTemporary("usr_2", morning, 3)).toBe(true);
+            expect(yield* repo.reserveTemporary("usr_1", at("2026-10-23T00:00:00Z"), 3)).toBe(true);
+            // Separate from the on-the-fly allowance.
+            expect(yield* repo.reserveCreation("usr_1", morning, 3)).toBe(true);
+          }),
+        ),
       );
 
       it.effect("counting a deleted alias fails instead of recreating it", () =>

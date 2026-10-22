@@ -21,6 +21,14 @@ export class Limits extends Context.Service<
      * aliases keep working.
      */
     readonly aliasesCreatedPerDay: number;
+    /**
+     * Inbox mode keeps mail up to this size (PLAN.md §20.22); larger mail is dropped as
+     * `too-large`. Stored mail is read back whole by the API Lambda, so it stays well below the
+     * forwarding limit.
+     */
+    readonly maxStoredBytes: number;
+    /** Messages stored per user and UTC day, all inboxes together. Past it: `storage-limited`. */
+    readonly storedPerDay: number;
   }
 >()("@alias/inbound/Limits") {}
 
@@ -28,4 +36,6 @@ export const defaults: Limits["Service"] = {
   maxMessageBytes: 25 * 1024 * 1024,
   forwardsPerHour: 100,
   aliasesCreatedPerDay: 20,
+  maxStoredBytes: 10 * 1024 * 1024,
+  storedPerDay: 500,
 };

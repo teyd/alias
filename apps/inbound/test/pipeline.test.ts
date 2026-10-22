@@ -1,6 +1,6 @@
-import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
+import { AwsClient, Inbound, Objects, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { Pgp, SharedDomains, Username } from "@alias/core";
+import { Pgp, SharedDomains, TempDomains, Username } from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
@@ -10,6 +10,9 @@ import {
   WebhookRepo,
 } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
+import { Inbox } from "@alias/inbox";
+import { freshInbox, TestInbox } from "@alias/inbox/testing";
+import { NodeCrypto } from "@effect/platform-node";
 import { freshQueue, TestQueue } from "@alias/webhooks/testing";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
@@ -43,9 +46,13 @@ const pipeline = (limits?: Limits.Limits["Service"]) =>
     Effect.sync(() => {
       // One queue: the pipeline publishes to it, tests read it (`TestQueue`).
       const queue = freshQueue();
+      const table = freshTable();
+      const inbox = freshInbox().pipe(Layer.provide(Layer.merge(table, NodeCrypto.layer)));
       return Pipeline.layer(
         Layer.mergeAll(
-          freshTable(),
+          table,
+          inbox,
+          TempDomains.layer("tmp.test").pipe(Layer.provide(SharedDomains.layer("alias.test"))),
           queue,
           Transport.ses.pipe(Layer.provide(aws)),
           Spool.layer(bucket).pipe(Layer.provide(aws)),
@@ -54,7 +61,7 @@ const pipeline = (limits?: Limits.Limits["Service"]) =>
           ImageProxySigner.layer("https://img.alias.test", keys),
         ),
         limits,
-      ).pipe(Layer.provideMerge(queue));
+      ).pipe(Layer.provideMerge(queue), Layer.provideMerge(inbox));
     }),
   );
 
@@ -368,22 +375,15 @@ describe("inbound pipeline (fakecloud)", () => {
     withPipeline(
       Effect.gen(function* () {
         yield* alias();
-        yield* alias({ id: "al_temp", localPart: "temp", mode: "inbox" });
         yield* alias({ id: "al_lone", userId: "usr_2", localPart: "lone" });
         yield* recipient("pending@mail.example", { userId: "usr_2", isPending: true });
         const { messageId, event } = yield* receive({
-          recipients: [
-            "nobody@alias.test",
-            "shop@custom.example",
-            "temp@alias.test",
-            "lone@alias.test",
-          ],
+          recipients: ["nobody@alias.test", "shop@custom.example", "lone@alias.test"],
         });
 
         expect(yield* Pipeline.handle(event)).toEqual([
           { _tag: "Dropped", reason: "unknown-alias" },
           { _tag: "Dropped", reason: "unknown-domain" },
-          { _tag: "Dropped", reason: "inbox-mode" },
           { _tag: "Dropped", reason: "no-recipient" },
         ]);
         expect(yield* sent).toEqual([]);
@@ -1399,12 +1399,154 @@ describe("inbound pipeline on custom domains (PLAN.md §20.18.2)", () => {
         yield* customDomain("open.example", "verified", { isCatchAllEnabled: true });
         yield* recipient("ada@mail.example");
         const { event } = yield* receive({ recipients: ["a@open.example", "b@open.example"] });
-        expect(yield* Pipeline.handle(event)).toEqual([
-          { _tag: "Forwarded" },
-          { _tag: "Dropped", reason: "creation-limited" },
-        ]);
+        // Recipients are planned concurrently, so either one may get the single allowance.
+        const outcomes = yield* Pipeline.handle(event);
+        expect(outcomes).toHaveLength(2);
+        expect(outcomes).toEqual(
+          expect.arrayContaining([
+            { _tag: "Forwarded" },
+            { _tag: "Dropped", reason: "creation-limited" },
+          ]),
+        );
       }),
       { ...Limits.defaults, aliasesCreatedPerDay: 1 },
+    ),
+  );
+});
+
+/** What the inbox holds for the alias, decrypted, newest first. */
+const inboxOf = (aliasId: string) =>
+  Inbox.Inbox.use((inbox) => inbox.list(aliasId, { after: Option.none(), limit: 50 }));
+
+/** Every stored body, as S3 holds it. */
+const storedObjects = Effect.fn("storedObjects")(function* () {
+  const { bucket: inboxBucket } = yield* TestInbox;
+  const keys = yield* Objects.keys(inboxBucket, "inbox/");
+  return yield* Effect.forEach(keys, (key) => Objects.get(inboxBucket, key), { concurrency: 4 });
+});
+
+const temporary = {
+  id: "al_temp",
+  domain: "tmp.test",
+  localPart: "k7m2qx9pzr",
+  mode: "inbox" as const,
+  inboxExpiresAt: 9_000_000_000_000,
+  retentionDays: 1,
+};
+
+describe("inbound pipeline: inbox mode (fakecloud)", () => {
+  it.effect("stores mail for an inbox alias encrypted, sends nothing and deletes the spool", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias({ mode: "inbox" });
+        const { messageId, event } = yield* receive({
+          recipients: ["shop@alias.test"],
+          headers: ["Subject: Your code is 482913"],
+          raw: new TextEncoder().encode(
+            "From: Login <no-reply@login.example>\r\nSubject: 482913 is your verification code\r\n\r\nYour verification code is 482913.\r\n",
+          ),
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Stored" }]);
+        expect(yield* sent).toEqual([]);
+        expect(yield* spoolHolds(messageId)).toBe(false);
+        const [summary] = yield* inboxOf("al_shop");
+        expect(summary?.code).toEqual(Option.some("482913"));
+        expect(summary?.subject).toEqual(Option.some("482913 is your verification code"));
+        const [object] = yield* storedObjects();
+        expect(new TextDecoder("latin1").decode(object)).not.toContain("482913");
+
+        // A redelivered event stores nothing twice.
+        yield* S3.putObject({
+          Bucket: bucket,
+          Key: Inbound.objectKey(Inbound.spoolPrefix, messageId),
+          Body: new TextEncoder().encode("From: x@y.example\r\n\r\nagain"),
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Duplicate" }]);
+        expect(yield* inboxOf("al_shop")).toHaveLength(1);
+        expect(yield* counters).toEqual(Option.some([0, 0]));
+      }),
+    ),
+  );
+
+  it.effect("serves temporary inboxes on the temp domain until they expire, receive-only", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias(temporary);
+        // The test clock stands at the epoch: this one expired then.
+        yield* alias({ ...temporary, id: "al_old", localPart: "old", inboxExpiresAt: 0 });
+        const live = yield* receive({ recipients: ["k7m2qx9pzr@tmp.test"] });
+        expect(yield* Pipeline.handle(live.event)).toEqual([{ _tag: "Stored" }]);
+        expect(yield* inboxOf("al_temp")).toHaveLength(1);
+        const expired = yield* receive({ recipients: ["old@tmp.test"] });
+        expect(yield* Pipeline.handle(expired.event)).toEqual([
+          { _tag: "Dropped", reason: "expired-inbox" },
+        ]);
+        const unknown = yield* receive({ recipients: ["nobody@tmp.test"] });
+        expect(yield* Pipeline.handle(unknown.event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        const reply = yield* receive({ recipients: ["k7m2qx9pzr+r.abcdefgh@tmp.test"] });
+        expect(yield* Pipeline.handle(reply.event)).toEqual([
+          { _tag: "Dropped", reason: "unroutable" },
+        ]);
+        // One day of retention: the object sits in the one-day lifecycle class.
+        const { bucket: inboxBucket } = yield* TestInbox;
+        const keys = yield* Objects.keys(inboxBucket, "inbox/1d/al_temp/");
+        expect(keys).toHaveLength(1);
+      }),
+    ),
+  );
+
+  it.effect("both: stores and forwards, and still stores when there is nowhere to forward", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias({ mode: "both" });
+        const first = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(first.event)).toEqual([{ _tag: "Stored" }]);
+        yield* recipient("ada@mail.example");
+        const second = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(second.event)).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* sent).toHaveLength(1);
+        expect(yield* inboxOf("al_shop")).toHaveLength(2);
+      }),
+    ),
+  );
+
+  it.effect("refuses mail over the stored size and past the daily allowance, as blocked", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias({ mode: "inbox" });
+        const large = yield* receive({
+          recipients: ["shop@alias.test"],
+          raw: new TextEncoder().encode(`From: shop@store.example\r\n\r\n${"x".repeat(2_000)}`),
+        });
+        expect(yield* Pipeline.handle(large.event)).toEqual([
+          { _tag: "Dropped", reason: "too-large" },
+        ]);
+        const kept = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(kept.event)).toEqual([{ _tag: "Stored" }]);
+        const over = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(over.event)).toEqual([
+          { _tag: "Dropped", reason: "storage-limited" },
+        ]);
+        expect(yield* inboxOf("al_shop")).toHaveLength(1);
+        expect(yield* counters).toEqual(Option.some([0, 2]));
+      }),
+      { ...Limits.defaults, maxStoredBytes: 1_000, storedPerDay: 1 },
+    ),
+  );
+
+  it.effect("drops spam for inboxes too, before storing anything", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias(temporary);
+        const spam = yield* receive({
+          recipients: ["k7m2qx9pzr@tmp.test"],
+          verdicts: { spam: "FAIL" },
+        });
+        expect(yield* Pipeline.handle(spam.event)).toEqual([{ _tag: "Dropped", reason: "spam" }]);
+        expect(yield* storedObjects()).toEqual([]);
+      }),
     ),
   );
 });

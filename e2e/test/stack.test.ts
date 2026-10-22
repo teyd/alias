@@ -1,5 +1,5 @@
 import { TestAuthenticator } from "@alias/api/testing";
-import { Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
+import { Inbound, Objects, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { Username, Webhook } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { DohServer } from "@alias/doh-emulator";
@@ -12,7 +12,9 @@ import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
@@ -26,8 +28,17 @@ import {
   StreamableHTTPClientTransport,
   UnauthorizedError,
 } from "@modelcontextprotocol/client";
-import { apiHandler, layer, sentTo, smtp, smtpRaw, spoolBucket } from "./support/stack.ts";
+import {
+  apiHandler,
+  inboxBucket,
+  layer,
+  sentTo,
+  smtp,
+  smtpRaw,
+  spoolBucket,
+} from "./support/stack.ts";
 import * as openpgp from "openpgp";
+import * as TestClock from "effect/testing/TestClock";
 
 const origin = "https://alias.test";
 
@@ -1255,6 +1266,63 @@ describe("emulated stack", () => {
           expect(Option.map(replied, (email) => email.text.includes(mailbox))).toEqual(
             Option.some(false),
           );
+        }),
+    );
+
+    it.effect(
+      "temp mail: SMTP → stored encrypted → a long poll returns it with the code, in under 5 s",
+      () =>
+        Effect.gen(function* () {
+          // What `alias temp --wait --otp` does: a temp-only token, a temporary inbox, a long poll.
+          const { cookie } = yield* signUp("tia");
+          const minted = yield* call("/v1/tokens", {
+            cookie,
+            body: { name: "cli", scopes: ["inboxes:read", "inboxes:write"] },
+          });
+          const bearer = String(minted.body.token);
+          const created = yield* call("/v1/inboxes", { bearer, body: {} });
+          expect(created.status).toBe(201);
+          const address = String(created.body.address);
+          expect(address).toMatch(/^[2-9a-z]{10}@tmp\.test$/);
+          const [local] = address.split("@");
+          const messages = `/v1/inboxes/tmp.test/${local}/messages`;
+
+          const started = yield* TestClock.withLive(DateTime.now);
+          const waiting = yield* Effect.forkChild(call(`${messages}?wait=20`, { bearer }));
+          const event = yield* smtp({
+            from: "no-reply@login.example",
+            to: address,
+            subject: "Your sign-in code",
+            text: "Use this verification code to sign in: 482913\n\nIt expires in 10 minutes.",
+          });
+          expect(yield* invoke(event)).toEqual([{ _tag: "Stored" }]);
+          const answer = yield* Fiber.join(waiting);
+          const elapsed = DateTime.distance(started, yield* TestClock.withLive(DateTime.now));
+          expect(answer.status).toBe(200);
+          expect(answer.body).toMatchObject([
+            { code: "482913", subject: "Your sign-in code", from: "no-reply@login.example" },
+          ]);
+          expect(Duration.toMillis(elapsed)).toBeLessThan(5_000);
+
+          // At rest, nothing is plaintext: the S3 body is sealed and the table holds no content.
+          const [key = ""] = yield* Objects.keys(inboxBucket, "inbox/1d/");
+          const body = new TextDecoder().decode(yield* Objects.get(inboxBucket, key));
+          expect(body).not.toContain("482913");
+          expect(body).not.toContain("verification");
+          expect(body).not.toContain("login.example");
+          expect(yield* itemsMentioning("482913")).toEqual([]);
+          expect(yield* itemsMentioning("sign-in code")).toEqual([]);
+          // The spool copy is gone once stored.
+          expect(
+            yield* Effect.flip(Inbound.readMessage(spoolBucket, messageIdOf(event))),
+          ).toMatchObject({ _tag: "MessageGone" });
+
+          // Reading it decrypts server-side.
+          const id = String(answer.body[0].id);
+          const read = yield* call(`${messages}/${id}`, { bearer });
+          expect(read.body.text).toContain("482913");
+          // The token reaches nothing but inboxes.
+          expect((yield* call("/v1/aliases", { bearer })).status).toBe(403);
         }),
     );
   });

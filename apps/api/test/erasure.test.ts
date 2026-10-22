@@ -1,3 +1,7 @@
+import { AwsClient, Objects } from "@alias/aws";
+import { FakeCloud } from "@alias/aws-emulators";
+import { Inbox } from "@alias/inbox";
+import { TestInbox } from "@alias/inbox/testing";
 import { AliasRepo, ContactRepo } from "@alias/db";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import { describe, expect, it } from "@effect/vitest";
@@ -130,6 +134,25 @@ describe("data lifecycle over the API (fakecloud)", () => {
         ),
       );
 
+      // A temporary inbox with a stored message: its body sits encrypted in S3.
+      const temporary = Schema.decodeUnknownSync(Created)(
+        (yield* ada.browser.post("/v1/inboxes", {})).body,
+      );
+      const [tempLocal = "", tempDomain = ""] = temporary.address.split("@");
+      yield* Effect.gen(function* () {
+        const found = yield* (yield* AliasRepo.make()).findByAddress(tempDomain, tempLocal);
+        yield* (yield* Inbox.Inbox).store(
+          yield* Effect.fromOption(found),
+          new TextEncoder().encode("Subject: 482913 is your code\r\n\r\nYour code is 482913."),
+        );
+      }).pipe(Effect.provide(context));
+      const storedBodies = Effect.gen(function* () {
+        const { bucket } = yield* TestInbox;
+        const { url } = yield* FakeCloud.FakeCloud;
+        return yield* Objects.keys(bucket, "inbox/").pipe(Effect.provide(AwsClient.emulator(url)));
+      }).pipe(Effect.provide(context));
+      expect(yield* storedBodies).toHaveLength(1);
+
       const minted = yield* ada.browser.post("/v1/tokens", {
         name: "cli",
         scopes: ["aliases:read"],
@@ -176,6 +199,13 @@ describe("data lifecycle over the API (fakecloud)", () => {
           ),
         ),
       ).toEqual([Option.none(), true]);
+
+      // The stored message is gone: its metadata with the account, its body from S3. The
+      // temporary inbox's address stays taken, by nobody.
+      expect(yield* storedBodies).toEqual([]);
+      expect(
+        yield* withRepos(AliasRepo.AliasRepo.use((repo) => repo.isDeleted(tempDomain, tempLocal))),
+      ).toBe(true);
 
       // Grace is untouched.
       expect(yield* grace.browser.get("/v1/me")).toMatchObject({

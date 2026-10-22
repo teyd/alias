@@ -23,8 +23,10 @@ export const DropReason = Schema.Literals([
   // Past the owner's daily allowance of aliases created on the fly.
   "creation-limited",
   "inactive-alias",
-  // Inbox mode (temp mail) stores mail instead of forwarding it: roadmap phase 7.
-  "inbox-mode",
+  // A temporary inbox past its lifetime (PLAN.md §20.22).
+  "expired-inbox",
+  // Past the owner's daily allowance of stored messages (inbox mode).
+  "storage-limited",
   // The alias owner has no verified forwarding address.
   "no-recipient",
   // SES reported the owner's forwarding address as permanently bouncing.

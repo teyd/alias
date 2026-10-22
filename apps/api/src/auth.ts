@@ -9,6 +9,7 @@ import {
 } from "@alias/contracts";
 import {
   AccountRepo,
+  AliasRepo,
   ChallengeRepo,
   DomainRepo,
   PasskeyRepo,
@@ -16,6 +17,7 @@ import {
   type SessionRepo,
   UserRepo,
 } from "@alias/db";
+import { Inbox } from "@alias/inbox";
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -217,6 +219,8 @@ const erase = Effect.fn("auth.erase")(function* (payload: {
     concurrency: 4,
     discard: true,
   }).pipe(Effect.orDie);
+  // Their aliases' ids, for the stored mail in S3: erasure removes the aliases from the table.
+  const aliases = yield* Effect.orDie((yield* AliasRepo.AliasRepo).listByUser(user.userId));
   const shared = yield* SharedDomains.SharedDomains;
   yield* Effect.orDie(
     (yield* AccountRepo.AccountRepo).erase({
@@ -227,6 +231,13 @@ const erase = Effect.fn("auth.erase")(function* (payload: {
       sessionId: yield* Effect.orDie(Sessions.currentId()),
     }),
   );
+  // The table no longer holds the data keys, so what is left in S3 can't be read; it goes too.
+  // Bodies of aliases deleted before were purged with them.
+  const inbox = yield* Inbox.Inbox;
+  yield* Effect.forEach(aliases, (alias) => Effect.orDie(inbox.purge(alias.id)), {
+    concurrency: 4,
+    discard: true,
+  });
   yield* Effect.orDie(Sessions.end());
 });
 
@@ -251,7 +262,9 @@ type AccountServices =
   | DomainRepo.DomainRepo
   | Identities.Identities
   | Transport.Transport
-  | SharedDomains.SharedDomains;
+  | SharedDomains.SharedDomains
+  | AliasRepo.AliasRepo
+  | Inbox.Inbox;
 
 export const AccountLive = HttpApiBuilder.group(Api, "account", (handlers) =>
   Effect.map(Effect.context<AccountServices>(), (services) =>

@@ -4,6 +4,7 @@ import { AccountGroup, AuthGroup, Authentication } from "./Auth.ts";
 import { DeviceGroup, OAuthGroup } from "./Device.ts";
 import { ConsentGroup } from "./OAuth.ts";
 import { OutboxGroup } from "./Outbox.ts";
+import { InboxesGroup, RetentionDays } from "./Inboxes.ts";
 import { requires } from "./Scopes.ts";
 import { DomainsGroup } from "./Domains.ts";
 import { RecipientsGroup } from "./Recipients.ts";
@@ -26,6 +27,8 @@ const AliasView = Schema.Struct({
   forwardedCount: Schema.Int,
   /** Mail refused: spam, viruses, loops, blocked contacts, caps, a disabled alias. */
   blockedCount: Schema.Int,
+  /** How long mail stored in inbox mode is kept (PLAN.md §20.22). */
+  retentionDays: RetentionDays,
 });
 export type AliasView = typeof AliasView.Type;
 
@@ -44,6 +47,7 @@ export type NewAlias = typeof NewAlias.Type;
 const AliasChanges = Schema.Struct({
   mode: Schema.optionalKey(AliasMode),
   isActive: Schema.optionalKey(Schema.Boolean),
+  retentionDays: Schema.optionalKey(RetentionDays),
 });
 
 /**
@@ -210,6 +214,7 @@ export const Api = HttpApi.make("alias")
   .add(AccountGroup)
   .add(AliasesGroup)
   .add(ContactsGroup)
+  .add(InboxesGroup)
   .add(RecipientsGroup)
   .add(DomainsGroup)
   .add(SettingsGroup)

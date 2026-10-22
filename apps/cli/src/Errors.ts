@@ -5,6 +5,8 @@ import {
   DeviceLogin,
   Forbidden,
   InvalidAlias,
+  InvalidTemporaryInbox,
+  TemporaryInboxLimit,
   TooManyAttempts,
   Unauthenticated,
 } from "@alias/sdk";
@@ -25,6 +27,12 @@ export class InvalidAddress extends Schema.TaggedError<InvalidAddress>()("Invali
 
 /** `alias aliases delete` without `--yes`. */
 export class NotConfirmed extends Schema.TaggedError<NotConfirmed>()("NotConfirmed", {}) {}
+
+/** `alias temp --wait`: nothing arrived before the timeout. */
+export class NoMail extends Schema.TaggedError<NoMail>()("NoMail", { address: Schema.String }) {}
+
+/** `alias temp --wait --otp`: mail arrived, but no code or verification link was found in it. */
+export class NoCode extends Schema.TaggedError<NoCode>()("NoCode", {}) {}
 
 /** No contact of the alias has this id or address. */
 export class NoSuchContact extends Schema.TaggedError<NoSuchContact>()("NoSuchContact", {}) {}
@@ -65,6 +73,18 @@ const describe = <E>(error: E): string => {
   if (error instanceof InvalidAddress) return `${error.input} isn't an address like name@domain.`;
   if (error instanceof NotConfirmed) {
     return "Not deleted. Pass --yes to delete the alias and its contacts for good.";
+  }
+  if (error instanceof NoMail) return `No mail reached ${error.address} in time.`;
+  if (error instanceof NoCode) {
+    return "Mail arrived, but no code or link was found in it. Run without --otp to see it.";
+  }
+  if (error instanceof InvalidTemporaryInbox) {
+    return error.reason === "temp-mail-disabled"
+      ? "This server has no temporary inboxes."
+      : "That domain takes no temporary inboxes.";
+  }
+  if (error instanceof TemporaryInboxLimit) {
+    return "You created as many temporary inboxes as you may today.";
   }
   if (error instanceof DeviceLogin.DeviceLoginFailed) return loginFailure(error.reason);
   if (error instanceof CredentialsUnreadable) return `Can't use ${error.path}: ${error.reason}`;

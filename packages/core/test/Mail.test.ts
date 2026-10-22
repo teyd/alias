@@ -1,18 +1,22 @@
-import { NodeCrypto } from "@effect/platform-node";
+import { NodeCrypto, NodeServices } from "@effect/platform-node";
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { Address, Mail, ReverseToken } from "../src/index.ts";
 import { newsletter, newsletterBody, newsletterHeaders, ownerReply } from "./support/fixtures.ts";
-import { binary, bytes, mailbox, split, values } from "./support/mime.ts";
+import { binary, bytes, mailbox, split, textParts, values } from "./support/mime.ts";
 
 const alias: Address.MailAddress = { local: "k7m2qx9p", domain: "alias.test" };
 const token = "ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc";
 const reverse = `k7m2qx9p+r.${token}@alias.test`;
 const cafe: Mail.Sender = { name: Option.some("Café Müller"), address: "news@cafe.example" };
+/** The alias owner of the `ownerReply` fixture. */
+const owner: Mail.Owner = { addresses: ["jane.doe@gmail.example"], name: Option.some("Jane Doe") };
 
 const forwardWith = (raw: Uint8Array, sender: Mail.Sender = cafe) =>
   Mail.forward(raw, { alias, sender, token });
@@ -303,6 +307,7 @@ describe("Mail.reply", () => {
         alias,
         to: contact,
         messageId,
+        owner,
       });
       expect(names(out)).toEqual([
         "from",
@@ -332,15 +337,66 @@ describe("Mail.reply", () => {
         ...ownerReply("\r\n", reverse),
       ]);
       expect(values(forwarded, "X-Alias-Forwarded")).toEqual(["k7m2qx9p@alias.test"]);
-      const out = yield* Mail.reply(raw, { alias, to: contact, messageId });
+      const out = yield* Mail.reply(raw, { alias, to: contact, messageId, owner });
       expect(values(out, "X-Alias-Forwarded")).toEqual([]);
+    }),
+  );
+
+  const replyWith = (headers: ReadonlyArray<string>, body: Uint8Array) =>
+    Mail.reply(Uint8Array.from([...bytes([...headers, "", ""].join("\r\n")), ...body]), {
+      alias,
+      to: contact,
+      messageId,
+      owner,
+    }).pipe(Effect.map((out) => split(out).rest));
+
+  it.effect("leaves longer addresses, other words and unquoted names alone", () =>
+    Effect.gen(function* () {
+      const body = bytes(
+        [
+          "Jane Doe here, my old mail was xjane.doe@gmail.example, see jane.doe@gmail.example.org",
+          "> Jane Doerte and Jane Does wrote nothing of note",
+          "",
+        ].join("\r\n"),
+      );
+      expect(yield* replyWith(["Content-Type: text/plain"], body)).toEqual(
+        Uint8Array.from([...bytes("\r\n"), ...body]),
+      );
+    }),
+  );
+
+  it.effect("finds an address that quoted-printable split across a soft line break", () =>
+    Effect.gen(function* () {
+      const out = yield* replyWith(
+        ["Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: quoted-printable"],
+        bytes("> Write to jane.do=\r\ne@gmail.example =C3=BC\r\n"),
+      );
+      expect(binary(out)).toBe("\r\n> Write to k7m2qx9p@alias.test =C3=BC\r\n");
+    }),
+  );
+
+  it.effect("leaves UTF-16 parts and unknown transfer encodings alone", () =>
+    Effect.gen(function* () {
+      const utf16 = Uint8Array.from(
+        Array.from("jane.doe@gmail.example", (char) => [char.charCodeAt(0), 0]).flat(),
+      );
+      expect(yield* replyWith(["Content-Type: text/plain; charset=utf-16le"], utf16)).toEqual(
+        Uint8Array.from([0x0d, 0x0a, ...utf16]),
+      );
+      const uuencoded = bytes("jane.doe@gmail.example");
+      expect(
+        yield* replyWith(
+          ["Content-Type: text/plain", "Content-Transfer-Encoding: x-uuencode"],
+          uuencoded,
+        ),
+      ).toEqual(Uint8Array.from([0x0d, 0x0a, ...uuencoded]));
     }),
   );
 
   it.effect("keeps the body and the threading fields byte for byte", () =>
     Effect.gen(function* () {
       const raw = ownerReply("\n", reverse);
-      const out = yield* Mail.reply(raw, { alias, to: contact, messageId });
+      const out = yield* Mail.reply(raw, { alias, to: contact, messageId, owner });
       expect(split(out).rest).toEqual(split(raw).rest);
       expect(binary(out)).toContain("In-Reply-To: <20261021091400.4f2a@cafe.example>\nReferences:");
       expect(binary(out)).not.toContain("\r");
@@ -377,9 +433,84 @@ layer(NodeCrypto.layer)((it) => {
         alias: aliasAddress,
         to,
         messageId: "reply-1",
+        owner,
       });
       expect(values(sent, "From")).toEqual(["k7m2qx9p@alias.test"]);
       expect(values(sent, "To")).toEqual(["news@cafe.example"]);
+    }),
+  );
+});
+
+describe("Mail.reply on the golden corpus", () => {
+  const ada: Mail.Owner = {
+    addresses: ["ada@mailbox.example", "ada.work@office.example"],
+    name: Option.some("Ada Lovelace"),
+  };
+  const zoe: Mail.Owner = { addresses: ["zoe@mailbox.example"], name: Option.some("Zoë Müller") };
+  const cases = [
+    { name: "gmail-alternative", owner: ada },
+    { name: "apple-mail", owner: ada },
+    { name: "thunderbird-flowed", owner: ada },
+    { name: "outlook-base64", owner: ada },
+    { name: "latin1-qp", owner: zoe },
+    { name: "attachment-mixed", owner: ada },
+    { name: "nothing-to-scrub", owner: ada },
+  ];
+
+  const read = (file: string) =>
+    Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
+      fs.readFile(new URL(`./corpus/${file}`, import.meta.url).pathname),
+    ).pipe(
+      // NodeFileSystem returns a Buffer, which never deep-equals a plain Uint8Array.
+      Effect.map((data) => new Uint8Array(data)),
+      Effect.provide(NodeServices.layer),
+    );
+
+  const relay = (raw: Uint8Array, owner: Mail.Owner) =>
+    Mail.reply(raw, {
+      alias: { local: "shop", domain: "ada.alias.test" },
+      to: "orders@store.example",
+      messageId: "reply-1",
+      owner,
+    });
+
+  it.effect.each(cases)("$name: matches the reviewed output byte for byte", ({ name, owner }) =>
+    Effect.gen(function* () {
+      const out = yield* relay(yield* read(`${name}.eml`), owner);
+      expect(binary(out)).toBe(binary(yield* read(`${name}.expected.eml`)));
+      // Relaying the output again changes nothing.
+      expect(binary(yield* relay(out, owner))).toBe(binary(out));
+    }),
+  );
+
+  it.effect.each(cases)(
+    "$name: leaves no owner address in any inline text part",
+    ({ name, owner }) =>
+      Effect.gen(function* () {
+        const out = yield* relay(yield* read(`${name}.eml`), owner);
+        const inline = Arr.filter(textParts(out), (part) => !part.isAttachment);
+        expect(inline.length).toBeGreaterThan(0);
+        Arr.map(inline, (part) =>
+          Arr.map(owner.addresses, (address) =>
+            expect(part.text.toLowerCase()).not.toContain(address),
+          ),
+        );
+      }),
+  );
+
+  it.effect("keeps attachments and bodies without owner data byte for byte", () =>
+    Effect.gen(function* () {
+      const mixed = yield* read("attachment-mixed.eml");
+      const mixedOut = yield* relay(mixed, ada);
+      const attachments = (raw: Uint8Array) => {
+        const text = binary(raw);
+        return text.slice(text.indexOf("--mixed-7c1e\r\nContent-Type: application/pdf"));
+      };
+      expect(attachments(mixedOut)).toBe(attachments(mixed));
+      expect(binary(mixedOut)).toContain("Notes for ada@mailbox.example");
+
+      const plain = yield* read("nothing-to-scrub.eml");
+      expect(split(yield* relay(plain, ada)).rest).toEqual(split(plain).rest);
     }),
   );
 });

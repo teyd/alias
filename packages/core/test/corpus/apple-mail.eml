@@ -1,0 +1,45 @@
+Return-Path: <ada@mailbox.example>
+Received: by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 9z; Wed, 22 Oct 2026 15:01:13 +0000
+DKIM-Signature: v=1; a=rsa-sha256; d=mailbox.example; s=s1; b=cmVhbA==
+From: Ada Lovelace <ada@mailbox.example>
+To: "Store (orders@store.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Message-ID: <CAJ8x1=ada@mail.mailbox.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary=Apple-Mail-5B3D9E8A-1C2F-4E6B-9A7D-0F1E2D3C4B5A
+
+--Apple-Mail-5B3D9E8A-1C2F-4E6B-9A7D-0F1E2D3C4B5A
+Content-Type: text/plain;
+	charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Perfect, see you then.
+
+> On 22. Oct 2026, at 07:45, Store (orders@store.example) <shop+r.ceaqyyzlm=
+fuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test> wrote:
+>
+> Could you confirm the delivery date?
+>
+>> On 21. Oct 2026, at 21:00, Ada Lovelace <ada@mailbox.example> wrote:
+>>
+>> Where is my parcel?
+
+--Apple-Mail-5B3D9E8A-1C2F-4E6B-9A7D-0F1E2D3C4B5A
+Content-Type: text/html;
+	charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta http-equiv=3D"content-type" content=3D"text/html; charset=
+=3Dutf-8"></head><body dir=3D"auto">Perfect, see you then.<br><div dir=3D"l=
+tr"><br><blockquote type=3D"cite">On 22. Oct 2026, at 07:45, Store (orders@=
+store.example) &lt;shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.ali=
+as.test&gt; wrote:<br><br></blockquote></div>
+<blockquote type=3D"cite"><div dir=3D"ltr">Could you confirm the delivery d=
+ate?<br><blockquote type=3D"cite">On 21. Oct 2026, at 21:00, Ada Lovelace &=
+lt;ada@mailbox.example&gt; wrote:<br>Where is my parcel?</blockquote></div>=
+</blockquote></body></html>
+
+--Apple-Mail-5B3D9E8A-1C2F-4E6B-9A7D-0F1E2D3C4B5A--

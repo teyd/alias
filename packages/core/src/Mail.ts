@@ -6,12 +6,14 @@ import * as Str from "effect/String";
 import * as Address from "./Address.ts";
 import { decode as decodeWords } from "./internal/encodedWords.ts";
 import * as Headers from "./internal/headers.ts";
+import * as Mime from "./internal/mime.ts";
 import { mailboxField, sanitize } from "./internal/phrase.ts";
+import { scrub } from "./internal/scrub.ts";
 
 /**
- * Header rewrites for the two mail paths (PLAN.md §3.2). Both work on raw RFC 5322 bytes and
- * change header fields only: the subject, the MIME structure and every body byte go out as
- * they came in.
+ * Rewrites for the two mail paths (PLAN.md §3.2). Both work on raw RFC 5322 bytes. Forwarding
+ * changes header fields only. Replying also takes the owner's identity out of their text parts;
+ * the subject, the MIME structure and every other body byte go out as they came in.
  */
 
 /** Who sent the mail being forwarded: the display name and address from its `From`. */
@@ -167,11 +169,24 @@ export const forward = Effect.fn("Mail.forward")(function* (
   ]);
 });
 
+/** Who the alias owner really is, as far as their reply could give it away. */
+export interface Owner {
+  /** Every address of theirs: the verified recipients, which their client may quote. */
+  readonly addresses: ReadonlyArray<string>;
+  /** The display name from their reply's `From`. */
+  readonly name: Option.Option<string>;
+}
+
 /**
  * Prepares the alias owner's reply for the contact: `From` becomes the alias, `To` the contact
  * the reverse alias stood for, `Message-ID` a new one on the alias's domain, and fields that
  * identify the user's mailbox, client or network are removed. `In-Reply-To` and `References`
- * name the contact's own messages, so threading keeps working. Quoted text is not touched yet.
+ * name the contact's own messages, so threading keeps working.
+ *
+ * In `text/plain` and `text/html` parts, the owner's addresses become the alias address
+ * everywhere, and so does their name in quoted text and attribution lines
+ * (`On Tue, Ada <ada@…> wrote:`). Only parts that contain them are re-encoded (in their own
+ * transfer encoding); every other byte is copied.
  *
  * `messageId` must be unique (a random UUID, say); it becomes `<messageId@alias domain>`.
  */
@@ -181,11 +196,16 @@ export const reply = Effect.fn("Mail.reply")(function* (
     readonly alias: Address.MailAddress;
     readonly to: string;
     readonly messageId: string;
+    readonly owner: Owner;
   },
 ) {
-  const message = yield* Headers.parse(raw);
+  const alias = Address.format(options.alias);
+  const message = yield* Mime.rewriteText(
+    yield* Headers.parse(raw),
+    scrub({ ...options.owner, replacement: alias }),
+  );
   return Headers.rewrite(message, isReplyRemoved, [
-    `From: ${Address.format(options.alias)}`,
+    `From: ${alias}`,
     `To: ${sanitize(options.to)}`,
     `Message-ID: <${options.messageId.replace(/[^\w.-]/g, "")}@${options.alias.domain}>`,
   ]);

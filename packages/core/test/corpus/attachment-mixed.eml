@@ -1,0 +1,41 @@
+Return-Path: <ada@mailbox.example>
+Received: by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 9z; Wed, 22 Oct 2026 15:01:13 +0000
+DKIM-Signature: v=1; a=rsa-sha256; d=mailbox.example; s=s1; b=cmVhbA==
+From: "Ada Lovelace" <ada@mailbox.example>
+To: "Store (orders@store.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Message-ID: <CAJ8x1=ada@mail.mailbox.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-7c1e"
+
+This is a multi-part message in MIME format.
+--mixed-7c1e
+Content-Type: multipart/alternative; boundary="alt-7c1e"
+
+--alt-7c1e
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Invoice attached.
+
+On Wed, Oct 22, 2026, Ada Lovelace <ada@mailbox.example> wrote:
+> Please send the invoice.
+
+--alt-7c1e--
+
+--mixed-7c1e
+Content-Type: application/pdf; name="invoice.pdf"
+Content-Disposition: attachment; filename="invoice.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJeLjz9MKYWRhQG1haWxib3guZXhhbXBsZQolJUVPRgo=
+--mixed-7c1e
+Content-Type: text/plain; charset=utf-8; name="notes.txt"
+Content-Disposition: attachment; filename="notes.txt"
+
+Notes for ada@mailbox.example
+--mixed-7c1e--
+epilogue

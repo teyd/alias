@@ -800,6 +800,46 @@ describe("inbound pipeline (fakecloud)", () => {
       ),
   );
 
+  it.effect("scrubs every one of the owner's addresses and their name from quoted text", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* recipient("ada.work@office.example");
+        const { reverse } = yield* forwardFrom("orders@store.example");
+        const raw = [
+          "From: Ada Lovelace <ada@mail.example>",
+          `To: ${Option.getOrElse(reverse, () => "")}`,
+          "Subject: Re: Order",
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          "See below. Ada Lovelace",
+          "",
+          "On Mon, Ada Lovelace <ada.work@office.example> wrote:",
+          "> Sent from ada@mail.example",
+          "",
+        ].join("\r\n");
+        const { event } = yield* receive({
+          from: "Ada Lovelace <ada@mail.example>",
+          recipients: [Option.getOrElse(reverse, () => "")],
+          raw: new TextEncoder().encode(raw),
+        });
+
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Replied" }]);
+        const out = text(Arr.last(yield* sent).pipe(Option.flatMap((email) => email.raw)));
+        expect(out).toContain(
+          [
+            "See below. Ada Lovelace",
+            "",
+            "On Mon, shop@alias.test <shop@alias.test> wrote:",
+            "> Sent from shop@alias.test",
+          ].join("\r\n"),
+        );
+        expect(out).not.toMatch(/ada@mail|ada\.work/);
+      }),
+    ),
+  );
+
   it.effect("drops what SES refuses for the message itself", () =>
     withPipeline(
       Effect.gen(function* () {

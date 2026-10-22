@@ -1,0 +1,20 @@
+Return-Path: <ada@mailbox.example>
+Received: by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 9z; Wed, 22 Oct 2026 15:01:13 +0000
+DKIM-Signature: v=1; a=rsa-sha256; d=mailbox.example; s=s1; b=cmVhbA==
+From: =?ISO-8859-1?Q?Zo=EB_M=FCller?= <zoe@mailbox.example>
+To: "Store (orders@store.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Message-ID: <CAJ8x1=ada@mail.mailbox.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset=ISO-8859-1
+
+Ja, bitte liefern.
+
+Zo=EB M=FCller <zoe@mailbox.example> schrieb am 21.10.2026:
+> Wann passt es Ihnen?
+> Zo=EB M=FCller hatte geschrieben:
+> > Bitte um R=FCckruf.

@@ -1,0 +1,26 @@
+Return-Path: <ada@mailbox.example>
+Received: by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 9z; Wed, 22 Oct 2026 15:01:13 +0000
+DKIM-Signature: v=1; a=rsa-sha256; d=mailbox.example; s=s1; b=cmVhbA==
+From: "Ada Lovelace" <ada@mailbox.example>
+To: "Store (orders@store.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Message-ID: <CAJ8x1=ada@mail.mailbox.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+User-Agent: Mozilla Thunderbird
+Content-Language: de-DE
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain; charset=UTF-8; format=flowed
+
+Danke, passt so. 
+Grüße, Ada Lovelace
+
+Am 22.10.26 um 07:45 schrieb Store (orders@store.example):
+> Können Sie den Liefertermin bestätigen?
+>
+> Am 21.10.26 um 21:00 schrieb Ada Lovelace:
+>> Wo ist mein Paket?
+>> -- 
+>> Ada Lovelace, ada@mailbox.example

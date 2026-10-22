@@ -1,0 +1,42 @@
+Return-Path: <ada@mailbox.example>
+Received: by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 9z; Wed, 22 Oct 2026 15:01:13 +0000
+DKIM-Signature: v=1; a=rsa-sha256; d=mailbox.example; s=s1; b=cmVhbA==
+From: "Ada Lovelace" <ada@mailbox.example>
+To: "Store (orders@store.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Message-ID: <CAJ8x1=ada@mail.mailbox.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+X-MS-Has-Attach:
+Content-Language: en-US
+Content-Type: multipart/alternative; boundary="_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_"
+
+--_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+WWVzLCBUaHVyc2RheSBpcyBmaW5lLg0KDQpfX19fX19fX19fX19fX19fX19fX19fX19fX19fX19f
+Xw0KRnJvbTogU3RvcmUgKG9yZGVyc0BzdG9yZS5leGFtcGxlKSA8c2hvcCtyLmNlYXF5eXpsbWZ1
+d3lxZGNmenN3cXlsbm9id2drYzVvNmNjZHkyeHFjQGFkYS5hbGlhcy50ZXN0Pg0KU2VudDogV2Vk
+bmVzZGF5LCBPY3RvYmVyIDIyLCAyMDI2IDc6NDUgQU0NClRvOiBBZGEgTG92ZWxhY2UgPGFkYUBt
+YWlsYm94LmV4YW1wbGU+DQpTdWJqZWN0OiBSZTogWW91ciBvcmRlcg0KDQpDb3VsZCB5b3UgY29u
+ZmlybSB0aGUgZGVsaXZlcnkgZGF0ZT8NCg==
+
+--_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHk+PGRpdiBzdHlsZT0iZm9udC1mYW1pbHk6Q2FsaWJyaSI+WWVzLCBUaHVyc2Rh
+eSBpcyBmaW5lLjwvZGl2Pg0KPGhyIHN0eWxlPSJkaXNwbGF5OmlubGluZS1ibG9jazt3aWR0aDo5
+OCUiIHRhYmluZGV4PSItMSI+PGRpdiBpZD0iZGl2UnBseUZ3ZE1zZyIgZGlyPSJsdHIiPjxmb250
+IGZhY2U9IkNhbGlicmkiIHN0eWxlPSJmb250LXNpemU6MTFwdCI+PGI+RnJvbTo8L2I+IFN0b3Jl
+IChvcmRlcnNAc3RvcmUuZXhhbXBsZSkgJmx0O3Nob3Arci5jZWFxeXl6bG1mdXd5cWRjZnpzd3F5
+bG5vYndna2M1bzZjY2R5MnhxY0BhZGEuYWxpYXMudGVzdCZndDs8YnI+PGI+U2VudDo8L2I+IFdl
+ZG5lc2RheSwgT2N0b2JlciAyMiwgMjAyNiA3OjQ1IEFNPGJyPjxiPlRvOjwvYj4gQWRhIExvdmVs
+YWNlICZsdDthZGFAbWFpbGJveC5leGFtcGxlJmd0Ozxicj48Yj5TdWJqZWN0OjwvYj4gUmU6IFlv
+dXIgb3JkZXI8L2ZvbnQ+PGRpdj4mbmJzcDs8L2Rpdj48L2Rpdj4NCjxkaXY+Q291bGQgeW91IGNv
+bmZpcm0gdGhlIGRlbGl2ZXJ5IGRhdGU/PC9kaXY+PC9ib2R5PjwvaHRtbD4NCg==
+
+--_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_--

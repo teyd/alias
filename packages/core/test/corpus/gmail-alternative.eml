@@ -1,0 +1,57 @@
+Return-Path: <ada@mailbox.example>
+Received: by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 9z; Wed, 22 Oct 2026 15:01:13 +0000
+DKIM-Signature: v=1; a=rsa-sha256; d=mailbox.example; s=s1; b=cmVhbA==
+From: "Ada Lovelace" <ada@mailbox.example>
+To: "Store (orders@store.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Message-ID: <CAJ8x1=ada@mail.mailbox.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="000000000000a1b2c3d4e5f60718"
+
+--000000000000a1b2c3d4e5f60718
+Content-Type: text/plain; charset="UTF-8"
+
+Thanks, that works for me. Reach me at ada@mailbox.example if anything changes.
+
+Ada Lovelace
+
+On Wed, Oct 22, 2026 at 7:45 AM Store (orders@store.example) <
+shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test> wrote:
+
+> Could you confirm the delivery date?
+>
+> On Tue, Oct 21, 2026 at 9:00 PM Ada Lovelace <ada@mailbox.example>
+> wrote:
+>
+> > Where is my parcel?
+> >
+> > --
+> > Ada Lovelace | ADA@MAILBOX.EXAMPLE
+> >
+>
+
+--000000000000a1b2c3d4e5f60718
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr">Thanks, that works for me. Reach me at <a href=3D"mailto:a=
+da@mailbox.example">ada@mailbox.example</a> if anything changes.<div><br></=
+div><div>Ada Lovelace</div></div><br>
+<div class=3D"gmail_quote"><div dir=3D"ltr" class=3D"gmail_attr">On Wed, Oc=
+t 22, 2026 at 7:45 AM Store (orders@store.example) &lt;<a href=3D"mailto:sh=
+op+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test">shop+r.ceaqy=
+yzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test</a>&gt; wrote:<br></div>
+<blockquote class=3D"gmail_quote" style=3D"margin:0px 0px 0px 0.8ex;border-=
+left:1px solid rgb(204,204,204);padding-left:1ex"><div dir=3D"ltr">Could yo=
+u confirm the delivery date?</div><br>
+<div class=3D"gmail_quote"><div dir=3D"ltr" class=3D"gmail_attr">On Tue, Oc=
+t 21, 2026 at 9:00 PM Ada Lovelace &lt;<a href=3D"mailto:ada@mailbox.exampl=
+e">ada@mailbox.example</a>&gt; wrote:<br></div>
+<blockquote class=3D"gmail_quote"><div dir=3D"ltr">Where is my parcel?<br>-=
+- <br>Ada Lovelace | ada@mailbox.example</div></blockquote></div></blockquo=
+te></div>
+
+--000000000000a1b2c3d4e5f60718--

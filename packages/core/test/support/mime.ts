@@ -67,3 +67,67 @@ export const mailbox = (value: string) => {
       );
   return { display, address: match[2] ?? "" };
 };
+
+export interface TextPart {
+  readonly type: string;
+  readonly isAttachment: boolean;
+  /** Decoded with its charset. */
+  readonly text: string;
+}
+
+const parameter = (value: string, name: string) =>
+  new RegExp(`;\\s*${name}="?([^";]+)"?`, "i").exec(value)?.[1];
+
+const decodeTransfer = (body: string, encoding: string): Uint8Array => {
+  if (encoding === "base64") {
+    return Result.match(Base64.decode(body.replace(/\s+/g, "")), {
+      onFailure: (error) => {
+        throw error;
+      },
+      onSuccess: (decoded) => decoded,
+    });
+  }
+  const text =
+    encoding === "quoted-printable"
+      ? body
+          .replace(/=\r?\n/g, "")
+          .replace(/=([0-9A-F]{2})/gi, (_, hex: string) =>
+            String.fromCharCode(Number.parseInt(hex, 16)),
+          )
+      : body;
+  return Uint8Array.from(text, (char) => char.charCodeAt(0));
+};
+
+/**
+ * Every leaf `text/*` part of a message, decoded: an independent reading of what the rewrite
+ * produced, deliberately simpler than the production MIME walk.
+ */
+export const textParts = (data: Uint8Array): ReadonlyArray<TextPart> => {
+  const walk = (entity: string): ReadonlyArray<TextPart> => {
+    const { fields, rest } = split(Uint8Array.from(entity, (char) => char.charCodeAt(0)));
+    const header = (name: string) =>
+      fields.find((field) => field.name.toLowerCase() === name)?.value ?? "";
+    const contentType = header("content-type") || "text/plain";
+    const body = binary(rest).replace(/^\r?\n/, "");
+    const boundary = parameter(contentType, "boundary");
+    if (contentType.toLowerCase().startsWith("multipart/") && boundary !== undefined) {
+      const sections = body.split(
+        new RegExp(
+          `\\r?\\n?--${boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?[ \\t]*\\r?\\n`,
+        ),
+      );
+      return sections.slice(1, -1).flatMap(walk);
+    }
+    if (!contentType.toLowerCase().startsWith("text/")) return [];
+    const charset = parameter(contentType, "charset") ?? "us-ascii";
+    const encoding = header("content-transfer-encoding").toLowerCase() || "7bit";
+    return [
+      {
+        type: contentType.split(";")[0]?.trim().toLowerCase() ?? "",
+        isAttachment: /^attachment/i.test(header("content-disposition")),
+        text: new TextDecoder(charset).decode(decodeTransfer(body, encoding)),
+      },
+    ];
+  };
+  return walk(binary(data));
+};

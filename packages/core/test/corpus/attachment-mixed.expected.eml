@@ -1,0 +1,38 @@
+From: shop@ada.alias.test
+To: orders@store.example
+Message-ID: <reply-1@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-7c1e"
+
+This is a multi-part message in MIME format.
+--mixed-7c1e
+Content-Type: multipart/alternative; boundary="alt-7c1e"
+
+--alt-7c1e
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Invoice attached.
+
+On Wed, Oct 22, 2026, shop@ada.alias.test <shop@ada.alias.test> wrote:
+> Please send the invoice.
+
+--alt-7c1e--
+
+--mixed-7c1e
+Content-Type: application/pdf; name="invoice.pdf"
+Content-Disposition: attachment; filename="invoice.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJeLjz9MKYWRhQG1haWxib3guZXhhbXBsZQolJUVPRgo=
+--mixed-7c1e
+Content-Type: text/plain; charset=utf-8; name="notes.txt"
+Content-Disposition: attachment; filename="notes.txt"
+
+Notes for ada@mailbox.example
+--mixed-7c1e--
+epilogue

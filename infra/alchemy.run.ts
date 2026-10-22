@@ -9,6 +9,7 @@ import { Table } from "@alias/db";
 import { WebhookQueue } from "@alias/webhooks";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
+import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -58,6 +59,19 @@ const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
  */
 const reverseTokenKeysParameter = `/alias/${stage}/reverse-token-keys`;
 
+/**
+ * The image proxy's URL keys (PLAN.md §20.19): the inbound Lambda signs proxy URLs with them and
+ * the image proxy Lambda verifies them. Same format, storage and two-step rotation as the
+ * reverse-token keys; put it once before the first deploy:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/image-proxy-keys \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * Removing a key breaks the images of every mail forwarded while it signed, so keep old keys.
+ */
+const imageProxyKeysParameter = `/alias/${stage}/image-proxy-keys`;
+
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
   "alias",
@@ -73,6 +87,7 @@ export default Alchemy.Stack(
     // Sending through a configuration set is authorized on the set as well as on the identity.
     // A name with a leading slash has no extra slash in its ARN.
     const reverseTokenKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${reverseTokenKeysParameter}`;
+    const imageProxyKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${imageProxyKeysParameter}`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
     // both name it, and SES checks both when the rule is created, before it exists. The format is
@@ -229,6 +244,77 @@ export default Alchemy.Stack(
       ],
     };
 
+    // The image proxy (`apps/image-proxy`, PLAN.md §20.19): its own function and role, because it
+    // fetches URLs that come from mail. The role can read its keys and nothing else: no table, no
+    // spool, no SES. Reserved concurrency caps what a flood of uncached proxy URLs can cost.
+    // The function URL takes only CloudFront's signed requests (OAC with `AWS_IAM`), so every
+    // request goes through the cache.
+    const imageProxy = yield* AWS.Lambda.Function("ImageProxy", {
+      main: new URL("../apps/image-proxy/src/handler.ts", import.meta.url).pathname,
+      runtime: "nodejs24.x",
+      architecture: "arm64",
+      memorySize: 256,
+      // The fetch has a 5 s deadline (`Proxy.limits`).
+      timeout: Duration.seconds(10),
+      reservedConcurrentExecutions: 10,
+      functionUrl: { authType: "AWS_IAM" },
+      env: { ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter },
+    });
+    yield* imageProxy.bind("ImageProxyKeys", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: imageProxyKeysParameterArn },
+      ],
+    });
+    const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxy", {
+      originType: "lambda",
+      signingBehavior: "always",
+      signingProtocol: "sigv4",
+    });
+    const functionUrlHost = (url: string | undefined) =>
+      new URL(url ?? "https://missing.invalid").hostname;
+    // CachingOptimized keys the cache on the path alone and forwards no cookies, query or viewer
+    // headers, and honours the Lambda's `Cache-Control` (a day for images). No custom domain yet:
+    // mail points at the distribution's own `*.cloudfront.net` name until an ACM certificate
+    // (us-east-1, DNS-validated in Cloudflare) for `img.<app domain>` exists.
+    const images = yield* AWS.CloudFront.Distribution("Images", {
+      comment: `alias image proxy (${stage})`,
+      priceClass: "PriceClass_100",
+      origins: [
+        {
+          id: "image-proxy",
+          domainName: Output.map(functionUrlHost)(imageProxy.functionUrl),
+          originAccessControlId: imageProxyAccess.originAccessControlId,
+          customOriginConfig: { originProtocolPolicy: "https-only" },
+        },
+      ],
+      defaultCacheBehavior: {
+        targetOriginId: "image-proxy",
+        viewerProtocolPolicy: "redirect-to-https",
+        allowedMethods: ["GET", "HEAD"],
+        cachedMethods: ["GET", "HEAD"],
+        compress: false,
+        cachePolicyId: AWS.CloudFront.MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+      },
+    });
+    // OAC needs both: `InvokeFunctionUrl` for the URL and `InvokeFunction` for the call behind it,
+    // each only for this distribution.
+    yield* Effect.forEach(
+      [
+        { id: "CloudFrontInvokesImageProxyUrl", action: "lambda:InvokeFunctionUrl" },
+        { id: "CloudFrontInvokesImageProxy", action: "lambda:InvokeFunction" },
+      ],
+      ({ id, action }) =>
+        AWS.Lambda.Permission(id, {
+          action,
+          functionName: imageProxy.functionName,
+          principal: "cloudfront.amazonaws.com",
+          sourceArn: images.distributionArn,
+          ...(action === "lambda:InvokeFunctionUrl"
+            ? { functionUrlAuthType: "AWS_IAM" as const }
+            : { invokedViaFunctionUrl: true }),
+        }),
+    );
+
     // The inbound pipeline (`apps/inbound`), invoked by the receipt rule below. Raw mail is held in
     // memory (SES accepts up to 40 MB) and rewritten once, hence the memory size.
     const inbound = yield* AWS.Lambda.Function("Inbound", {
@@ -247,6 +333,8 @@ export default Alchemy.Stack(
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
+        ALIAS_IMAGE_PROXY_URL: Output.interpolate`https://${images.domainName}`,
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
       },
     });
@@ -291,6 +379,8 @@ export default Alchemy.Stack(
     yield* inbound.bind("ReverseTokenKeys", {
       policyStatements: [
         { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: reverseTokenKeysParameterArn },
+        // The image proxy's keys, to sign proxy URLs (same `aws/ssm` key, no KMS grant).
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: imageProxyKeysParameterArn },
       ],
     });
     // SES checks that it may invoke the function when the rule is created, so the rule waits for
@@ -488,6 +578,7 @@ export default Alchemy.Stack(
       inboundFunction: inbound.functionName,
       feedbackFunction: feedback.functionName,
       webhookDeliveryFunction: delivery.functionName,
+      imageProxyUrl: Output.interpolate`https://${images.domainName}`,
     };
   }),
 );

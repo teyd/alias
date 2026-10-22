@@ -61,13 +61,16 @@ export class UserRepo extends Context.Service<
       passkey: Passkey,
     ) => Effect.Effect<void, UsernameTaken | CredentialTaken | DatabaseError>;
     readonly findById: (userId: string) => Effect.Effect<Option.Option<User>, DatabaseError>;
-    /** True when the username or a lookalike of it is claimed. */
+    /**
+     * True when the username or a lookalike of it is claimed, now or by an erased account: an
+     * erased username is never given out again.
+     */
     readonly isUsernameTaken: (
       username: Username.Username,
     ) => Effect.Effect<boolean, DatabaseError>;
     /**
      * The user with exactly this username (lowercase, as subdomains carry it). A lookalike that
-     * merely shares its skeleton finds none.
+     * merely shares its skeleton finds none, and neither does an erased username.
      */
     readonly findByUsername: (
       username: string,
@@ -81,10 +84,10 @@ export class UserRepo extends Context.Service<
   }
 >()("@alias/db/UserRepo") {}
 
-const userKey = (userId: string) => ({ pk: { S: `USER#${userId}` }, sk: { S: "USER" } });
+export const userKey = (userId: string) => ({ pk: { S: `USER#${userId}` }, sk: { S: "USER" } });
 
 /** Uniqueness is on the confusable skeleton, not the username itself. */
-const usernameKey = (username: string) => ({
+export const usernameKey = (username: string) => ({
   pk: { S: `USERNAME#${Username.skeleton(username)}` },
   sk: { S: "USERNAME" },
 });
@@ -110,6 +113,9 @@ const UsernameItem = Item.codec(
   Schema.Struct({ userId: Attribute.S, username: Attribute.S }),
   "Username",
 );
+
+/** An erased account's username keeps its claim as a tombstone: `deletedAt`, no owner. */
+const isClaimed = (item: DynamoDB.AttributeMap) => P.hasProperty(item, "userId");
 
 const mustNotExist = "attribute_not_exists(pk)";
 
@@ -196,7 +202,9 @@ const make = Effect.fn("UserRepo.make")(function* () {
         ConsistentRead: true,
       }).pipe(
         Effect.mapError(databaseError("GetItem")),
-        Effect.flatMap((result) => UsernameItem.decodeOption(Option.fromUndefinedOr(result.Item))),
+        Effect.flatMap((result) =>
+          UsernameItem.decodeOption(Option.filter(Option.fromUndefinedOr(result.Item), isClaimed)),
+        ),
         Effect.provide(client),
       );
       const owner = Option.filter(claim, (found) => found.username === username);

@@ -69,3 +69,16 @@ export const logIn = (api: Client): Effect.Effect<Me, AuthFailed> =>
       return yield* api.auth.login({ payload: { challengeId, credential } });
     }),
   );
+
+/**
+ * Erases the signed-in account after a fresh passkey prompt; the response clears the session
+ * cookie.
+ */
+export const eraseAccount = (api: Client): Effect.Effect<void, AuthFailed> =>
+  explain(
+    Effect.gen(function* () {
+      const { challengeId, options } = yield* api.account.eraseOptions();
+      const credential = yield* prompt(() => startAuthentication({ optionsJSON: options }));
+      yield* api.account.erase({ payload: { challengeId, credential } });
+    }),
+  );

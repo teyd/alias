@@ -182,7 +182,22 @@ const AliasRow = ({
         >
           {alias.isActive ? "Disable" : "Enable"}
         </Button>
-        <Button variant="destructive" size="sm" disabled={isBusy} onClick={() => remove.mutate()}>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={isBusy}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Delete ${alias.address} for good? Its contacts are erased, replies to them stop ` +
+                  "working, and nobody else can ever use the address. To stop mail for now, " +
+                  "disable it instead.",
+              )
+            ) {
+              remove.mutate();
+            }
+          }}
+        >
           Delete
         </Button>
       </div>

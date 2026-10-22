@@ -119,11 +119,19 @@ export default Alchemy.Stack(
       ],
     });
 
+    // Logs carry no addresses or content, but still expire (PLAN.md §20.15): without a retention
+    // Lambda's log groups never do.
+    const logging = { retention: Duration.days(14) };
+
     const api = yield* AWS.Lambda.Function("Api", {
       main: new URL("../apps/api/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
       architecture: "arm64",
       memorySize: 256,
+      // Lambda's default of 3 s is too short for erasing an account with many aliases; the sweep
+      // is resumable, but each retry costs the user a passkey prompt.
+      timeout: Duration.seconds(30),
+      logging,
       functionUrl: true,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
@@ -194,6 +202,7 @@ export default Alchemy.Stack(
       architecture: "arm64",
       memorySize: 512,
       timeout: Duration.seconds(60),
+      logging,
       functionUrl: false,
       // Lambda's defaults, spelled out: the pipeline's claims make retries safe (PLAN.md §20.6).
       eventInvokeConfig: { maximumRetryAttempts: 2, maximumEventAge: "6 hours" },
@@ -207,7 +216,8 @@ export default Alchemy.Stack(
     });
     // Least privilege: aliases, recipients and contacts are read by key or one partition Query;
     // counters, quotas and delivery claims are single-item writes. A new contact and its id are
-    // one TransactWriteItems, which IAM authorizes per item through PutItem. No index.
+    // one TransactWriteItems, which IAM authorizes per item: PutItem for the two items, and
+    // ConditionCheckItem for the check that their alias still exists (PLAN.md §20.15). No index.
     yield* inbound.bind("DataAccess", {
       policyStatements: [
         {
@@ -218,6 +228,7 @@ export default Alchemy.Stack(
             "dynamodb:PutItem",
             "dynamodb:UpdateItem",
             "dynamodb:DeleteItem",
+            "dynamodb:ConditionCheckItem",
           ],
           Resource: [tableArn],
         },
@@ -292,6 +303,7 @@ export default Alchemy.Stack(
       architecture: "arm64",
       memorySize: 256,
       timeout: Duration.seconds(30),
+      logging,
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName },
     });

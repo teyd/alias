@@ -96,7 +96,8 @@ const aliasAddress = (alias: AliasRepo.Alias): Address.MailAddress => ({
 
 /**
  * The alias's contact for `sender`, created on its first message. A concurrent first message
- * creates it only once; both then use the stored one.
+ * creates it only once; both then use the stored one. Fails with `NoSuchAlias` when the alias was
+ * deleted since it was read, so its purge can't miss the new contact.
  */
 const contactFor = Effect.fn("Pipeline.contactFor")(function* (
   alias: AliasRepo.Alias,
@@ -113,7 +114,7 @@ const contactFor = Effect.fn("Pipeline.contactFor")(function* (
     createdAt: yield* DateTime.now,
     isBlocked: false,
   };
-  return yield* contacts.create(created).pipe(
+  return yield* contacts.create(created, alias).pipe(
     Effect.as(created),
     Effect.catchTag("ContactExists", () =>
       Effect.map(
@@ -168,7 +169,12 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   if (!Policy.isStorableAddress(sender.value.address)) {
     return Plan.Drop({ reason: "unencodable-sender" });
   }
-  const contact = yield* contactFor(alias, sender.value);
+  const found = yield* contactFor(alias, sender.value).pipe(
+    Effect.map(Option.some),
+    Effect.catchTag("NoSuchAlias", () => Effect.succeedNone),
+  );
+  if (Option.isNone(found)) return Plan.Drop({ reason: "unknown-alias" });
+  const contact = found.value;
   if (contact.isBlocked) return Plan.Block({ alias, reason: "blocked-contact" });
   const address = aliasAddress(alias);
   // The token names the contact, not the sender: short whatever the address, and revoked with
@@ -252,8 +258,9 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
 /**
  * Creates the alias for mail to an unknown address on a user's subdomain, if that user opted in
  * (PLAN.md §3.2 step 1). Spam and viruses never create one, and each user may create only
- * `Limits.aliasesCreatedPerDay` this way. A concurrent creation of the same address is fine:
- * both then use the one that was stored.
+ * `Limits.aliasesCreatedPerDay` this way. A deleted alias stays deleted: mail to it is dropped
+ * like mail to any unknown address and spends nothing. A concurrent creation of the same address
+ * is fine: both then use the one that was stored.
  */
 const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   record: Record,
@@ -269,6 +276,9 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   }
   const screened = Policy.screen(record.ses.receipt, "drop");
   if (Option.isSome(screened)) return Result.fail<Policy.DropReason>(screened.value);
+  if (yield* aliases.isDeleted(address.domain, address.local)) {
+    return Result.fail<Policy.DropReason>("unknown-alias");
+  }
   const now = yield* DateTime.now;
   const { aliasesCreatedPerDay } = yield* Limits.Limits;
   if (!(yield* aliases.reserveCreation(owner.value.id, now, aliasesCreatedPerDay))) {

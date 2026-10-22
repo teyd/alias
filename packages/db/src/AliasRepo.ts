@@ -1,7 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
-import type * as DateTime from "effect/DateTime";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -12,6 +12,9 @@ import * as Stream from "effect/Stream";
 import { DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Attribute from "./Attribute.ts";
+import * as Item from "./Item.ts";
+import { aliasKey, contactsPartition } from "./Keys.ts";
+import * as Purge from "./Purge.ts";
 import * as Quota from "./Quota.ts";
 
 const AliasMode = Schema.Literals(["forward", "inbox", "both"]);
@@ -65,12 +68,22 @@ export class NoSuchAlias extends Schema.TaggedError<NoSuchAlias>()("NoSuchAlias"
 export class AliasRepo extends Context.Service<
   AliasRepo,
   {
-    /** Fails with `AliasTaken` when the address exists, whatever its letter case. */
+    /**
+     * Fails with `AliasTaken` when the address exists, whatever its letter case, or was deleted:
+     * a deleted address stays taken for good, except that the user who deleted it may create it
+     * again.
+     */
     readonly insert: (alias: NewAlias) => Effect.Effect<void, AliasTaken | DatabaseError>;
+    /** None for unknown and for deleted addresses. */
     readonly findByAddress: (
       domain: string,
       localPart: string,
     ) => Effect.Effect<Option.Option<Alias>, DatabaseError>;
+    /** True when an alias at this address was deleted (its tombstone is all that is left). */
+    readonly isDeleted: (
+      domain: string,
+      localPart: string,
+    ) => Effect.Effect<boolean, DatabaseError>;
     /** Oldest first. */
     readonly listByUser: (userId: string) => Effect.Effect<ReadonlyArray<Alias>, DatabaseError>;
     /** Applies the given changes and returns the alias as stored afterwards. */
@@ -78,6 +91,11 @@ export class AliasRepo extends Context.Service<
       address: OwnedAddress,
       changes: AliasChanges,
     ) => Effect.Effect<Alias, NoSuchAlias | DatabaseError>;
+    /**
+     * Deletes the alias for good: its contacts and forward counters go too, and a tombstone keeps
+     * the address from ever being claimed by anyone else (see `Table.ts`). Calling it again on a
+     * deletion that failed halfway finishes it; on a finished one it fails with `NoSuchAlias`.
+     */
     readonly delete: (address: OwnedAddress) => Effect.Effect<void, NoSuchAlias | DatabaseError>;
     /** Atomically adds one to a counter. Never recreates a deleted alias. */
     readonly increment: (
@@ -108,23 +126,21 @@ export class AliasRepo extends Context.Service<
   }
 >()("@alias/db/AliasRepo") {}
 
-/** Addresses are case-insensitive, so keys use the lowercased address. */
-const addressKey = (domain: string, localPart: string) => ({
-  pk: { S: `ALIAS#${domain.toLowerCase()}#${localPart.toLowerCase()}` },
-  sk: { S: "ALIAS" },
-});
-
 /** The alias's forward counter for one UTC hour, next to the alias in its partition. */
 const forwardQuotaKey = (domain: string, localPart: string, hour: string) => ({
-  pk: addressKey(domain, localPart).pk,
+  pk: aliasKey(domain, localPart).pk,
   sk: { S: `FORWARDS#${hour}` },
 });
 
-const userKey = (userId: string) => `USER#${userId}`;
+/** The user's partition, and the gsi1 partition listing their aliases. */
+export const userPartition = (userId: string) => `USER#${userId}`;
+
+/** The gsi1 partition listing a user's tombstones, so erasing the account finds them. */
+export const deletedKey = (userId: string) => `DELETED-ALIASES#${userId}`;
 
 /** The user's count of aliases created on the fly in one UTC day, in their partition. */
 const creationQuotaKey = (userId: string, day: string) => ({
-  pk: { S: userKey(userId) },
+  pk: { S: userPartition(userId) },
   sk: { S: `ALIASES#${day}` },
 });
 
@@ -158,6 +174,22 @@ const missingOn =
       ? new NoSuchAlias({ address: formatAddress(domain, localPart) })
       : databaseError(operation)(error);
 
+/**
+ * What a deleted alias leaves behind, in place of the alias item. `userId` names who deleted it
+ * (gone once their account is erased); `id` is the deleted alias's id, kept only until its
+ * contacts are purged.
+ */
+const TombstoneItem = Item.codec(
+  Schema.Struct({
+    deletedAt: Attribute.EpochMillis,
+    userId: Schema.OptionFromOptionalKey(Attribute.S),
+    id: Schema.OptionFromOptionalKey(Attribute.S),
+  }),
+  "Tombstone",
+);
+
+const isTombstone = (item: DynamoDB.AttributeMap) => P.hasProperty(item, "deletedAt");
+
 const decodeItem = Schema.decodeUnknownEffect(AliasItem);
 const decodeFields = Schema.decodeUnknownEffect(Alias);
 
@@ -166,6 +198,101 @@ const decodeAlias = (item: DynamoDB.AttributeMap) =>
     Effect.flatMap(decodeFields),
     Effect.mapError(databaseError("DecodeAlias")),
   );
+
+/**
+ * Turns the owner's alias at `key` into its tombstone and returns the deleted alias's id, whose
+ * contacts are still to purge. A tombstone left halfway by an earlier call returns the same id,
+ * so retries finish the job.
+ */
+export const retire = Effect.fn("AliasRepo.retire")(function* (
+  table: typeof DynamoTable.Service,
+  address: OwnedAddress,
+) {
+  const key = aliasKey(address.domain, address.localPart);
+  const deletedAt = yield* Schema.encodeEffect(Attribute.EpochMillis)(yield* DateTime.now).pipe(
+    Effect.mapError(databaseError("EncodeTombstone")),
+  );
+  const retired = yield* DynamoDB.updateItem({
+    TableName: table.name,
+    Key: key,
+    UpdateExpression:
+      "SET deletedAt = :deletedAt, gsi1pk = :deleted, gsi1sk = :address " +
+      "REMOVE #domain, #localPart, #mode, #isActive, #createdAt, #forwarded, #blocked",
+    ConditionExpression: "userId = :userId AND attribute_not_exists(deletedAt)",
+    ExpressionAttributeNames: {
+      "#domain": "domain",
+      "#localPart": "localPart",
+      "#mode": "mode",
+      "#isActive": "isActive",
+      "#createdAt": "createdAt",
+      "#forwarded": "forwardedCount",
+      "#blocked": "blockedCount",
+    },
+    ExpressionAttributeValues: {
+      ":userId": { S: address.userId },
+      ":deletedAt": deletedAt,
+      ":deleted": { S: deletedKey(address.userId) },
+      ":address": key.pk,
+    },
+    ReturnValues: "ALL_NEW",
+  }).pipe(
+    Effect.map((result) => Option.some(result.Attributes ?? {})),
+    Effect.catchIf(
+      (error) => P.isTagged(error, "ConditionalCheckFailedException"),
+      () =>
+        DynamoDB.getItem({ TableName: table.name, Key: key, ConsistentRead: true }).pipe(
+          Effect.map((result) => Option.fromUndefinedOr(result.Item)),
+        ),
+    ),
+    Effect.mapError(databaseError("UpdateItem")),
+  );
+  const tombstone = yield* TombstoneItem.decodeOption(Option.filter(retired, isTombstone));
+  const pending = Option.flatMap(
+    Option.filter(tombstone, (found) => Option.contains(found.userId, address.userId)),
+    (found) => found.id,
+  );
+  return yield* Option.match(pending, {
+    onNone: () =>
+      Effect.fail(new NoSuchAlias({ address: formatAddress(address.domain, address.localPart) })),
+    onSome: Effect.succeed,
+  });
+});
+
+/**
+ * Deletes everything a deleted alias left besides its tombstone: its contacts (partition
+ * `CONTACTS#<aliasId>`, both the contacts and their id pointers) and its forward counters, then
+ * marks the tombstone done by dropping the alias id. Safe to run again.
+ */
+export const purge = Effect.fn("AliasRepo.purge")(function* (
+  table: typeof DynamoTable.Service,
+  key: Purge.Key,
+  aliasId: string,
+) {
+  yield* Purge.deleteAll(
+    table,
+    yield* Purge.partitionKeys(table, contactsPartition(aliasId), Option.none()),
+  );
+  yield* Purge.deleteAll(
+    table,
+    yield* Purge.partitionKeys(table, key.pk.S, Option.some("FORWARDS#")),
+  );
+  yield* DynamoDB.updateItem({
+    TableName: table.name,
+    Key: key,
+    UpdateExpression: "REMOVE #id",
+    ConditionExpression: "#id = :id AND attribute_exists(deletedAt)",
+    ExpressionAttributeNames: { "#id": "id" },
+    ExpressionAttributeValues: { ":id": { S: aliasId } },
+  }).pipe(
+    Effect.asVoid,
+    // Already done by a concurrent call.
+    Effect.catchIf(
+      (error) => P.isTagged(error, "ConditionalCheckFailedException"),
+      () => Effect.void,
+    ),
+    Effect.mapError(databaseError("UpdateItem")),
+  );
+});
 
 export const make = Effect.fn("AliasRepo.make")(function* () {
   const table = yield* DynamoTable;
@@ -178,8 +305,8 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
       return DynamoDB.putItem({
         TableName: table.name,
         Item: {
-          ...addressKey(domain, localPart),
-          gsi1pk: { S: userKey(alias.userId) },
+          ...aliasKey(domain, localPart),
+          gsi1pk: { S: userPartition(alias.userId) },
           gsi1sk: { S: userSortKey(alias) },
           id: { S: alias.id },
           userId: { S: alias.userId },
@@ -191,7 +318,12 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
           forwardedCount: { N: "0" },
           blockedCount: { N: "0" },
         },
-        ConditionExpression: "attribute_not_exists(pk)",
+        // A tombstone whose contacts are purged gives the address back to the user who deleted it.
+        ConditionExpression:
+          "attribute_not_exists(pk) OR " +
+          "(attribute_exists(deletedAt) AND userId = :userId AND attribute_not_exists(#id))",
+        ExpressionAttributeNames: { "#id": "id" },
+        ExpressionAttributeValues: { ":userId": { S: alias.userId } },
       }).pipe(
         Effect.asVoid,
         Effect.mapError((error) =>
@@ -206,16 +338,31 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
     findByAddress: (domain, localPart) =>
       DynamoDB.getItem({
         TableName: table.name,
-        Key: addressKey(domain, localPart),
+        Key: aliasKey(domain, localPart),
         ConsistentRead: true,
       }).pipe(
         Effect.mapError(databaseError("GetItem")),
         Effect.flatMap((result) =>
-          Option.match(Option.fromUndefinedOr(result.Item), {
-            onNone: () => Effect.succeedNone,
-            onSome: (item) => Effect.asSome(decodeAlias(item)),
-          }),
+          Option.match(
+            Option.filter(Option.fromUndefinedOr(result.Item), (item) => !isTombstone(item)),
+            {
+              onNone: () => Effect.succeedNone,
+              onSome: (item) => Effect.asSome(decodeAlias(item)),
+            },
+          ),
         ),
+        Effect.provide(client),
+      ),
+
+    isDeleted: (domain, localPart) =>
+      DynamoDB.getItem({
+        TableName: table.name,
+        Key: aliasKey(domain, localPart),
+        ConsistentRead: true,
+        ProjectionExpression: "deletedAt",
+      }).pipe(
+        Effect.mapError(databaseError("GetItem")),
+        Effect.map((result) => Option.exists(Option.fromUndefinedOr(result.Item), isTombstone)),
         Effect.provide(client),
       ),
 
@@ -225,7 +372,7 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
           TableName: table.name,
           IndexName: "gsi1",
           KeyConditionExpression: "gsi1pk = :user",
-          ExpressionAttributeValues: { ":user": { S: userKey(userId) } },
+          ExpressionAttributeValues: { ":user": { S: userPartition(userId) } },
         })
         .pipe(
           Stream.mapError(databaseError("Query")),
@@ -244,7 +391,7 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
       const names = R.keys(values);
       return DynamoDB.updateItem({
         TableName: table.name,
-        Key: addressKey(address.domain, address.localPart),
+        Key: aliasKey(address.domain, address.localPart),
         // With nothing to change, a no-op SET still checks ownership and returns the item.
         UpdateExpression: Arr.match(names, {
           onEmpty: () => "SET userId = userId",
@@ -254,7 +401,7 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
               ", ",
             )}`,
         }),
-        ConditionExpression: "userId = :userId",
+        ConditionExpression: "userId = :userId AND attribute_not_exists(deletedAt)",
         // Placeholders keep attribute names clear of DynamoDB's reserved words.
         ...Arr.match(names, {
           onEmpty: () => ({}),
@@ -275,23 +422,19 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
     },
 
     delete: (address) =>
-      DynamoDB.deleteItem({
-        TableName: table.name,
-        Key: addressKey(address.domain, address.localPart),
-        ConditionExpression: "userId = :userId",
-        ExpressionAttributeValues: { ":userId": { S: address.userId } },
-      }).pipe(
-        Effect.asVoid,
-        Effect.mapError(missingOn("DeleteItem", address.domain, address.localPart)),
+      retire(table, address).pipe(
+        Effect.flatMap((aliasId) =>
+          purge(table, aliasKey(address.domain, address.localPart), aliasId),
+        ),
         Effect.provide(client),
       ),
 
     increment: (domain, localPart, counter) =>
       DynamoDB.updateItem({
         TableName: table.name,
-        Key: addressKey(domain, localPart),
+        Key: aliasKey(domain, localPart),
         UpdateExpression: "ADD #counter :one",
-        ConditionExpression: "attribute_exists(pk)",
+        ConditionExpression: "attribute_exists(pk) AND attribute_not_exists(deletedAt)",
         ExpressionAttributeNames: { "#counter": counterAttribute[counter] },
         ExpressionAttributeValues: { ":one": { N: "1" } },
       }).pipe(

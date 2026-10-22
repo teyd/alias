@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 export const DropReason = Schema.Literals([
   // Not a valid address, or a domain we don't serve yet.
   "unroutable",
+  // No alias at this address, or only the tombstone of a deleted one.
   "unknown-alias",
   // Past the owner's daily allowance of aliases created on the fly.
   "creation-limited",

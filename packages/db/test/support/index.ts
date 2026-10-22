@@ -1,3 +1,4 @@
+export { accountRepoSuite } from "./accountRepoSuite.ts";
 export { aliasRepoSuite } from "./aliasRepoSuite.ts";
 export { authRepoSuite } from "./authRepoSuite.ts";
 export { deliveryRepoSuite } from "./deliveryRepoSuite.ts";

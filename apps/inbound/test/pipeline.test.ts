@@ -669,6 +669,55 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
+  it.effect("drops mail to a deleted alias and to its reverse aliases like unknown mail", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const { reverse } = yield* forwardFrom("orders@store.example");
+        yield* AliasRepo.AliasRepo.use((repo) =>
+          repo.delete({ userId: "usr_1", domain: "alias.test", localPart: "shop" }),
+        );
+
+        expect((yield* forwardFrom("orders@store.example")).outcomes).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* contacts).toEqual([]);
+        expect(yield* sent).toHaveLength(1);
+      }),
+    ),
+  );
+
+  it.effect("never brings a deleted alias back on the fly, nor spends the daily cap on it", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        const deliver = (address: string) =>
+          Effect.flatMap(receive({ recipients: [address] }), ({ event }) => Pipeline.handle(event));
+        expect(yield* deliver("club@user1.alias.test")).toEqual([{ _tag: "Forwarded" }]);
+        yield* AliasRepo.AliasRepo.use((repo) =>
+          repo.delete({ userId: "usr_1", domain: "user1.alias.test", localPart: "club" }),
+        );
+
+        const outcomes = yield* Effect.forEach(
+          ["club@user1.alias.test", "Club@user1.alias.test", "fresh@user1.alias.test"],
+          deliver,
+          { concurrency: 1 },
+        );
+        expect(Arr.flatten(outcomes)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+          { _tag: "Dropped", reason: "unknown-alias" },
+          { _tag: "Forwarded" },
+        ]);
+        expect(yield* aliasAt("user1.alias.test", "club")).toEqual(Option.none());
+      }),
+      { ...Limits.defaults, aliasesCreatedPerDay: 2 },
+    ),
+  );
+
   it.effect("creates a contact on a sender's first message and keeps its reverse alias", () =>
     withPipeline(
       Effect.gen(function* () {

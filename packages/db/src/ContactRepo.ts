@@ -11,8 +11,10 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
+import { NoSuchAlias } from "./AliasRepo.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Item from "./Item.ts";
+import { aliasKey, contactsPartition } from "./Keys.ts";
 import { conditionFailedAt } from "./Transaction.ts";
 
 /**
@@ -35,6 +37,12 @@ export interface Contact {
 
 export type NewContact = Omit<Contact, "isBlocked">;
 
+/** Where the contact's alias lives. */
+interface AliasAddress {
+  readonly domain: string;
+  readonly localPart: string;
+}
+
 /** The alias already has a contact for this address (a concurrent first message, say). */
 export class ContactExists extends Schema.TaggedError<ContactExists>()("ContactExists", {
   address: Schema.String,
@@ -48,8 +56,15 @@ export class NoSuchContact extends Schema.TaggedError<NoSuchContact>()("NoSuchCo
 export class ContactRepo extends Context.Service<
   ContactRepo,
   {
-    /** Stores a new, unblocked contact. Addresses match case-insensitively. */
-    readonly create: (contact: NewContact) => Effect.Effect<void, ContactExists | DatabaseError>;
+    /**
+     * Stores a new, unblocked contact of the alias at `alias` (whose id is `contact.aliasId`).
+     * Addresses match case-insensitively. Fails with `NoSuchAlias` once that alias is deleted, so
+     * no contact outlives the purge of its alias (`AliasRepo.delete`).
+     */
+    readonly create: (
+      contact: NewContact,
+      alias: AliasAddress,
+    ) => Effect.Effect<void, ContactExists | NoSuchAlias | DatabaseError>;
     readonly findByAddress: (
       aliasId: string,
       address: string,
@@ -74,7 +89,7 @@ export class ContactRepo extends Context.Service<
   }
 >()("@alias/db/ContactRepo") {}
 
-const partition = (aliasId: string) => ({ S: `CONTACTS#${aliasId}` });
+const partition = (aliasId: string) => ({ S: contactsPartition(aliasId) });
 
 /** The contact itself, found by sender address on every forwarded message. */
 const addressKey = (aliasId: string, address: string) => ({
@@ -153,7 +168,7 @@ const make = Effect.fn("ContactRepo.make")(function* () {
         : databaseError(operation)(error);
 
   return ContactRepo.of({
-    create: Effect.fn("ContactRepo.create")(function* (contact) {
+    create: Effect.fn("ContactRepo.create")(function* (contact, alias) {
       const attributes = yield* ContactItem.encode({ ...contact, isBlocked: false });
       const pointer = yield* PointerItem.encode({ address: contact.address.toLowerCase() });
       yield* DynamoDB.transactWriteItems({
@@ -172,13 +187,27 @@ const make = Effect.fn("ContactRepo.make")(function* () {
               ConditionExpression: "attribute_not_exists(pk)",
             },
           },
+          {
+            // The live alias has this id; its tombstone has none or keeps it marked deleted.
+            ConditionCheck: {
+              TableName,
+              Key: aliasKey(alias.domain, alias.localPart),
+              ConditionExpression: "#id = :aliasId AND attribute_not_exists(deletedAt)",
+              ExpressionAttributeNames: { "#id": "id" },
+              ExpressionAttributeValues: { ":aliasId": { S: contact.aliasId } },
+            },
+          },
         ],
       }).pipe(
-        Effect.mapError((error) =>
-          conditionFailedAt(error, 0)
-            ? new ContactExists({ address: contact.address })
-            : databaseError("TransactWriteItems")(error),
-        ),
+        Effect.mapError((error) => {
+          if (conditionFailedAt(error, 0)) return new ContactExists({ address: contact.address });
+          if (conditionFailedAt(error, 2)) {
+            return new NoSuchAlias({
+              address: `${alias.localPart}@${alias.domain}`.toLowerCase(),
+            });
+          }
+          return databaseError("TransactWriteItems")(error);
+        }),
         Effect.provide(client),
       );
     }),

@@ -74,3 +74,22 @@ export const signUp = Effect.fn("signUp")(function* (
     credential: authenticator.create(options),
   });
 });
+
+export const AuthenticationChallenge = Schema.Struct({
+  challengeId: Schema.String,
+  options: Schema.Struct({ challenge: Schema.String, rpId: Schema.optionalKey(Schema.String) }),
+});
+export type AuthenticationChallenge = typeof AuthenticationChallenge.Type;
+
+/** Logs in with the authenticator's newest passkey; the browser keeps the session cookie. */
+export const logIn = Effect.fn("logIn")(function* (
+  browser: Browser.Client,
+  authenticator: TestAuthenticator.TestAuthenticator,
+) {
+  const started = yield* browser.post("/v1/auth/login/options");
+  const { challengeId, options } = Schema.decodeUnknownSync(AuthenticationChallenge)(started.body);
+  return yield* browser.post("/v1/auth/login", {
+    challengeId,
+    credential: authenticator.get(options),
+  });
+});

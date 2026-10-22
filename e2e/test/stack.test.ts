@@ -2,11 +2,12 @@ import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
 import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains } from "@alias/core";
-import { type Dynamo } from "@alias/db";
+import { SharedDomains, Username } from "@alias/core";
+import { Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Feedback, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber } from "@alias/lambda-emulator";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
 import * as SSM from "@distilled.cloud/aws/ssm";
@@ -185,7 +186,7 @@ const signUp = (username: string) =>
     });
     expect(registered.status).toBe(200);
     const cookie = (registered.cookies[0] ?? "").split(";")[0] ?? "";
-    return { cookie, userId: String(registered.body.userId) };
+    return { cookie, userId: String(registered.body.userId), authenticator };
   });
 
 const decoder = new TextDecoder();
@@ -221,7 +222,7 @@ const field = (raw: string, name: string) =>
  */
 const owner = (username: string, mailbox = `${username}@mailbox.example`) =>
   Effect.gen(function* () {
-    const { cookie, userId } = yield* signUp(username);
+    const { cookie, userId, authenticator } = yield* signUp(username);
     const added = yield* call("/v1/recipients", { cookie, body: { address: mailbox } });
     expect(added.status).toBe(201);
     const [confirmation] = yield* sentTo(mailbox);
@@ -242,7 +243,15 @@ const owner = (username: string, mailbox = `${username}@mailbox.example`) =>
     // fakecloud only accepts senders on an exactly verified domain; AWS also accepts subdomains
     // of a verified one (PLAN.md §20.5), so the user's subdomain is verified explicitly.
     yield* Transport.ensureIdentity(`${username}.alias.test`);
-    return { cookie, userId, mailbox, alias };
+    return { cookie, userId, authenticator, mailbox, alias };
+  });
+
+/** Every item in the shared table whose keys or values mention `text`, as JSON. */
+const itemsMentioning = (text: string) =>
+  Effect.gen(function* () {
+    const table = yield* Dynamo.DynamoTable;
+    const { Items } = yield* DynamoDB.scan({ TableName: table.name, ConsistentRead: true });
+    return Arr.filter(Items ?? [], (item) => JSON.stringify(item).includes(text));
   });
 
 /** Sends one message over SMTP and returns the Lambda event SES emits for it, as JSON. */
@@ -651,6 +660,99 @@ describe("emulated stack", () => {
         expect(yield* invoke(event)).toEqual([{ _tag: "Duplicate" }]);
         // The confirmation mail and one forward.
         expect(yield* sentTo(cleo.mailbox)).toHaveLength(2);
+      }),
+    );
+
+    it.effect("deleting an alias drops its mail and its reverse aliases, and its contacts", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const lin = yield* owner("lin");
+        const write = () =>
+          smtp({ from: "lin-store@store.example", to: lin.alias, subject: "Hi", text: "Hello" });
+        expect(yield* invoke(yield* write())).toEqual([{ _tag: "Forwarded" }]);
+        const reverse = (yield* sentTo(lin.mailbox)).at(-1)?.from ?? "";
+        const contactsPath = "/v1/aliases/lin.alias.test/shop/contacts";
+        expect(yield* call(contactsPath, { cookie: lin.cookie })).toMatchObject({
+          body: [{ address: "lin-store@store.example" }],
+        });
+
+        const aliasPath = "/v1/aliases/lin.alias.test/shop";
+        expect((yield* call(aliasPath, { cookie: lin.cookie, method: "DELETE" })).status).toBe(204);
+        // Nothing in the table remembers the contact, a third party's address.
+        expect(yield* itemsMentioning("lin-store@store.example")).toEqual([]);
+        expect(yield* invoke(yield* write())).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        const reply = yield* smtp({
+          from: lin.mailbox,
+          to: reverse,
+          subject: "Re: Hi",
+          text: "Still there?",
+        });
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Dropped", reason: "unknown-alias" }]);
+        expect(yield* sentTo("lin-store@store.example")).toEqual([]);
+
+        // Its owner may create it again: a new alias that knows no one yet.
+        const again = yield* call("/v1/aliases", {
+          cookie: lin.cookie,
+          body: { _tag: "Address", address: lin.alias, mode: "forward" },
+        });
+        expect(again.status).toBe(201);
+        expect(yield* call(contactsPath, { cookie: lin.cookie })).toMatchObject({ body: [] });
+        // The old reverse alias stays dead: it named a contact the new alias doesn't have.
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Dropped", reason: "unknown-contact" }]);
+      }),
+    );
+
+    it.effect("erasing an account leaves only tombstones, and its username stays taken", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const moe = yield* owner("moe");
+        const write = () =>
+          smtp({ from: "moe-pal@pal.example", to: moe.alias, subject: "Hi", text: "Hello" });
+        expect(yield* invoke(yield* write())).toEqual([{ _tag: "Forwarded" }]);
+        const reverse = (yield* sentTo(moe.mailbox)).at(-1)?.from ?? "";
+
+        const started = yield* call("/v1/me/erase/options", { cookie: moe.cookie, body: {} });
+        const erased = yield* call("/v1/me/erase", {
+          cookie: moe.cookie,
+          body: {
+            challengeId: started.body.challengeId,
+            credential: moe.authenticator.get(started.body.options),
+          },
+        });
+        expect(erased.status).toBe(204);
+
+        expect((yield* call("/v1/me", { cookie: moe.cookie })).status).toBe(401);
+        expect(
+          yield* call("/v1/auth/register/options", { body: { username: "moe" } }),
+        ).toMatchObject({ status: 409, body: { _tag: "UsernameTaken" } });
+        expect(yield* invoke(yield* write())).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        const reply = yield* smtp({
+          from: moe.mailbox,
+          to: reverse,
+          subject: "Re: Hi",
+          text: "Still there?",
+        });
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Dropped", reason: "unknown-alias" }]);
+
+        // Nothing names the user, their mailbox or their contact any more.
+        expect(yield* itemsMentioning(moe.userId)).toEqual([]);
+        expect(yield* itemsMentioning("moe@mailbox.example")).toEqual([]);
+        expect(yield* itemsMentioning("moe-pal@pal.example")).toEqual([]);
+        // What is left: the username's tombstone, and the idempotency claim of the one message
+        // forwarded, which names the alias address until its one-week TTL (PLAN.md §20.15).
+        const left = yield* itemsMentioning("moe.alias.test");
+        expect(Arr.map(left, (item) => item.pk?.S?.split("#")[0])).toEqual(["DELIVERY"]);
+        expect(yield* itemsMentioning(`USERNAME#${Username.skeleton("moe")}`)).toEqual([
+          {
+            pk: { S: `USERNAME#${Username.skeleton("moe")}` },
+            sk: { S: "USERNAME" },
+            deletedAt: expect.anything(),
+          },
+        ]);
       }),
     );
   });

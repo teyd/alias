@@ -4,20 +4,29 @@
  * pipeline, the way SES invokes the Lambda asynchronously. Forwarded mail and replies land in
  * fakecloud's sent mail.
  *
+ * Bounces and complaints: every send names the `alias-events` configuration set, whose SNS
+ * destination fakecloud publishes to; `SnsSubscriber` turns each notification into the Lambda
+ * event the feedback handler gets in production (PLAN.md §20.11). Send to
+ * `bounce@simulator.amazonses.com` or `complaint@simulator.amazonses.com` to see it work.
+ *
  * The reverse-token key is a fixed dev key unless `ALIAS_REVERSE_TOKEN_KEYS` is set. Never use it
  * anywhere real: anyone with this repo can mint reverse aliases for it.
  */
-import { AwsClient, Inbound, SesEvent, Transport } from "@alias/aws";
+import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
 import { Dynamo, Table } from "@alias/db";
+import { SnsSubscriber } from "@alias/lambda-emulator";
 import { SesEmulator } from "@alias/ses-emulator";
+import * as SESV2 from "@distilled.cloud/aws/sesv2";
+import * as SNS from "@distilled.cloud/aws/sns";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { Pipeline, ReverseKeys, Spool } from "../src/index.ts";
+import { Feedback, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
 const DEV_REVERSE_TOKEN_KEYS = "1:ZGV2LW9ubHktcmV2ZXJzZS10b2tlbi1rZXktbm90LXNlY3JldA";
 
@@ -26,11 +35,16 @@ const spoolBucket = "alias-spool";
 const fakecloudUrl = `http://127.0.0.1:${process.env.ALIAS_FAKECLOUD_PORT ?? 4566}`;
 const awsClient = AwsClient.emulator(fakecloudUrl);
 const sharedDomains = SharedDomains.layer(sharedDomainsValue);
+/** The dev configuration set; `apps/api/bin/dev.ts` sends through it too. */
+const configurationSet = "alias-events";
+const sending = Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
+  Layer.provide(awsClient),
+);
 
 const pipeline = Pipeline.layer(
   Layer.mergeAll(
     Dynamo.emulator(fakecloudUrl, "alias"),
-    Transport.ses.pipe(Layer.provide(awsClient)),
+    sending,
     Spool.layer(spoolBucket).pipe(Layer.provide(awsClient)),
     sharedDomains,
     ReverseKeys.layer(
@@ -84,6 +98,37 @@ const prepare = Effect.fn("inbound.dev.prepare")(function* () {
   );
 });
 
+/** The configuration set and its SNS destination, as infra deploys them; idempotent. */
+const feedbackTopic = Effect.fn("inbound.dev.feedbackTopic")(function* () {
+  const { TopicArn = "" } = yield* SNS.createTopic({ Name: "alias-ses-events" });
+  yield* SESV2.createConfigurationSet({ ConfigurationSetName: configurationSet }).pipe(
+    Effect.catchTag("AlreadyExistsException", () => Effect.void),
+  );
+  yield* SESV2.createConfigurationSetEventDestination({
+    ConfigurationSetName: configurationSet,
+    EventDestinationName: "feedback",
+    EventDestination: {
+      Enabled: true,
+      MatchingEventTypes: ["BOUNCE", "COMPLAINT"],
+      SnsDestination: { TopicArn },
+    },
+  }).pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
+  return TopicArn;
+});
+
+/** Bounces and complaints, the way SNS invokes the feedback Lambda. */
+const relayFeedback = Effect.fn("inbound.dev.relayFeedback")(function* () {
+  const topicArn = yield* untilFakeCloudIsUp(feedbackTopic()).pipe(Effect.provide(awsClient));
+  const subscriber = yield* SnsSubscriber.make({ topicArn }).pipe(Effect.provide(awsClient));
+  const handle = (event: SnsSubscriber.SnsLambdaEvent) =>
+    SnsEvent.decode(event).pipe(
+      Effect.flatMap(Feedback.handle),
+      Effect.provide(Feedback.layer(Layer.merge(Dynamo.emulator(fakecloudUrl, "alias"), sending))),
+      Effect.catch((error) => Effect.logError("feedback failed; SNS would retry", error)),
+    );
+  yield* Queue.take(subscriber.events).pipe(Effect.flatMap(handle), Effect.forever);
+});
+
 /** The pipeline logs each outcome. Lambda would retry a failed event; dev logs it instead. */
 const invoke = (event: SesEvent.SesEvent) =>
   Pipeline.handle(event).pipe(
@@ -96,9 +141,10 @@ const serve = Effect.fn("inbound.dev")(function* () {
   yield* Effect.logInfo(
     `ses-emulator on smtp://127.0.0.1:${ses.smtpPort}, spooling to s3://${spoolBucket}/${Inbound.spoolPrefix}; sent mail at ${fakecloudUrl}/_fakecloud/ses/emails`,
   );
+  yield* Effect.forkScoped(relayFeedback());
   yield* Queue.take(ses.events).pipe(Effect.flatMap(invoke), Effect.forever);
 });
 
 NodeRuntime.runMain(
-  serve().pipe(Effect.provide(Layer.mergeAll(emulator, pipeline, sharedDomains))),
+  serve().pipe(Effect.scoped, Effect.provide(Layer.mergeAll(emulator, pipeline, sharedDomains))),
 );

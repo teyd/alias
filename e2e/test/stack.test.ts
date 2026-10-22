@@ -1,12 +1,14 @@
 import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
-import { AwsClient, Inbound, SesEvent, Transport } from "@alias/aws";
+import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains } from "@alias/core";
 import { type Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
-import { Pipeline, ReverseKeys, Spool } from "@alias/inbound";
-import { FunctionUrlServer } from "@alias/lambda-emulator";
+import { Feedback, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
+import { FunctionUrlServer, SnsSubscriber } from "@alias/lambda-emulator";
+import * as SESV2 from "@distilled.cloud/aws/sesv2";
+import * as SNS from "@distilled.cloud/aws/sns";
 import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
@@ -35,7 +37,30 @@ const spool = Layer.effectDiscard(Inbound.ensureSpool(spoolBucket)).pipe(Layer.p
 const database = freshTable();
 const origin = "https://alias.test";
 const sharedDomains = SharedDomains.layer("alias.test");
-const sending = Transport.ses.pipe(Layer.provide(aws));
+/** Every send names it; its SNS destination reports bounces and complaints (PLAN.md §20.11). */
+const configurationSet = "alias-events";
+const sending = Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
+  Layer.provide(aws),
+);
+
+/** The configuration set's SNS destination, and the feedback Lambda's subscription to it. */
+const feedbackTopic = Layer.effect(
+  SnsSubscriber.SnsSubscriber,
+  Effect.gen(function* () {
+    const { TopicArn = "" } = yield* SNS.createTopic({ Name: "ses-events" });
+    yield* SESV2.createConfigurationSet({ ConfigurationSetName: configurationSet });
+    yield* SESV2.createConfigurationSetEventDestination({
+      ConfigurationSetName: configurationSet,
+      EventDestinationName: "feedback",
+      EventDestination: {
+        Enabled: true,
+        MatchingEventTypes: ["BOUNCE", "COMPLAINT"],
+        SnsDestination: { TopicArn },
+      },
+    });
+    return yield* SnsSubscriber.make({ topicArn: TopicArn });
+  }),
+).pipe(Layer.provide(aws));
 
 /** The real API Lambda behind the function URL emulator. */
 const api = Layer.unwrap(
@@ -46,7 +71,9 @@ const api = Layer.unwrap(
       Layer.mergeAll(
         Layer.succeedContext(context),
         RelyingParty.layer({ id: "alias.test", origin }),
-        Transport.ses.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
+        Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
+          Layer.provide(AwsClient.emulator(fakecloud.url)),
+        ),
         MailSettings.layer(Option.some("no-reply@alias.test")).pipe(
           Layer.provideMerge(sharedDomains),
         ),
@@ -98,10 +125,17 @@ const ses = SesEmulator.layer({
   verdicts: () => verdicts.next,
 }).pipe(Layer.provide([aws, spool]));
 
-const stack = Layer.mergeAll(api.pipe(Layer.provide(database)), inbound, ses, aws).pipe(
-  Layer.provide(NodeCrypto.layer),
-  Layer.provideMerge(FakeCloud.layer()),
-);
+/** The feedback Lambda on the same table and SES. */
+const feedback = Feedback.layer(Layer.mergeAll(database, sending));
+
+const stack = Layer.mergeAll(
+  api.pipe(Layer.provide(database)),
+  inbound,
+  feedback,
+  feedbackTopic,
+  ses,
+  aws,
+).pipe(Layer.provide(NodeCrypto.layer), Layer.provideMerge(FakeCloud.layer()));
 
 /** A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. */
 const call = (
@@ -175,10 +209,9 @@ const field = (raw: string, name: string) =>
  * A user as the web app creates one: a passkey account, a forwarding address confirmed with the
  * link from the mailed confirmation, and an alias on their own subdomain.
  */
-const owner = (username: string) =>
+const owner = (username: string, mailbox = `${username}@mailbox.example`) =>
   Effect.gen(function* () {
     const { cookie, userId } = yield* signUp(username);
-    const mailbox = `${username}@mailbox.example`;
     const added = yield* call("/v1/recipients", { cookie, body: { address: mailbox } });
     expect(added.status).toBe(201);
     const [confirmation] = yield* sentTo(mailbox);
@@ -558,6 +591,39 @@ describe("emulated stack", () => {
         expect(yield* sentTo("friend@pal.example")).toEqual([]);
         // The confirmation mail and the two first forwards.
         expect(yield* sentTo(gil.mailbox)).toHaveLength(3);
+      }),
+    );
+
+    it.effect("stops forwarding to a mailbox that hard-bounces, and says so in the API", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const bounce = "bounce@simulator.amazonses.com";
+        const ivy = yield* owner("ivy", bounce);
+
+        // The confirmation mail bounced: SES published it, SNS invoked the feedback Lambda.
+        const subscriber = yield* SnsSubscriber.SnsSubscriber;
+        const event = yield* SnsEvent.decode(
+          JSON.parse(JSON.stringify(yield* Queue.take(subscriber.events))),
+        );
+        expect(yield* Feedback.handle(event)).toEqual([
+          { _tag: "Bounced", suppressed: 1, marked: 1 },
+        ]);
+        const listed = yield* call("/v1/recipients", { cookie: ivy.cookie });
+        expect(listed.body).toEqual([
+          expect.objectContaining({ address: bounce, bouncedAt: expect.any(String) }),
+        ]);
+        const suppressed = yield* SESV2.getSuppressedDestination({ EmailAddress: bounce });
+        expect(suppressed.SuppressedDestination?.Reason).toBe("BOUNCE");
+
+        // Mail to the alias is no longer sent to the bouncing mailbox.
+        const forward = yield* smtp({
+          from: "orders@store.example",
+          to: ivy.alias,
+          subject: "Invoice",
+          text: "Attached.",
+        });
+        expect(yield* invoke(forward)).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
+        expect(yield* sentTo(bounce)).toHaveLength(1);
       }),
     );
 

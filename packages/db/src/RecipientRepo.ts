@@ -32,6 +32,13 @@ export interface Recipient {
    * verified one. Never a pending recipient.
    */
   readonly isDefault: boolean;
+  /**
+   * When SES last reported a permanent bounce for the address (PLAN.md §20.11). Forwarding to it
+   * stops; a resent confirmation clears it.
+   */
+  readonly bouncedAt: Option.Option<DateTime.Utc>;
+  /** When the owner's mailbox last reported forwarded mail as spam. Recorded, nothing more. */
+  readonly complainedAt: Option.Option<DateTime.Utc>;
 }
 
 export interface NewRecipient {
@@ -116,6 +123,18 @@ export class RecipientRepo extends Context.Service<
       userId: string,
       recipientId: string,
     ) => Effect.Effect<void, NoSuchRecipient | DatabaseError>;
+    /** Records a permanent bounce. False when the user has no recipient with this address. */
+    readonly markBounced: (
+      userId: string,
+      address: string,
+      at: DateTime.Utc,
+    ) => Effect.Effect<boolean, DatabaseError>;
+    /** Records a complaint. False when the user has no recipient with this address. */
+    readonly markComplained: (
+      userId: string,
+      address: string,
+      at: DateTime.Utc,
+    ) => Effect.Effect<boolean, DatabaseError>;
     /** Counts one confirmation mail against the user's daily (UTC) allowance of `maxPerDay`. */
     readonly reserveMail: (
       userId: string,
@@ -148,6 +167,8 @@ const RecipientItem = Item.codec(
     createdAt: Attribute.EpochMillis,
     lastSentAt: Attribute.EpochMillis,
     verifiedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
+    bouncedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
+    complainedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
   }),
   "Recipient",
 );
@@ -266,12 +287,38 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
     }).pipe(Effect.mapError(changed("TransactWriteItems", recipientId)), Effect.provide(client));
   });
 
+  /** Sets one timestamp on an existing recipient; false when there is none. */
+  const mark = (
+    userId: string,
+    address: string,
+    attribute: "bouncedAt" | "complainedAt",
+    at: DateTime.Utc,
+  ) =>
+    DynamoDB.updateItem({
+      TableName,
+      Key: recipientKey(userId, address.toLowerCase()),
+      UpdateExpression: "SET #at = :at",
+      ConditionExpression: "attribute_exists(pk)",
+      ExpressionAttributeNames: { "#at": attribute },
+      ExpressionAttributeValues: { ":at": millis(at) },
+    }).pipe(
+      Effect.as(true),
+      Effect.catchIf(
+        (error) => P.isTagged(error, "ConditionalCheckFailedException"),
+        () => Effect.succeed(false),
+      ),
+      Effect.mapError(databaseError("UpdateItem")),
+      Effect.provide(client),
+    );
+
   return RecipientRepo.of({
     add: Effect.fn("RecipientRepo.add")(function* (recipient, confirmation, maxPending) {
       const attributes = yield* RecipientItem.encode({
         ...recipient,
         lastSentAt: confirmation.sentAt,
         verifiedAt: Option.none(),
+        bouncedAt: Option.none(),
+        complainedAt: Option.none(),
       });
       yield* DynamoDB.transactWriteItems({
         TransactItems: [
@@ -320,8 +367,9 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
       DynamoDB.updateItem({
         TableName,
         Key: recipientKey(recipient.userId, recipient.address),
+        // A fresh confirmation is a fresh try: an earlier bounce no longer counts.
         UpdateExpression:
-          "SET tokenHash = :hash, tokenExpiresAt = :expiresAt, lastSentAt = :sentAt",
+          "SET tokenHash = :hash, tokenExpiresAt = :expiresAt, lastSentAt = :sentAt REMOVE bouncedAt",
         ConditionExpression:
           "#id = :id AND attribute_not_exists(verifiedAt) AND lastSentAt = :previous",
         ExpressionAttributeNames: { "#id": "id" },
@@ -404,6 +452,9 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
           Effect.fail(databaseError("DeleteRecipient")(error)),
         ),
       ),
+
+    markBounced: (userId, address, at) => mark(userId, address, "bouncedAt", at),
+    markComplained: (userId, address, at) => mark(userId, address, "complainedAt", at),
 
     reserveMail: Effect.fn("RecipientRepo.reserveMail")(function* (userId, now, maxPerDay) {
       const day = Quota.window(now, "day");

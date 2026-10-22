@@ -20,6 +20,8 @@ const appDomain = sharedDomains[0] ?? "alias.test";
 const confirmationSender = `no-reply@${appDomain}`;
 const spoolBucketName = `alias-spool-${stage}`;
 const tableName = `alias-${stage}`;
+/** Every send names it, so SES reports its bounces and complaints (PLAN.md §20.11). */
+const configurationSetName = `alias-events-${stage}`;
 /** Where SES stores received mail; `Inbound.spoolPrefix` in `@alias/aws`. */
 const spoolPrefix = "inbound/";
 
@@ -49,6 +51,8 @@ export default Alchemy.Stack(
     // Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
     const tableArn = `arn:aws:dynamodb:eu-west-1:${accountId}:table/${tableName}`;
     const spoolObjects = `arn:aws:s3:::${spoolBucketName}/${spoolPrefix}*`;
+    // Sending through a configuration set is authorized on the set as well as on the identity.
+    const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
 
     const table = yield* AWS.DynamoDB.Table("Data", {
       tableName,
@@ -103,6 +107,7 @@ export default Alchemy.Stack(
         ALIAS_WEB_ORIGIN: `https://${appDomain}`,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_CONFIRMATION_FROM: confirmationSender,
+        ALIAS_SES_CONFIGURATION_SET: configurationSetName,
       },
     });
     yield* api.bind("DataAccess", {
@@ -128,7 +133,13 @@ export default Alchemy.Stack(
         {
           Effect: "Allow",
           Action: ["ses:SendEmail", "ses:SendRawEmail"],
-          Resource: `arn:aws:ses:eu-west-1:*:identity/${appDomain}`,
+          Resource: [`arn:aws:ses:eu-west-1:*:identity/${appDomain}`, configurationSetArn],
+        },
+        {
+          // Re-adding a bounced address takes it off the suppression list once (§20.11).
+          Effect: "Allow",
+          Action: ["ses:DeleteSuppressedDestination"],
+          Resource: "*",
         },
       ],
     });
@@ -142,10 +153,13 @@ export default Alchemy.Stack(
       Effect: "Allow" as const,
       Sid: "SendFromSharedDomains",
       Action: ["ses:SendEmail", "ses:SendRawEmail"],
-      Resource: sharedDomains.flatMap((domain) => [
-        `arn:aws:ses:eu-west-1:${accountId}:identity/${domain}`,
-        `arn:aws:ses:eu-west-1:${accountId}:identity/*.${domain}`,
-      ]),
+      Resource: [
+        ...sharedDomains.flatMap((domain) => [
+          `arn:aws:ses:eu-west-1:${accountId}:identity/${domain}`,
+          `arn:aws:ses:eu-west-1:${accountId}:identity/*.${domain}`,
+        ]),
+        configurationSetArn,
+      ],
     };
 
     // The inbound pipeline (`apps/inbound`), invoked by the receipt rule below. Raw mail is held in
@@ -164,6 +178,7 @@ export default Alchemy.Stack(
         ALIAS_SPOOL_BUCKET: spool.bucketName,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_REVERSE_TOKEN_KEYS: reverseTokenKeys,
+        ALIAS_SES_CONFIGURATION_SET: configurationSetName,
       },
     });
     // Least privilege: aliases, recipients and contacts are read by key or one partition Query;
@@ -219,8 +234,56 @@ export default Alchemy.Stack(
     });
     yield* AWS.SES.ActiveReceiptRuleSet("Active", { ruleSetName: ruleSet.ruleSetName });
 
+    // Bounces and complaints (PLAN.md §20.11): every send names the configuration set, whose
+    // event destination publishes BOUNCE and COMPLAINT to an SNS topic that invokes the feedback
+    // Lambda. SES itself suppresses hard-bounced addresses for this set; complaints only get
+    // recorded, so one "spam" click doesn't stop a user's forwarding.
+    yield* AWS.SES.ConfigurationSet("Events", {
+      configurationSetName,
+      suppressedReasons: ["BOUNCE"],
+    });
+    const feedbackTopic = yield* AWS.SNS.Topic("SesEvents", {});
+    yield* AWS.SES.ConfigurationSetEventDestination("FeedbackTopic", {
+      configurationSetName,
+      matchingEventTypes: ["BOUNCE", "COMPLAINT"],
+      snsDestination: { topicArn: feedbackTopic.topicArn },
+    });
+
+    const feedback = yield* AWS.Lambda.Function("Feedback", {
+      main: new URL("../apps/inbound/src/feedbackHandler.ts", import.meta.url).pathname,
+      runtime: "nodejs24.x",
+      architecture: "arm64",
+      memorySize: 256,
+      timeout: Duration.seconds(30),
+      functionUrl: false,
+      env: { ALIAS_TABLE_NAME: table.tableName },
+    });
+    // Marks recipients (one UpdateItem each) and suppresses addresses, nothing else.
+    yield* feedback.bind("Feedback", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["dynamodb:UpdateItem"], Resource: [tableArn] },
+        { Effect: "Allow", Action: ["ses:PutSuppressedDestination"], Resource: "*" },
+      ],
+    });
+    const snsInvoke = yield* AWS.Lambda.Permission("SnsInvokesFeedback", {
+      action: "lambda:InvokeFunction",
+      functionName: feedback.functionArn,
+      principal: "sns.amazonaws.com",
+      sourceArn: feedbackTopic.topicArn,
+    });
+    yield* AWS.SNS.Subscription("FeedbackSubscription", {
+      topicArn: feedbackTopic.topicArn,
+      protocol: "lambda",
+      endpoint: snsInvoke.functionName,
+    });
+
+    // Events reach the feedback Lambda, so SES needn't also mail bounces to the sender, which
+    // would be a reverse alias (the inbound pipeline drops them as `bounce` anyway).
     yield* Effect.forEach(sharedDomains, (domain) =>
-      AWS.SES.EmailIdentity(`Shared-${domain}`, { emailIdentity: domain }),
+      AWS.SES.EmailIdentity(`Shared-${domain}`, {
+        emailIdentity: domain,
+        feedbackForwardingEnabled: false,
+      }),
     );
 
     return {
@@ -228,6 +291,7 @@ export default Alchemy.Stack(
       tableName: table.tableName,
       spoolBucket: spool.bucketName,
       inboundFunction: inbound.functionName,
+      feedbackFunction: feedback.functionName,
     };
   }),
 );

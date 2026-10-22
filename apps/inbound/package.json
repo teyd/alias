@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@alias/aws-emulators": "workspace:*",
+    "@alias/lambda-emulator": "workspace:*",
     "@alias/ses-emulator": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "@effect/vitest": "catalog:",

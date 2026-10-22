@@ -174,7 +174,14 @@ const recipient = Effect.fn("recipient")(function* (
   yield* repo.add(added, { tokenHash: "hash", expiresAt, sentAt: now }, 10);
   if (options.isPending !== true) {
     yield* repo.confirm(
-      { ...added, verifiedAt: Option.none(), lastSentAt: now, isDefault: false },
+      {
+        ...added,
+        verifiedAt: Option.none(),
+        lastSentAt: now,
+        isDefault: false,
+        bouncedAt: Option.none(),
+        complainedAt: Option.none(),
+      },
       "hash",
       now,
     );
@@ -840,6 +847,27 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
+  it.effect("stops forwarding to a recipient SES reported as hard-bouncing", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          repo.markBounced("usr_1", "ada@mail.example", DateTime.makeUnsafe(1)),
+        );
+        const { messageId, event } = yield* receive({ recipients: ["shop@alias.test"] });
+
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "recipient-bounced" },
+        ]);
+        expect(yield* sent).toEqual([]);
+        expect(yield* spoolHolds(messageId)).toBe(false);
+      }),
+    ),
+  );
+
+  // fakecloud refuses a suppressed recipient; AWS documents accepting and dropping it, with a
+  // bounce event (PLAN.md §20.11). Either way the pipeline can't send it again.
   it.effect("drops what SES refuses for the message itself", () =>
     withPipeline(
       Effect.gen(function* () {

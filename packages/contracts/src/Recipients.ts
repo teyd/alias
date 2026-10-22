@@ -10,6 +10,13 @@ const Recipient = Schema.Struct({
   /** The chosen default, or else the oldest verified recipient. Never a pending one. */
   isDefault: Schema.Boolean,
   createdAt: Schema.DateTimeUtcFromString,
+  /**
+   * When SES last reported a permanent bounce. Mail isn't forwarded to it any more; resending
+   * the confirmation (pending) or deleting and adding it again (verified) tries it once more.
+   */
+  bouncedAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
+  /** When the mailbox last reported forwarded mail as spam. */
+  complainedAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
 });
 export type Recipient = typeof Recipient.Type;
 

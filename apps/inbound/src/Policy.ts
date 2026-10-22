@@ -22,6 +22,8 @@ export const DropReason = Schema.Literals([
   "inbox-mode",
   // The alias owner has no verified forwarding address.
   "no-recipient",
+  // SES reported the owner's forwarding address as permanently bouncing.
+  "recipient-bounced",
   "virus",
   "spam",
   // Neither a `From` address nor an envelope sender to reply to.

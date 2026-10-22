@@ -27,6 +27,8 @@ Prefer the lowest tier that can observe the behaviour, but every new path throug
 | S3 | `FakeCloud.layer()` | `tools/aws-emulators/test` (incl. `HeadObject` sizes for `Inbound.messageSize`); production code (`Inbound.readMessage`) reads what the SES emulator wrote |
 | SES receiving | `SesEmulator.layer(config)` (SMTP, receipt rules, verdicts, S3 action, Lambda events) | `SesEvent` schema decodes the AWS-documented event and the emulator's events |
 | SES sending (SESv2 `SendEmail`) | `FakeCloud.layer()`; read sent mail with `FakeCloud.sentEmails` | `Transport` decodes the AWS-documented response and fakecloud's; the documented raw message arrives byte for byte (PLAN.md §20.5) |
+| SES event publishing → SNS (bounces, complaints) | `FakeCloud.layer()` (configuration set + SNS destination; send to `bounce@`/`complaint@simulator.amazonses.com`) | `SendingEvent` decodes the AWS-documented records and fakecloud's events (`apps/inbound/test/feedback.test.ts`) |
+| SNS → Lambda | `SnsSubscriber.make({ topicArn })` from `@alias/lambda-emulator`: subscribes over HTTP, confirms, and queues the documented Lambda event per notification | `SnsEvent` decodes the AWS-documented Lambda event and the emulator's; `toEvent` maps the documented HTTP notification field by field |
 | Lambda function URLs | `FunctionUrlServer.layer({ handler })` | `FunctionUrl` schemas decode AWS-documented payloads; emulator events decode with them |
 
 Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. A new AWS dependency needs an emulator and a contract test before any feature uses it.

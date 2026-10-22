@@ -79,6 +79,8 @@ export const recipientRepoSuite = (
               verifiedAt: Option.none(),
               lastSentAt: at(1_000),
               isDefault: false,
+              bouncedAt: Option.none(),
+              complainedAt: Option.none(),
             });
             expect(Option.map(yield* repo.find("usr_2", "rcp_other"), (r) => r.address)).toEqual(
               Option.some("ada@example.com"),
@@ -322,6 +324,36 @@ export const recipientRepoSuite = (
             // Another user has their own allowance, and the next day starts afresh.
             yield* repo.reserveMail("usr_2", lateOnDayOne, 2);
             yield* repo.reserveMail("usr_1", at(2 * day), 2);
+          }),
+        ),
+      );
+      it.effect("records bounces and complaints; a resent confirmation clears the bounce", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* RecipientRepo.RecipientRepo;
+            yield* repo.add(recipient(), confirmation(), MAX_PENDING);
+
+            expect(yield* repo.markBounced("usr_1", "ADA@example.com", at(5_000))).toBe(true);
+            expect(yield* repo.markComplained("usr_1", "ada@example.com", at(6_000))).toBe(true);
+            const marked = yield* get(repo, "usr_1", "rcp_1");
+            expect(marked).toMatchObject({
+              bouncedAt: Option.some(at(5_000)),
+              complainedAt: Option.some(at(6_000)),
+            });
+
+            // Another user's address, or an unknown one, is left alone and creates nothing.
+            expect(yield* repo.markBounced("usr_2", "ada@example.com", at(5_000))).toBe(false);
+            expect(yield* repo.markComplained("usr_1", "nobody@example.com", at(5_000))).toBe(
+              false,
+            );
+            expect(yield* repo.list("usr_2")).toEqual([]);
+            expect(yield* repo.list("usr_1")).toHaveLength(1);
+
+            yield* repo.renewConfirmation(marked, confirmation({ sentAt: at(7_000) }));
+            expect(yield* get(repo, "usr_1", "rcp_1")).toMatchObject({
+              bouncedAt: Option.none(),
+              complainedAt: Option.some(at(6_000)),
+            });
           }),
         ),
       );

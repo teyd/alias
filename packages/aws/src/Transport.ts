@@ -5,6 +5,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as AwsClient from "./Client.ts";
 
@@ -16,7 +17,17 @@ export type MessageId = typeof MessageId.Type;
 export interface Envelope {
   readonly from: string;
   readonly to: Arr.NonEmptyReadonlyArray<string>;
+  /**
+   * SES message tags (`EmailTags`), echoed in the bounce and complaint events of the
+   * configuration set (`SendingEvent.tags`).
+   */
+  readonly tags?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
 }
+
+/** The suppression list couldn't be changed now. */
+export class SuppressionError extends Schema.TaggedError<SuppressionError>()("SuppressionError", {
+  reason: Schema.String,
+}) {}
 
 /** SES refused this message itself. Sending it again fails the same way, so drop it. */
 export class TransportRejected extends Schema.TaggedError<TransportRejected>()(
@@ -67,10 +78,19 @@ export class Transport extends Context.Service<
       raw: Uint8Array,
       envelope: Envelope,
     ) => Effect.Effect<MessageId, TransportRejected | TransportRetryable>;
+    /**
+     * Puts an address on the account-level suppression list (SESv2 `PutSuppressedDestination`),
+     * after it bounced for good. SES then stops delivering to it. Idempotent.
+     */
+    readonly suppress: (address: string) => Effect.Effect<void, SuppressionError>;
+    /** Takes an address off the suppression list, e.g. when its owner adds it again. */
+    readonly unsuppress: (address: string) => Effect.Effect<void, SuppressionError>;
   }
 >()("@alias/aws/Transport") {}
 
-const makeSes = Effect.fn("Transport.makeSes")(function* () {
+const suppressionError = (cause: unknown) => new SuppressionError({ reason: String(cause) });
+
+const makeSes = Effect.fn("Transport.makeSes")(function* (configurationSet: Option.Option<string>) {
   const client = yield* Effect.context<AwsClient.AwsClient>();
   return Transport.of({
     send: (raw, envelope) =>
@@ -78,23 +98,57 @@ const makeSes = Effect.fn("Transport.makeSes")(function* () {
         FromEmailAddress: envelope.from,
         Destination: { ToAddresses: [...envelope.to] },
         Content: { Raw: { Data: raw } },
+        ...Option.match(configurationSet, {
+          onNone: () => ({}),
+          onSome: (name) => ({ ConfigurationSetName: name }),
+        }),
+        ...Option.match(Option.fromUndefinedOr(envelope.tags), {
+          onNone: () => ({}),
+          onSome: (tags) => ({
+            EmailTags: tags.map((tag) => ({ Name: tag.name, Value: tag.value })),
+          }),
+        }),
       }).pipe(Effect.mapError(classify), Effect.flatMap(decodeResult), Effect.provide(client)),
+    suppress: (address) =>
+      SESV2.putSuppressedDestination({ EmailAddress: address, Reason: "BOUNCE" }).pipe(
+        Effect.asVoid,
+        Effect.mapError(suppressionError),
+        Effect.provide(client),
+      ),
+    unsuppress: (address) =>
+      SESV2.deleteSuppressedDestination({ EmailAddress: address }).pipe(
+        Effect.asVoid,
+        Effect.catchTag("NotFoundException", () => Effect.void),
+        Effect.mapError(suppressionError),
+        Effect.provide(client),
+      ),
   });
 });
 
-/** SESv2 `SendEmail` with `Content.Raw`, on whatever `AwsClient` points at. */
-export const ses: Layer.Layer<Transport, never, AwsClient.AwsClient> = Layer.effect(
-  Transport,
-  makeSes(),
-);
+/**
+ * SESv2 on whatever `AwsClient` points at. Sends name `configurationSet` when given, whose event
+ * destination reports bounces and complaints (PLAN.md §20.11).
+ */
+export const layer = (options: {
+  readonly configurationSet: Option.Option<string>;
+}): Layer.Layer<Transport, never, AwsClient.AwsClient> =>
+  Layer.effect(Transport, makeSes(options.configurationSet));
+
+/** SESv2 without a configuration set: no events. */
+export const ses = layer({ configurationSet: Option.none() });
 
 /**
- * SES sending from the Lambda environment. `AWS_ENDPOINT_URL_SESV2` (the AWS-standard endpoint
- * override) is set only in emulated runs.
+ * SES from the Lambda environment: `ALIAS_SES_CONFIGURATION_SET`, and `AWS_ENDPOINT_URL_SESV2`
+ * (the AWS-standard endpoint override) only in emulated runs.
  */
-export const config = Config.option(Config.String("AWS_ENDPOINT_URL_SESV2")).pipe(
-  Config.map((endpoint) =>
-    ses.pipe(Layer.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
+export const config = Config.all({
+  endpoint: Config.option(Config.String("AWS_ENDPOINT_URL_SESV2")),
+  configurationSet: Config.option(Config.String("ALIAS_SES_CONFIGURATION_SET")),
+}).pipe(
+  Config.map(({ endpoint, configurationSet }) =>
+    layer({ configurationSet }).pipe(
+      Layer.provide(AwsClient.layer({ region: AwsClient.region, endpoint })),
+    ),
   ),
 );
 

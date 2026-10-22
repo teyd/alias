@@ -57,6 +57,8 @@ const recipient = (
   verifiedAt: fields.isVerified === false ? Option.none() : Option.some(DateTime.makeUnsafe(1)),
   lastSentAt: DateTime.makeUnsafe(0),
   isDefault: fields.isDefault ?? false,
+  bouncedAt: Option.none(),
+  complainedAt: Option.none(),
 });
 
 describe("route", () => {

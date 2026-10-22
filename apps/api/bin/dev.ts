@@ -28,8 +28,11 @@ const port = Number(process.env.ALIAS_API_PORT ?? 8787);
 const fakecloudUrl = `http://127.0.0.1:${process.env.ALIAS_FAKECLOUD_PORT ?? 4566}`;
 const database = Dynamo.emulator(fakecloudUrl, "alias");
 const sharedDomains = SharedDomains.layer(process.env.ALIAS_SHARED_DOMAINS ?? "alias.test");
+// The configuration set `apps/inbound/bin/dev.ts` creates, so bounces reach the feedback handler.
 const mail = Layer.merge(
-  Transport.ses.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
+  Transport.layer({ configurationSet: Option.some("alias-events") }).pipe(
+    Layer.provide(AwsClient.emulator(fakecloudUrl)),
+  ),
   MailSettings.layer(Option.fromUndefinedOr(process.env.ALIAS_CONFIRMATION_FROM)),
 ).pipe(Layer.provideMerge(sharedDomains));
 const relyingParty = RelyingParty.layer({
@@ -91,7 +94,14 @@ const seed = Effect.fn("api.dev.seed")(function* () {
     );
   if (added) {
     yield* recipients.confirm(
-      { ...recipient, verifiedAt: Option.none(), lastSentAt: now, isDefault: false },
+      {
+        ...recipient,
+        verifiedAt: Option.none(),
+        lastSentAt: now,
+        isDefault: false,
+        bouncedAt: Option.none(),
+        complainedAt: Option.none(),
+      },
       "dev",
       now,
     );

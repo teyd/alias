@@ -62,6 +62,9 @@ const issued = (n: number, grantId = "grt_1", userId = "usr_1"): OAuthRepo.Issue
   },
 });
 
+/** The test codes' client, `mcp_client`, isn't stored: redemption leaves clients alone. */
+const unregistered = { isRegistered: false };
+
 const failureTag = <A, E extends { readonly _tag: string }>(result: Result.Result<A, E>) =>
   Result.isFailure(result) ? result.failure._tag : "Success";
 
@@ -87,7 +90,7 @@ export const oauthRepoSuite = (
         const repo = yield* OAuthRepo.OAuthRepo;
         yield* repo.createCode(code());
         const stored = yield* Effect.flatMap(repo.findCode(code().hash), Effect.fromOption);
-        yield* repo.redeemCode(stored, grant(), issued(0));
+        yield* repo.redeemCode(stored, grant(), issued(0), unregistered);
         return repo;
       });
 
@@ -104,6 +107,7 @@ export const oauthRepoSuite = (
               redirectUris: ["http://localhost/callback", "https://claude.ai/callback"],
               uri: Option.some("https://claude.ai"),
               createdAt: at(1_000),
+              expiresAt: Option.none(),
             };
             yield* repo.registerClient(client);
             yield* repo.registerClient({ ...client, id: "mcp_02", uri: Option.none() });
@@ -112,6 +116,70 @@ export const oauthRepoSuite = (
               Option.some({ ...client, id: "mcp_02", uri: Option.none() }),
             );
             expect(yield* repo.findClient("mcp_03")).toEqual(Option.none());
+          }),
+        ),
+      );
+
+      // SR-17 (PLAN.md §20.25): registration needs no account, so unused clients must go.
+      it.effect("forgets a registered client at its expiry unless a grant used it", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* OAuthRepo.OAuthRepo;
+            const client = (id: string): OAuthRepo.Client => ({
+              id,
+              name: "Claude Code",
+              redirectUris: ["http://127.0.0.1:5555/callback"],
+              uri: Option.none(),
+              createdAt: at(0),
+              expiresAt: Option.some(at(30 * day)),
+            });
+            yield* repo.registerClient(client("mcp_unused"));
+            yield* repo.registerClient(client("mcp_client"));
+            yield* repo.createCode(code());
+            const stored = yield* Effect.flatMap(repo.findCode(code().hash), Effect.fromOption);
+            yield* repo.redeemCode(stored, grant(), issued(0), { isRegistered: true });
+            expect(yield* repo.findClient("mcp_unused")).toEqual(Option.some(client("mcp_unused")));
+            expect(yield* repo.findClient("mcp_client")).toEqual(
+              Option.some({ ...client("mcp_client"), expiresAt: Option.none() }),
+            );
+
+            // TTL deletes late; until then readers already treat the client as gone.
+            yield* TestClock.setTime(30 * day + 1_000);
+            expect(yield* repo.findClient("mcp_unused")).toEqual(Option.none());
+            expect(Option.isSome(yield* repo.findClient("mcp_client"))).toBe(true);
+          }),
+        ),
+      );
+
+      it.effect("refuses a code whose registered client expired before redemption", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* OAuthRepo.OAuthRepo;
+            yield* repo.registerClient({
+              id: "mcp_client",
+              name: "Claude Code",
+              redirectUris: ["http://127.0.0.1:5555/callback"],
+              uri: Option.none(),
+              createdAt: at(0),
+              expiresAt: Option.some(at(2 * 60_000)),
+            });
+            yield* repo.createCode(code());
+            const stored = yield* Effect.flatMap(repo.findCode(code().hash), Effect.fromOption);
+            yield* TestClock.setTime(3 * 60_000);
+            const result = yield* Effect.result(
+              repo.redeemCode(stored, grant(), issued(0), { isRegistered: true }),
+            );
+            expect(failureTag(result)).toBe("CodeUnusable");
+            expect(yield* repo.listGrants("usr_1")).toEqual([]);
+            // An unknown registered client (deleted by TTL) fails the same way.
+            yield* repo.createCode(code({ hash: "d".repeat(64), clientId: "mcp_gone" }));
+            const other = yield* Effect.flatMap(repo.findCode("d".repeat(64)), Effect.fromOption);
+            const gone = yield* Effect.result(
+              repo.redeemCode(other, grant({ clientId: "mcp_gone" }), issued(0), {
+                isRegistered: true,
+              }),
+            );
+            expect(failureTag(gone)).toBe("CodeUnusable");
           }),
         ),
       );
@@ -179,7 +247,7 @@ export const oauthRepoSuite = (
             const repo = yield* redeem();
             const stored = yield* Effect.flatMap(repo.findCode(code().hash), Effect.fromOption);
             const again = yield* Effect.result(
-              repo.redeemCode(stored, grant({ id: "grt_2" }), issued(1, "grt_2")),
+              repo.redeemCode(stored, grant({ id: "grt_2" }), issued(1, "grt_2"), unregistered),
             );
             expect(failureTag(again)).toBe("CodeUnusable");
             expect(yield* repo.findGrant("grt_1")).toEqual(Option.none());
@@ -199,8 +267,10 @@ export const oauthRepoSuite = (
             const stored = yield* Effect.flatMap(repo.findCode(code().hash), Effect.fromOption);
             const results = yield* Effect.all(
               [
-                Effect.result(repo.redeemCode(stored, grant(), issued(0))),
-                Effect.result(repo.redeemCode(stored, grant({ id: "grt_2" }), issued(1, "grt_2"))),
+                Effect.result(repo.redeemCode(stored, grant(), issued(0), unregistered)),
+                Effect.result(
+                  repo.redeemCode(stored, grant({ id: "grt_2" }), issued(1, "grt_2"), unregistered),
+                ),
               ],
               { concurrency: "unbounded" },
             );

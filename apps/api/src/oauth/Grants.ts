@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
 import { hashToken, newToken } from "../Secrets.ts";
+import * as Clients from "./Clients.ts";
 import { ACCESS_LIFETIME, PREFIX, REFRESH_LIFETIME } from "./Issuer.ts";
 
 /**
@@ -127,7 +128,8 @@ const exchangeCode = Effect.fn("Grants.exchangeCode")(function* (request: TokenR
     expiresAt: DateTime.addDuration(now, REFRESH_LIFETIME),
   };
   const { issued, response } = yield* mint(grant, grant.scopes, now);
-  yield* repo.redeemCode(code, grant, issued).pipe(
+  const client = { isRegistered: !Clients.isMetadataDocumentId(code.clientId) };
+  yield* repo.redeemCode(code, grant, issued, client).pipe(
     Effect.catchTags({
       CodeUnusable: () => invalidGrant("Code already used."),
       DatabaseError: Effect.die,

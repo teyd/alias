@@ -45,7 +45,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
  * | Draft             | `USER#<userId>`              | `DRAFT#<id>`           |                            |                           | `expiresAt` |
  * | SendQuota         | `USER#<userId>`              | `SENDS#<date>`         |                            |                           | `expiresAt` |
- * | OAuthClient       | `OAUTH-CLIENT#<clientId>`    | `CLIENT`               |                            |                           |             |
+ * | OAuthClient       | `OAUTH-CLIENT#<clientId>`    | `CLIENT`               |                            |                           | `expiresAt` |
  * | Registrations     | `OAUTHREG#<sha256(ip)>`      | `REGISTRATIONS#<hour>` |                            |                           | `expiresAt` |
  * | OAuthCode         | `OAUTH-CODE#<sha256(code)>`  | `CODE`                 | `OAUTH#<userId>`           | `CODE#<sha256(code)>`     | `expiresAt` |
  * | OAuthGrant        | `OAUTH-GRANT#<grantId>`      | `GRANT`                | `OAUTH#<userId>`           | `GRANT#<grantId>`         | `expiresAt` |

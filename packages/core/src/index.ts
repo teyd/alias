@@ -1,4 +1,5 @@
 export * as Address from "./Address.ts";
+export * as ClientAddress from "./ClientAddress.ts";
 export * as ImageProxy from "./ImageProxy.ts";
 export * as Keyring from "./Keyring.ts";
 export * as Mail from "./Mail.ts";

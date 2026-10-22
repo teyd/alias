@@ -2,31 +2,38 @@ import { AliasRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { FakeCloud } from "@alias/aws-emulators";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { RelyingParty, makeFunctionUrlHandler } from "../src/index.ts";
+import { RelyingParty, SharedDomains, makeFunctionUrlHandler } from "../src/index.ts";
 import * as Browser from "./support/Browser.ts";
 import { TestAuthenticator } from "./support/index.ts";
 
 const SESSION = "__Host-alias_session";
 
-const relyingParty = RelyingParty.layer({ id: "alias.test", origin: Browser.origin });
+const services = Layer.merge(
+  RelyingParty.layer({ id: "alias.test", origin: Browser.origin }),
+  SharedDomains.layer("alias.test,alias2.test"),
+);
 
 /** The API Lambda on a fresh table in its own fakecloud, plus a way to seed aliases. */
 const api = Effect.acquireRelease(
   Effect.gen(function* () {
     const context = yield* Layer.build(freshTable().pipe(Layer.provide(FakeCloud.layer())));
-    const handler = makeFunctionUrlHandler(
-      Layer.merge(Layer.succeedContext(context), relyingParty),
-    );
+    const handler = makeFunctionUrlHandler(Layer.merge(Layer.succeedContext(context), services));
     const seedAlias = (alias: AliasRepo.NewAlias) =>
       AliasRepo.make().pipe(
         Effect.flatMap((repo) => repo.insert(alias)),
         Effect.provide(context),
       );
-    return { ...handler, browser: () => Browser.make(handler.handle), seedAlias };
+    const findAlias = (domain: string, localPart: string) =>
+      AliasRepo.make().pipe(
+        Effect.flatMap((repo) => repo.findByAddress(domain, localPart)),
+        Effect.provide(context),
+      );
+    return { ...handler, browser: () => Browser.make(handler.handle), seedAlias, findAlias };
   }),
   (handler) => Effect.promise(() => handler.dispose()),
 );
@@ -73,6 +80,16 @@ const logIn = Effect.fn("logIn")(function* (
     credential: authenticator.get(options),
   });
 });
+
+/** A browser signed in as a freshly registered user. */
+const signedIn = Effect.fn("signedIn")(function* (open: () => Client, username: string) {
+  const browser = open();
+  const registered = yield* signUp(browser, TestAuthenticator.make(Browser.origin), username);
+  return { browser, ...Schema.decodeUnknownSync(Me)(registered.body) };
+});
+
+const random = (domain: string) => ({ _tag: "Random", domain, mode: "forward" });
+const address = (value: string) => ({ _tag: "Address", address: value, mode: "inbox" });
 
 describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
   it.effect("serves health", () =>
@@ -287,6 +304,186 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
         }),
       ).toMatchObject({ status: 400, body: { reason: "verification-failed" } });
       expect(browser.cookie(SESSION)).toEqual(Option.none());
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("creates random aliases on the shared domains only", () =>
+    Effect.gen(function* () {
+      const { browser: open } = yield* api;
+      const { browser } = yield* signedIn(open, "ada");
+
+      const first = yield* browser.post("/v1/aliases", random("alias.test"));
+      expect(first).toMatchObject({ status: 201, body: { mode: "forward", isActive: true } });
+      expect(first.body).toMatchObject({
+        id: expect.stringMatching(/^al_[0-9a-z]{26}$/),
+        address: expect.stringMatching(/^[2-9a-hjkmnp-z]{10}@alias\.test$/),
+      });
+      const second = yield* browser.post("/v1/aliases", random(" ALIAS2.test "));
+      expect(second).toMatchObject({
+        status: 201,
+        body: { address: expect.stringMatching(/^[2-9a-hjkmnp-z]{10}@alias2\.test$/) },
+      });
+
+      const refused = yield* Effect.forEach(
+        ["example.org", "ada.alias.test"],
+        (domain) => browser.post("/v1/aliases", random(domain)),
+        { concurrency: 1 },
+      );
+      expect(refused).toMatchObject([
+        { status: 400, body: { _tag: "InvalidAlias", reason: "unknown-domain" } },
+        { status: 400, body: { _tag: "InvalidAlias", reason: "unknown-domain" } },
+      ]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("creates any address on the caller's own subdomain, and nowhere else", () =>
+    Effect.gen(function* () {
+      const { browser: open } = yield* api;
+      const { browser } = yield* signedIn(open, "ada");
+      yield* signedIn(open, "grace");
+
+      expect(yield* browser.post("/v1/aliases", address(" Shop@ADA.alias2.test"))).toMatchObject({
+        status: 201,
+        body: { address: "shop@ada.alias2.test", mode: "inbox", isActive: true },
+      });
+
+      const cases = [
+        ["not an address", "invalid-address"],
+        ["shop@grace.alias.test", "not-your-subdomain"],
+        ["shop@alias.test", "random-only-on-shared-domain"],
+        ["me@example.org", "unknown-domain"],
+        ["a@x.ada.alias.test", "unknown-domain"],
+        ["shop+r.abc@ada.alias.test", "reserved-local-part"],
+      ] as const;
+      const responses = yield* Effect.forEach(
+        cases,
+        ([value]) => browser.post("/v1/aliases", address(value)),
+        { concurrency: 1 },
+      );
+      expect(responses).toMatchObject(
+        cases.map(([value, reason]) => ({
+          status: 400,
+          body: { _tag: "InvalidAlias", address: value, reason },
+        })),
+      );
+      expect((yield* browser.post("/v1/aliases", { _tag: "Address", mode: "inbox" })).status).toBe(
+        400,
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("answers 409 when the address is taken, whatever its case", () =>
+    Effect.gen(function* () {
+      const { browser: open, seedAlias } = yield* api;
+      const { browser } = yield* signedIn(open, "ada");
+      expect((yield* browser.post("/v1/aliases", address("shop@ada.alias.test"))).status).toBe(201);
+      expect(yield* browser.post("/v1/aliases", address("SHOP@ada.alias.test"))).toMatchObject({
+        status: 409,
+        body: { _tag: "AliasTaken", address: "shop@ada.alias.test" },
+      });
+
+      // Left over from a previous owner of the name, say: still nobody else's to take.
+      yield* seedAlias({
+        id: "al_old",
+        userId: "usr_old",
+        domain: "ada.alias.test",
+        localPart: "bank",
+        mode: "forward",
+        createdAt: 0,
+      });
+      expect(yield* browser.post("/v1/aliases", address("bank@ada.alias.test"))).toMatchObject({
+        status: 409,
+        body: { _tag: "AliasTaken" },
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lists the caller's aliases only, oldest first", () =>
+    Effect.gen(function* () {
+      const { browser: open, seedAlias } = yield* api;
+      const ada = yield* signedIn(open, "ada");
+      const grace = yield* signedIn(open, "grace");
+      expect(yield* ada.browser.get("/v1/aliases")).toMatchObject({ status: 200, body: [] });
+
+      const seed = (id: string, userId: string, localPart: string, createdAt: number) =>
+        seedAlias({ id, userId, domain: "alias.test", localPart, mode: "both", createdAt });
+      yield* seed("al_2", ada.userId, "second", 2);
+      yield* seed("al_1", ada.userId, "first", 1);
+      yield* seed("al_3", grace.userId, "theirs", 3);
+
+      expect(yield* ada.browser.get("/v1/aliases")).toMatchObject({
+        status: 200,
+        body: [
+          { id: "al_1", address: "first@alias.test", mode: "both", isActive: true },
+          { id: "al_2", address: "second@alias.test", mode: "both", isActive: true },
+        ],
+      });
+      expect(yield* grace.browser.get("/v1/aliases/domains")).toMatchObject({
+        status: 200,
+        body: {
+          shared: ["alias.test", "alias2.test"],
+          subdomains: ["grace.alias.test", "grace.alias2.test"],
+        },
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("updates and deletes the caller's own aliases, and 404s on anyone else's", () =>
+    Effect.gen(function* () {
+      const { browser: open, seedAlias, findAlias } = yield* api;
+      const { browser, userId } = yield* signedIn(open, "ada");
+      const alias = { domain: "alias.test", mode: "forward", createdAt: 0 } as const;
+      yield* seedAlias({ ...alias, id: "al_mine", userId, localPart: "shop" });
+      yield* seedAlias({ ...alias, id: "al_theirs", userId: "usr_other", localPart: "bank" });
+
+      expect(
+        yield* browser.patch("/v1/aliases/alias.test/SHOP", { isActive: false, mode: "both" }),
+      ).toMatchObject({
+        status: 200,
+        body: { id: "al_mine", address: "shop@alias.test", mode: "both", isActive: false },
+      });
+      expect(yield* browser.patch("/v1/aliases/alias.test/shop", {})).toMatchObject({
+        status: 200,
+        body: { mode: "both", isActive: false },
+      });
+      expect((yield* browser.patch("/v1/aliases/alias.test/shop", { mode: "bogus" })).status).toBe(
+        400,
+      );
+
+      // Someone else's alias looks exactly like a missing one, and stays as it was.
+      const notFound = { status: 404, body: { _tag: "AliasNotFound" } };
+      expect(
+        yield* browser.patch("/v1/aliases/alias.test/bank", { isActive: false }),
+      ).toMatchObject({ ...notFound, body: { ...notFound.body, address: "bank@alias.test" } });
+      expect(yield* browser.patch("/v1/aliases/alias.test/nobody", {})).toMatchObject(notFound);
+      expect(yield* browser.delete("/v1/aliases/alias.test/bank")).toMatchObject(notFound);
+      expect(yield* findAlias("alias.test", "bank")).toEqual(
+        Option.some(expect.objectContaining({ userId: "usr_other", isActive: true })),
+      );
+
+      expect((yield* browser.delete("/v1/aliases/alias.test/shop")).status).toBe(204);
+      expect(yield* findAlias("alias.test", "shop")).toEqual(Option.none());
+      expect(yield* browser.get("/v1/aliases/alias.test/shop")).toMatchObject(notFound);
+      expect(yield* browser.delete("/v1/aliases/alias.test/shop")).toMatchObject(notFound);
+      expect(yield* browser.get("/v1/aliases")).toMatchObject({ status: 200, body: [] });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("keeps every alias endpoint behind the session", () =>
+    Effect.gen(function* () {
+      const { browser: open } = yield* api;
+      const browser = open();
+      const responses = yield* Effect.all(
+        [
+          browser.get("/v1/aliases"),
+          browser.get("/v1/aliases/domains"),
+          browser.post("/v1/aliases", random("alias.test")),
+          browser.patch("/v1/aliases/alias.test/shop", { isActive: false }),
+          browser.delete("/v1/aliases/alias.test/shop"),
+        ],
+        { concurrency: 1 },
+      );
+      expect(Arr.map(responses, (response) => response.status)).toEqual([401, 401, 401, 401, 401]);
     }).pipe(Effect.scoped),
   );
 });

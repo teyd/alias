@@ -1,4 +1,4 @@
-import { RelyingParty, makeFunctionUrlHandler } from "@alias/api";
+import { RelyingParty, SharedDomains, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
 import { AliasRepo, type Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
@@ -34,9 +34,10 @@ const api = Layer.merge(
     Effect.gen(function* () {
       const context = yield* Effect.context<Dynamo.Database>();
       const { handle, dispose } = makeFunctionUrlHandler(
-        Layer.merge(
+        Layer.mergeAll(
           Layer.succeedContext(context),
           RelyingParty.layer({ id: "alias.test", origin }),
+          SharedDomains.layer("alias.test"),
         ),
       );
       yield* Effect.addFinalizer(() => Effect.promise(dispose));

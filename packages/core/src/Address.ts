@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -54,6 +55,30 @@ export const parse = Effect.fn("Address.parse")(function* (input: string) {
   }
   const address: MailAddress = { local, domain };
   return address;
+});
+
+/** Lowercase letters and digits without the lookalikes `0`, `1`, `i`, `l` and `o`: 31 symbols. */
+const RANDOM_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+const RANDOM_LENGTH = 10;
+
+/**
+ * A fresh local part for a shared-domain alias, like `k7m2qx9pzr`. Ten symbols carry about 49
+ * bits, so a collision with an existing alias is rare; callers still retry on one. Bytes at or
+ * above 248 (8 × 31) are skipped so every symbol is equally likely.
+ */
+export const randomLocal = Effect.fn("Address.randomLocal")(function* () {
+  const crypto = yield* Crypto.Crypto;
+  const limit = RANDOM_ALPHABET.length * 8;
+  const pick = Effect.map(crypto.randomBytes(RANDOM_LENGTH * 2), (bytes) =>
+    Arr.map(
+      Arr.filter(Array.from(bytes), (byte) => byte < limit),
+      (byte) => RANDOM_ALPHABET.charAt(byte % RANDOM_ALPHABET.length),
+    ),
+  );
+  const symbols = yield* pick.pipe(
+    Effect.repeat({ until: (picked) => picked.length >= RANDOM_LENGTH }),
+  );
+  return Arr.join(Arr.take(symbols, RANDOM_LENGTH), "");
 });
 
 /**

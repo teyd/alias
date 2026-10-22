@@ -12,6 +12,7 @@
   "dependencies": {
     "@alias/contracts": "workspace:*",
     "@simplewebauthn/browser": "catalog:",
+    "@tanstack/react-form": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "class-variance-authority": "catalog:",

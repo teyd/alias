@@ -1,11 +1,9 @@
-import { AliasNotFound, AliasTaken, type AliasView, InvalidAlias } from "@alias/contracts";
+import { AliasNotFound, AliasTaken, InvalidAlias } from "@alias/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import { type Client, callApi } from "./api";
-
-export type Mode = AliasView["mode"];
 
 /** Why an alias change failed, worded for the person at the keyboard. */
 class AliasFailed extends Schema.TaggedError<AliasFailed>()("AliasFailed", {
@@ -59,10 +57,9 @@ export const aliasParams = (address: string) => {
   return { local: address.slice(0, at), domain: address.slice(at + 1) };
 };
 
-export const updateAlias = (
-  address: string,
-  payload: { readonly mode?: Mode; readonly isActive?: boolean },
-) => explain((api) => api.aliases.update({ params: aliasParams(address), payload }));
+/** An inactive alias keeps its address, but its mail is refused (and counted as blocked). */
+export const setActive = (address: string, isActive: boolean) =>
+  explain((api) => api.aliases.update({ params: aliasParams(address), payload: { isActive } }));
 
 export const deleteAlias = (address: string) =>
   explain((api) => api.aliases.remove({ params: aliasParams(address) }));

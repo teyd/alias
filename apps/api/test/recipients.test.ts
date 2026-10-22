@@ -52,7 +52,7 @@ const addRecipient = Effect.fn("addRecipient")(function* (
   return Schema.decodeUnknownSync(Recipient)(response.body);
 });
 
-const LINK = /https:\/\/alias\.test\/forwarding\?\S+/;
+const LINK = /https:\/\/alias\.test\/destinations\?\S+/;
 
 /** Every confirmation mail fakecloud SES accepted for `address`, oldest first. */
 const mailsTo = Effect.fn("mailsTo")(function* (api: Api, address: string) {

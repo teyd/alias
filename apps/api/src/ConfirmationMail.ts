@@ -12,13 +12,13 @@ export interface ConfirmationMail {
   readonly date: DateTime.Utc;
 }
 
-/** Where the confirmation link points: the web app's forwarding page, with the secret in the query. */
+/** Where the confirmation link points: the web app's destinations page, with the secret in the query. */
 export const link = (input: {
   readonly origin: string;
   readonly recipientId: string;
   readonly token: string;
 }) => {
-  const url = new URL("/forwarding", input.origin);
+  const url = new URL("/destinations", input.origin);
   url.searchParams.set("confirm", input.recipientId);
   url.searchParams.set("token", input.token);
   return url.href;

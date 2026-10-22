@@ -227,7 +227,7 @@ const owner = (username: string, mailbox = `${username}@mailbox.example`) =>
     expect(added.status).toBe(201);
     const [confirmation] = yield* sentTo(mailbox);
     const token = new URL(
-      /https:\/\/alias\.test\/forwarding\?\S+/.exec(confirmation?.text ?? "")?.[0] ?? "x:",
+      /https:\/\/alias\.test\/destinations\?\S+/.exec(confirmation?.text ?? "")?.[0] ?? "x:",
     ).searchParams.get("token");
     const confirmed = yield* call(`/v1/recipients/${added.body.id}/confirm`, {
       cookie,

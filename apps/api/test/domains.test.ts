@@ -135,7 +135,16 @@ describe("custom domains on the API handler (fakecloud SES identities, DoH emula
       const ada = yield* signedIn(api, "ada");
       const bob = yield* signedIn(api, "bob");
       const reasons = yield* Effect.forEach(
-        ["not a domain", "localhost", "alias.test", "ada.alias.test", "test", "alias2.test"],
+        [
+          "not a domain",
+          "localhost",
+          "alias.test",
+          "ada.alias.test",
+          "test",
+          "alias2.test",
+          "tmp.test",
+          "x.tmp2.test",
+        ],
         (domain) =>
           Effect.map(ada.post("/v1/domains", { domain }), (response) => [
             response.status,
@@ -150,6 +159,10 @@ describe("custom domains on the API handler (fakecloud SES identities, DoH emula
         [400, { _tag: "InvalidDomain", domain: "ada.alias.test", reason: "shared-domain" }],
         [400, { _tag: "InvalidDomain", domain: "test", reason: "invalid" }],
         [400, { _tag: "InvalidDomain", domain: "alias2.test", reason: "shared-domain" }],
+        // Temp-mail domains are the service's too: a claim would let its removal delete their
+        // SES identity.
+        [400, { _tag: "InvalidDomain", domain: "tmp.test", reason: "shared-domain" }],
+        [400, { _tag: "InvalidDomain", domain: "x.tmp2.test", reason: "shared-domain" }],
       ]);
 
       yield* addDomain(ada, "one.example");

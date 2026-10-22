@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
 import * as Option from "effect/Option";
 import * as R from "effect/Record";
+import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import { concat, fromBinary, toBinary } from "./bytes.ts";
 import * as Headers from "./headers.ts";
@@ -60,9 +61,11 @@ export const first = (message: Headers.Message, name: string): Option.Option<str
 
 // Transfer encodings (RFC 2045 §6). Content is handled as byte strings throughout.
 
+// The lookbehind starts a match only where a run of whitespace starts, so a long run is scanned
+// once, not once per character (quadratic on attacker-chosen mail, PLAN.md §20.25).
 const decodeQuotedPrintable = (text: string): string =>
   text
-    .replace(/[ \t]+(?=\r?\n|$)/g, "")
+    .replace(/(?<![ \t])[ \t]+(?=\r?\n|$)/g, "")
     .replace(/=\r?\n/g, "")
     .replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) =>
       String.fromCharCode(Number.parseInt(hex, 16)),
@@ -183,29 +186,27 @@ export const splitMultipart = (
   const escaped = boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const delimiter = new RegExp(`(?:^|\\r?\\n)--${escaped}(--)?[ \\t]*(?:\\r?\\n|$)`, "g");
   const matches = Arr.fromIterable(text.matchAll(delimiter));
-  const pieces = Arr.reduce(
-    matches,
-    {
-      offset: 0,
-      isOpen: false,
-      pieces: Arr.empty<{ readonly isPart: boolean; readonly bytes: Uint8Array }>(),
-    },
-    (state, match) => {
-      if (!state.isOpen && state.offset > 0) return state;
-      const start = match.index;
-      const end = start + match[0].length;
-      return {
-        offset: end,
-        isOpen: match[1] === undefined,
-        pieces: [
-          ...state.pieces,
-          { isPart: state.isOpen, bytes: body.subarray(state.offset, start) },
-          { isPart: false, bytes: body.subarray(start, end) },
-        ],
-      };
-    },
-  );
-  return [...pieces.pieces, { isPart: false, bytes: body.subarray(pieces.offset) }];
+  // Everything after the close delimiter is the epilogue.
+  const close = Arr.findFirstIndex(matches, (match) => match[1] !== undefined);
+  const delimiters = Option.match(close, {
+    onNone: () => matches,
+    onSome: (index) => matches.slice(0, index + 1),
+  });
+  const end = (index: number) =>
+    Option.match(Arr.get(delimiters, index), {
+      onNone: () => 0,
+      onSome: (match) => match.index + match[0].length,
+    });
+  // One flatMap, not a reduce that copies its growing array per delimiter: a message may have
+  // millions of them.
+  return [
+    ...Arr.flatMap(delimiters, (match, index) => [
+      // Before the first delimiter is the preamble; between two delimiters, a part.
+      { isPart: index > 0, bytes: body.subarray(end(index - 1), match.index) },
+      { isPart: false, bytes: body.subarray(match.index, end(index)) },
+    ]),
+    { isPart: false, bytes: body.subarray(end(delimiters.length - 1)) },
+  ];
 };
 
 /** A part with no header fields at all starts with its blank line (RFC 2046 §5.1.1). */
@@ -221,9 +222,34 @@ export const parseEntity = (raw: Uint8Array): Effect.Effect<Headers.Message> =>
   );
 
 /** The entity's body after `rewrite`, or none when nothing in it changed. */
+/**
+ * How much of a message's MIME tree is walked (PLAN.md §20.25). Real mail nests three or four
+ * levels and has a few dozen parts; attacker-chosen mail may nest thousands (each level re-reads
+ * the rest of the message, so time grows with the square of its size) or hold a million parts
+ * (each costs a parse). Parts past either limit are passed on unchanged, and not read.
+ */
+export const MAX_DEPTH = 16;
+const MAX_PARTS = 1_000;
+
+/** Where a walk is: how deep, and how many parts it may still visit (shared by the whole walk). */
+export interface Walk {
+  readonly depth: number;
+  readonly parts: Ref.Ref<number>;
+}
+
+export const startWalk: Effect.Effect<Walk> = Effect.map(Ref.make(MAX_PARTS), (parts) => ({
+  depth: 0,
+  parts,
+}));
+
+/** Takes one part from the walk's allowance; false once it is spent. */
+export const visitPart = (walk: Walk): Effect.Effect<boolean> =>
+  Ref.modify(walk.parts, (left) => [left > 0, left - 1]);
+
 const rewriteEntity = <E, R>(
   message: Headers.Message,
   rewrite: Rewrite<E, R>,
+  walk: Walk,
 ): Effect.Effect<Option.Option<Uint8Array>, E, R> => {
   const type = Option.match(first(message, "content-type"), {
     // A message without Content-Type is text/plain, and so is a part (RFC 2045 §5.2).
@@ -235,17 +261,23 @@ const rewriteEntity = <E, R>(
   if (type.type !== "multipart" || Option.isNone(boundary)) {
     return rewriteLeaf(message, type, rewrite);
   }
+  if (walk.depth >= MAX_DEPTH) return Effect.succeedNone;
   const pieces = splitMultipart(message.rest, boundary.value);
+  const inner = { ...walk, depth: walk.depth + 1 };
   return Effect.forEach(
     pieces,
     (piece) =>
       piece.isPart
-        ? Effect.flatMap(parseEntity(piece.bytes), (part) =>
-            Effect.map(rewriteEntity(part, rewrite), (changed) =>
-              Option.map(changed, (rest) =>
-                concat([...Arr.map(part.fields, (field) => field.bytes), rest]),
-              ),
-            ),
+        ? Effect.flatMap(visitPart(walk), (isAllowed) =>
+            isAllowed
+              ? Effect.flatMap(parseEntity(piece.bytes), (part) =>
+                  Effect.map(rewriteEntity(part, rewrite, inner), (changed) =>
+                    Option.map(changed, (rest) =>
+                      concat([...Arr.map(part.fields, (field) => field.bytes), rest]),
+                    ),
+                  ),
+                )
+              : Effect.succeedNone,
           )
         : Effect.succeedNone,
     { concurrency: 1 },
@@ -269,6 +301,8 @@ export const rewriteText = <E, R>(
   message: Headers.Message,
   rewrite: Rewrite<E, R>,
 ): Effect.Effect<Headers.Message, E, R> =>
-  Effect.map(rewriteEntity(message, rewrite), (changed) =>
-    Option.match(changed, { onNone: () => message, onSome: (rest) => ({ ...message, rest }) }),
+  Effect.map(
+    Effect.flatMap(startWalk, (walk) => rewriteEntity(message, rewrite, walk)),
+    (changed) =>
+      Option.match(changed, { onNone: () => message, onSome: (rest) => ({ ...message, rest }) }),
   );

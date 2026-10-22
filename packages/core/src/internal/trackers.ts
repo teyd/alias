@@ -6,6 +6,7 @@ import * as Result from "effect/Result";
 import * as Str from "effect/String";
 import type { TextPart } from "./mime.ts";
 import { isTrackerUrl, isTrackingParameter as isTrackingParameterNamed } from "./filters.ts";
+import { pairedPrefix } from "./regex.ts";
 
 /**
  * Tracker protection for forwarded mail (PLAN.md §20.19). Works on a text part's content as a
@@ -84,6 +85,26 @@ const combine = (steps: ReadonlyArray<Step>, join = ""): Step => ({
 });
 
 const unchanged = (text: string): Step => ({ text, changes: noChanges, unsigned: [] });
+
+/**
+ * `text` with each match replaced by its step, the text between them unchanged. One flatMap, not
+ * a reduce that copies its growing array per match: attacker-chosen mail may hold millions of
+ * matches (PLAN.md §20.25).
+ */
+const replaceMatches = (
+  text: string,
+  found: ReadonlyArray<{ readonly start: number; readonly end: number; readonly step: Step }>,
+): Step => {
+  const endOf = (index: number) =>
+    Option.match(Arr.get(found, index), { onNone: () => 0, onSome: (match) => match.end });
+  return combine([
+    ...Arr.flatMap(found, ({ start, step }, index) => [
+      unchanged(text.slice(endOf(index - 1), start)),
+      step,
+    ]),
+    unchanged(text.slice(endOf(found.length - 1))),
+  ]);
+};
 
 /** What happens to one remote image URL: removed as a tracker, proxied, or kept. */
 interface Verdict {
@@ -182,7 +203,7 @@ interface Attribute {
   readonly value: string;
 }
 
-const ATTRIBUTE = /(\s+)([^\s"'>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'=<>`]+))?/g;
+const ATTRIBUTE = /(\s+)([^\s"'<>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'=<>`]+))?/g;
 
 const parseAttributes = (text: string): ReadonlyArray<Attribute> =>
   Arr.map(Arr.fromIterable(text.matchAll(ATTRIBUTE)), (match) => {
@@ -235,7 +256,8 @@ const declarations = (css: string): ReadonlyArray<readonly [string, string]> =>
   });
 
 /** A CSS `url()`, its target quoted, unquoted, or `&quot;`-quoted inside an attribute. */
-const CSS_URL = /url\([^)]*\)/gi;
+// `[^()]`, not `[^)]`: a run of `url(` without a `)` is then scanned once (PLAN.md §20.25).
+const CSS_URL = /url\([^()]*\)/gi;
 
 const CSS_QUOTES = /^(?:"|'|&quot;)|(?:"|'|&quot;)$/gi;
 
@@ -254,16 +276,14 @@ const cssUrl = (context: Context, token: string): Step => {
 /** CSS with every `url(…)` protected. */
 const protectCss = (context: Context, css: string): Step => {
   const tokens = Arr.fromIterable(css.matchAll(CSS_URL));
-  const steps = Arr.map(tokens, (match) => ({ match, step: cssUrl(context, match[0]) }));
-  const rebuilt = Arr.reduce(
-    steps,
-    { parts: Arr.empty<Step>(), offset: 0 },
-    (state, { match, step }) => ({
-      parts: [...state.parts, unchanged(css.slice(state.offset, match.index)), step],
-      offset: match.index + match[0].length,
-    }),
+  return replaceMatches(
+    css,
+    Arr.map(tokens, (match) => ({
+      start: match.index,
+      end: match.index + match[0].length,
+      step: cssUrl(context, match[0]),
+    })),
   );
-  return combine([...rebuilt.parts, unchanged(css.slice(rebuilt.offset))]);
 };
 
 // Images
@@ -363,7 +383,7 @@ const cleanLink = (link: string): Option.Option<string> => {
 
 /** A start tag with its attributes; quoted values may hold `>`. */
 const TAG =
-  /<([A-Za-z][A-Za-z0-9:-]*)((?:\s+[^\s"'>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)(\s*\/?)>/g;
+  /<([A-Za-z][A-Za-z0-9:-]*)((?:\s+[^\s"'<>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)(\s*\/?)>/g;
 
 const LINK_TAGS = HashSet.make("a", "area");
 
@@ -432,24 +452,24 @@ const protectTag = (
   });
 };
 
-const STYLE_ELEMENT = /(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi;
+const STYLE_ELEMENT = /(<style\b[^<>]*>)([\s\S]*?)(<\/style\s*>)/gi;
+const STYLE_CLOSE = /<\/style\s*>/gi;
 
 const protectHtml = (context: Context, html: string): Step => {
-  const styles = Arr.fromIterable(html.matchAll(STYLE_ELEMENT));
-  const styled = isBlocking(context)
-    ? Arr.reduce(styles, { parts: Arr.empty<Step>(), offset: 0 }, (state, match) => {
-        const start = match.index + (match[1] ?? "").length;
-        return {
-          parts: [
-            ...state.parts,
-            unchanged(html.slice(state.offset, start)),
-            protectCss(context, match[2] ?? ""),
-          ],
-          offset: start + (match[2] ?? "").length,
-        };
-      })
-    : { parts: [], offset: 0 };
-  const css = combine([...styled.parts, unchanged(html.slice(styled.offset))]);
+  const styles = Arr.fromIterable(pairedPrefix(html, STYLE_CLOSE).matchAll(STYLE_ELEMENT));
+  const css = isBlocking(context)
+    ? replaceMatches(
+        html,
+        Arr.map(styles, (match) => {
+          const start = match.index + (match[1] ?? "").length;
+          return {
+            start,
+            end: start + (match[2] ?? "").length,
+            step: protectCss(context, match[2] ?? ""),
+          };
+        }),
+      )
+    : unchanged(html);
   const tags = Arr.filterMap(Arr.fromIterable(css.text.matchAll(TAG)), (match) =>
     Result.fromOption(
       Option.map(protectTag(context, match[1] ?? "", match[2] ?? "", match[3] ?? ""), (step) => ({
@@ -459,15 +479,14 @@ const protectHtml = (context: Context, html: string): Step => {
       () => undefined,
     ),
   );
-  const rebuilt = Arr.reduce(
-    tags,
-    { parts: Arr.empty<Step>(), offset: 0 },
-    (state, { match, step }) => ({
-      parts: [...state.parts, unchanged(css.text.slice(state.offset, match.index)), step],
-      offset: match.index + match[0].length,
-    }),
+  const body = replaceMatches(
+    css.text,
+    Arr.map(tags, ({ match, step }) => ({
+      start: match.index,
+      end: match.index + match[0].length,
+      step,
+    })),
   );
-  const body = combine([...rebuilt.parts, unchanged(css.text.slice(rebuilt.offset))]);
   return {
     text: body.text,
     changes: addChanges(css.changes, body.changes),

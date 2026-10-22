@@ -2,6 +2,7 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as R from "effect/Record";
 import * as Str from "effect/String";
+import { pairedPrefix, replacePaired } from "./regex.ts";
 
 /**
  * HTML read as text, for the verification extractor. Not a parser and not a sanitizer: it keeps
@@ -84,12 +85,26 @@ const decodeEntities = (text: string): string =>
         : Option.getOrElse(R.get(NAMED, name), () => whole),
   );
 
-const INVISIBLE = /<(head|style|script|title|template|noscript|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+// Every pattern runs in linear time on attacker-chosen mail (PLAN.md §20.25): a tag ends at the
+// next `<` as well as at `>`, so a run of `<` is scanned once, and element pairs are only
+// searched up to their last closing tag (`pairedPrefix`).
+
+/** Elements whose content a reader doesn't see, each with its closing tag. */
+const INVISIBLE = Arr.map(
+  ["head", "style", "script", "title", "template", "noscript", "svg"],
+  (name) => ({
+    pattern: new RegExp(`<${name}\\b[^<>]*>[\\s\\S]*?<\\/${name}\\s*>`, "gi"),
+    close: new RegExp(`<\\/${name}\\s*>`, "gi"),
+  }),
+);
 const COMMENT = /<!--[\s\S]*?-->/g;
+const COMMENT_CLOSE = /-->/g;
 const BLOCK =
-  /<\/?(?:p|div|br|tr|table|tbody|thead|h[1-6]|li|ul|ol|dl|dt|dd|blockquote|section|article|header|footer|center|hr|pre|address)\b[^>]*>/gi;
-const CELL = /<\/?(?:td|th)\b[^>]*>/gi;
-const TAG = /<[^>]*>/g;
+  /<\/?(?:p|div|br|tr|table|tbody|thead|h[1-6]|li|ul|ol|dl|dt|dd|blockquote|section|article|header|footer|center|hr|pre|address)\b[^<>]*>/gi;
+const CELL = /<\/?(?:td|th)\b[^<>]*>/gi;
+const TAG = /<[^<>]*>/g;
+
+const withoutComments = (html: string) => replacePaired(html, COMMENT, COMMENT_CLOSE, "");
 /** Zero-width and formatting characters templates use to pad preheaders. */
 const ZERO_WIDTH = /\u00ad|\u034f|[\u200b-\u200d\u2060\ufeff]/g;
 
@@ -110,9 +125,9 @@ export const tidy = (text: string): string =>
 export const toText = (html: string): string =>
   tidy(
     decodeEntities(
-      html
-        .replace(COMMENT, "")
-        .replace(INVISIBLE, "")
+      Arr.reduce(INVISIBLE, withoutComments(html), (text, { pattern, close }) =>
+        replacePaired(text, pattern, close, ""),
+      )
         .replace(BLOCK, "\n")
         .replace(CELL, " ")
         .replace(TAG, ""),
@@ -125,18 +140,21 @@ export interface Anchor {
   readonly text: string;
 }
 
-const ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
+const ANCHOR = /<a\b([^<>]*)>([\s\S]*?)<\/a\s*>/gi;
+const ANCHOR_CLOSE = /<\/a\s*>/gi;
 const HREF = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i;
 
 /** Every `<a href>` with its text, in document order. */
 export const anchors = (html: string): ReadonlyArray<Anchor> =>
   Arr.getSomes(
-    Arr.map(Arr.fromIterable(html.replace(COMMENT, "").matchAll(ANCHOR)), (match) =>
-      Option.fromNullOr(HREF.exec(match[1] ?? "")).pipe(
-        Option.map((href): Anchor => ({
-          href: decodeEntities((href[1] ?? href[2] ?? href[3] ?? "").trim()),
-          text: toText(match[2] ?? "").replace(/\n/g, " "),
-        })),
-      ),
+    Arr.map(
+      Arr.fromIterable(pairedPrefix(withoutComments(html), ANCHOR_CLOSE).matchAll(ANCHOR)),
+      (match) =>
+        Option.fromNullOr(HREF.exec(match[1] ?? "")).pipe(
+          Option.map((href): Anchor => ({
+            href: decodeEntities((href[1] ?? href[2] ?? href[3] ?? "").trim()),
+            text: toText(match[2] ?? "").replace(/\n/g, " "),
+          })),
+        ),
     ),
   );

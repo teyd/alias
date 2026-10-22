@@ -1,12 +1,15 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import { Hex } from "effect/encoding";
 import * as AliasRepo from "./AliasRepo.ts";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
@@ -42,10 +45,20 @@ export class AccountRepo extends Context.Service<
      * one transaction, so a failure anywhere before leaves the account able to sign in and retry.
      * Expects that the caller already took the user's recipient addresses off SES's suppression
      * list. Running it on an erased account changes nothing.
+     *
+     * The last transaction also writes an erasure journal entry, `ERASURE#<sha256(userId)>` with
+     * a TTL of {@link JOURNAL_LIFETIME}: no name, no address, nothing else. After a point-in-time
+     * restore (7-day window), it names the restored users whose erasure must be applied again.
      */
     readonly erase: (account: Account) => Effect.Effect<void, DatabaseError>;
   }
 >()("@alias/db/AccountRepo") {}
+
+/**
+ * One day longer than the table's point-in-time recovery window (7 days, `infra/alchemy.run.ts`),
+ * so any restorable point is covered.
+ */
+const JOURNAL_LIFETIME = Duration.days(8);
 
 const LiveAlias = Item.codec(
   Schema.Struct({ domain: Attribute.S, localPart: Attribute.S }),
@@ -71,6 +84,7 @@ const ignoreConditionFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const make = Effect.fn("AccountRepo.make")(function* () {
   const table = yield* DynamoTable;
+  const crypto = yield* Crypto.Crypto;
   const TableName = table.name;
 
   /**
@@ -185,10 +199,18 @@ const make = Effect.fn("AccountRepo.make")(function* () {
       Purge.keyOf,
       { concurrency: "unbounded" },
     );
+    const digest = yield* crypto
+      .digest("SHA-256", new TextEncoder().encode(account.userId))
+      .pipe(Effect.mapError(databaseError("HashUserId")));
+    const expiresAt = yield* Schema.encodeEffect(Attribute.EpochSeconds)(
+      DateTime.addDuration(yield* DateTime.now, JOURNAL_LIFETIME),
+    ).pipe(Effect.mapError(databaseError("EncodeJournal")));
+    const journal = { pk: { S: `ERASURE#${Hex.encode(digest)}` }, sk: { S: "ERASURE" }, expiresAt };
     yield* DynamoDB.transactWriteItems({
-      TransactItems: Arr.map([user, current, ...passkeys], (key) => ({
-        Delete: { TableName, Key: key },
-      })),
+      TransactItems: [
+        ...Arr.map([user, current, ...passkeys], (key) => ({ Delete: { TableName, Key: key } })),
+        { Put: { TableName, Item: journal } },
+      ],
     }).pipe(Effect.mapError(databaseError("TransactWriteItems")));
 
     // 6. The alias index is eventually consistent: an alias created on the fly an instant before

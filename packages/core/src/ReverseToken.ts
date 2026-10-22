@@ -1,10 +1,8 @@
-import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Str from "effect/String";
 import * as Address from "./Address.ts";
 import * as Base32 from "./internal/base32.ts";
 import * as Keyring from "./Keyring.ts";
@@ -12,37 +10,33 @@ import { concat, constantTimeEqual, isEmptyBytes, utf8 } from "./internal/bytes.
 import { hmacSha256 } from "./internal/hmac.ts";
 
 /**
- * The `<token>` in a reverse alias `alias+r.<token>@domain`: what a reply needs, signed so that
- * nobody but us can mint one.
+ * The `<token>` in a reverse alias `alias+r.<token>@domain`: the contact a reply goes to, signed
+ * so that nobody but us can mint one.
  *
  * Wire format (bytes, then lowercase unpadded base32):
  *
  * ```
- * header      1 byte   high nibble: format version (1); low nibble: which fields follow
- *                      (bit 0: sender, bit 1: contact id)
+ * header      1 byte   high nibble: format version (2); low nibble: reserved, zero
  * key version 1 byte   which keyring secret signed the token (0–255)
- * contact id  1 + n    length-prefixed UTF-8, present when bit 1 is set
- * sender      n        UTF-8 address, present when bit 0 is set; runs to the MAC
+ * contact id  1–64     UTF-8, runs to the MAC
  * mac         10 bytes HMAC-SHA-256 over a domain separator, the alias address and every
  *                      byte above, truncated to 80 bits
  * ```
  *
  * - The alias is identified by the address the token sits in, so it is not repeated inside.
  *   The MAC covers it, so a token cannot be moved to another alias or domain.
- * - Verifying needs only the keyring: no table lookup decides whether a token is genuine.
- * - Phase 4's contacts table adds the contact id field. Tokens may carry the sender, the contact,
- *   or both; tokens minted before contacts existed keep verifying unchanged.
- * - Unknown format versions and field bits are rejected, so a future layout is never misread.
+ * - Verifying needs only the keyring: no table lookup decides whether a token is genuine. Whether
+ *   the contact still exists, and on this alias, is the caller's lookup, so deleting a contact
+ *   (or its alias) revokes the token.
+ * - Version 1 could also carry the sender's address; it was never deployed, and its tokens are
+ *   rejected like any unknown format, as are reserved bits, so a layout is never misread.
  */
-const FORMAT_VERSION = 1;
-const HAS_SENDER = 0b0001;
-const HAS_CONTACT = 0b0010;
-const FIELD_BITS = 0b1111;
+const FORMAT_VERSION = 2;
 const MAC_BYTES = 10;
 const MAX_CONTACT_BYTES = 64;
 const DOMAIN_SEPARATOR = utf8("alias/reverse-token/v1\u0000");
 
-class UnencodableSubject extends Schema.TaggedError<UnencodableSubject>()("UnencodableSubject", {
+class UnencodableContact extends Schema.TaggedError<UnencodableContact>()("UnencodableContact", {
   reason: Schema.String,
 }) {}
 
@@ -50,13 +44,9 @@ class InvalidReverseToken extends Schema.TaggedError<InvalidReverseToken>()("Inv
   reason: Schema.Literals(["malformed", "unknown-key", "bad-signature"]),
 }) {}
 
-/** Who a reply goes to. At least one field is set. */
-export interface Subject {
-  readonly sender: Option.Option<string>;
-  readonly contactId: Option.Option<string>;
-}
-
-export interface Claims extends Subject {
+/** What a genuine token says: the contact a reply goes to, and the key that signed it. */
+export interface Claims {
+  readonly contactId: string;
   readonly keyVersion: number;
 }
 
@@ -78,49 +68,27 @@ export const newContactId = Effect.fn("ReverseToken.newContactId")(function* () 
 const hasLoneSurrogate = (text: string) => /\p{Surrogate}/u.test(text);
 
 /**
- * The token for replies through `alias` to `subject`. Fails when the subject is empty or when
- * the reverse address would be longer than inbound mail accepts (a sender address of roughly
- * 120 characters or more); a contact id keeps the token short.
+ * The token for replies through `alias` to the contact `contactId` (see {@link newContactId}).
+ * Fails when the id isn't 1 to 64 bytes of well-formed Unicode, or the reverse address would be
+ * longer than inbound mail accepts.
  */
 export const mint = Effect.fn("ReverseToken.mint")(function* (
   keys: Keyring.Keyring,
   alias: Address.MailAddress,
-  subject: Subject,
+  contactId: string,
 ) {
-  if (Option.isNone(subject.contactId) && Option.isNone(subject.sender)) {
-    return yield* new UnencodableSubject({ reason: "needs a sender or a contact id" });
+  if (hasLoneSurrogate(contactId)) {
+    // UTF-8 would turn it into U+FFFD, and the token would name a different contact.
+    return yield* new UnencodableContact({ reason: "not well-formed Unicode" });
   }
-  const sender = Option.map(subject.sender, Str.trim);
-  if (Option.exists(sender, Str.isEmpty)) {
-    return yield* new UnencodableSubject({ reason: "empty sender" });
+  const contact = utf8(contactId);
+  if (isEmptyBytes(contact) || contact.length > MAX_CONTACT_BYTES) {
+    return yield* new UnencodableContact({ reason: "contact id must be 1 to 64 bytes" });
   }
-  if (
-    Arr.some([...Option.toArray(sender), ...Option.toArray(subject.contactId)], hasLoneSurrogate)
-  ) {
-    // UTF-8 would turn it into U+FFFD, and the reply would go to a different address.
-    return yield* new UnencodableSubject({ reason: "not well-formed Unicode" });
-  }
-  const contact = Option.map(subject.contactId, utf8);
-  if (Option.exists(contact, (bytes) => isEmptyBytes(bytes) || bytes.length > MAX_CONTACT_BYTES)) {
-    return yield* new UnencodableSubject({ reason: "contact id must be 1 to 64 bytes" });
-  }
-  const header =
-    (FORMAT_VERSION << 4) |
-    (Option.isSome(sender) ? HAS_SENDER : 0) |
-    (Option.isSome(contact) ? HAS_CONTACT : 0);
-  const unsigned = concat([
-    new Uint8Array([header, keys.current.version]),
-    ...Option.match(contact, {
-      onNone: () => [],
-      onSome: (bytes) => [new Uint8Array([bytes.length]), bytes],
-    }),
-    ...Option.toArray(Option.map(sender, utf8)),
-  ]);
+  const unsigned = concat([new Uint8Array([FORMAT_VERSION << 4, keys.current.version]), contact]);
   const token = Base32.encode(concat([unsigned, yield* sign(keys.current, alias, unsigned)]));
   yield* Address.parse(Address.format(Address.reverseAddress(alias, token))).pipe(
-    Effect.mapError(
-      () => new UnencodableSubject({ reason: "reverse address too long; use a contact id" }),
-    ),
+    Effect.mapError(() => new UnencodableContact({ reason: "reverse address too long" })),
   );
   return token;
 });
@@ -130,31 +98,9 @@ const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const decodeText = (bytes: Uint8Array): Option.Option<string> =>
   Option.liftThrowable(() => strictUtf8.decode(bytes))();
 
-/** A field must be present exactly when its header bit says so, and be valid UTF-8. */
-const field = (isPresent: boolean, bytes: Uint8Array): Option.Option<Option.Option<string>> =>
-  isPresent
-    ? isEmptyBytes(bytes)
-      ? Option.none()
-      : Option.map(decodeText(bytes), Option.some)
-    : isEmptyBytes(bytes)
-      ? Option.some(Option.none())
-      : Option.none();
-
-/** Reads the fields of a token whose MAC already checked out. */
-const readFields = (header: number, body: Uint8Array): Option.Option<Subject> => {
-  const hasContact = (header & HAS_CONTACT) !== 0;
-  const contactEnd = hasContact ? 1 + (body[0] ?? 0) : 0;
-  return contactEnd > body.length
-    ? Option.none()
-    : Option.all({
-        contactId: field(hasContact, body.subarray(hasContact ? 1 : 0, contactEnd)),
-        sender: field((header & HAS_SENDER) !== 0, body.subarray(contactEnd)),
-      });
-};
-
 /**
- * Checks `token` from a reverse alias on `alias` and returns who the reply is for. The MAC is
- * compared in constant time and before any field is trusted.
+ * Checks `token` from a reverse alias on `alias` and returns the contact the reply is for. The MAC
+ * is compared in constant time and before the contact id is trusted.
  */
 export const verify = Effect.fn("ReverseToken.verify")(function* (
   keys: Keyring.Keyring,
@@ -165,14 +111,7 @@ export const verify = Effect.fn("ReverseToken.verify")(function* (
     onNone: () => Effect.fail(new InvalidReverseToken({ reason: "malformed" })),
     onSome: Effect.succeed,
   });
-  const header = bytes[0] ?? 0;
-  const fieldBits = header & FIELD_BITS;
-  if (
-    bytes.length < 2 + MAC_BYTES ||
-    header >> 4 !== FORMAT_VERSION ||
-    fieldBits === 0 ||
-    (fieldBits & ~(HAS_SENDER | HAS_CONTACT)) !== 0
-  ) {
+  if (bytes.length < 3 + MAC_BYTES || bytes[0] !== FORMAT_VERSION << 4) {
     return yield* new InvalidReverseToken({ reason: "malformed" });
   }
   const keyVersion = bytes[1] ?? 0;
@@ -185,8 +124,8 @@ export const verify = Effect.fn("ReverseToken.verify")(function* (
   if (!constantTimeEqual(expected, bytes.subarray(bytes.length - MAC_BYTES))) {
     return yield* new InvalidReverseToken({ reason: "bad-signature" });
   }
-  return yield* Option.match(readFields(header, unsigned.subarray(2)), {
+  return yield* Option.match(decodeText(unsigned.subarray(2)), {
     onNone: () => Effect.fail(new InvalidReverseToken({ reason: "malformed" })),
-    onSome: (subject): Effect.Effect<Claims> => Effect.succeed({ ...subject, keyVersion }),
+    onSome: (contactId): Effect.Effect<Claims> => Effect.succeed({ contactId, keyVersion }),
   });
 });

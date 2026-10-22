@@ -7,7 +7,6 @@ import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { ReverseKeys } from "../src/index.ts";
 
 /**
@@ -55,7 +54,7 @@ describe("ReverseKeys from Parameter Store (fakecloud)", () => {
     it.effect("lets containers on either step of a rotation verify each other's tokens", () =>
       Effect.gen(function* () {
         const alias = { local: "shop", domain: "alias.test" };
-        const subject = { sender: Option.some("bob@store.example"), contactId: Option.none() };
+        const subject = "c1aaaaaaaaaaaaaa";
 
         // Step one: the new key 2 is added after the minting key 1.
         yield* put("/alias/test/rotation", `1:${secret(1)},2:${secret(2)}`);

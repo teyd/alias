@@ -1,6 +1,10 @@
 import type { DynamoDbEndpoint, EmulatorFailure } from "@alias/aws-emulators";
+// An independent SHA-256 to check the journal key against.
+// oxlint-disable-next-line effect/avoid-node-imports
+import { createHash } from "node:crypto";
 import { Username } from "@alias/core";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
@@ -26,7 +30,7 @@ import { freshTable } from "./database.ts";
 const at = (millis: number) => DateTime.makeUnsafe(millis);
 
 const repos = Layer.mergeAll(
-  AccountRepo.layer,
+  AccountRepo.layer.pipe(Layer.provide(NodeCrypto.layer)),
   AliasRepo.layer,
   ContactRepo.layer,
   RecipientRepo.layer,
@@ -212,16 +216,25 @@ export const accountRepoSuite = (
             // Grace's items are untouched; of Ada's only tombstones are left, each holding its
             // key and `deletedAt`. Aliases on her own subdomain leave none: the username's
             // tombstone covers the subdomain.
-            expect(Arr.filter(after, (item) => Str.includes("ada")(JSON.stringify(item)))).toEqual([
+            // (The journal's hex hash could spell "ada"; it is checked on its own below.)
+            const adas = (item: { readonly pk: string }) =>
+              Str.includes("ada")(JSON.stringify(item)) && !item.pk.startsWith("ERASURE#");
+            expect(Arr.filter(after, adas)).toEqual([
               { pk: "ALIAS#alias.test#ada-halfway", sk: "ALIAS", attributes: tombstone },
               { pk: "ALIAS#alias.test#ada-old", sk: "ALIAS", attributes: tombstone },
               { pk: "ALIAS#alias.test#ada-shared", sk: "ALIAS", attributes: tombstone },
               { pk: `USERNAME#${Username.skeleton("ada")}`, sk: "USERNAME", attributes: tombstone },
             ]);
-            expect(Arr.filter(after, (item) => !Str.includes("ada")(JSON.stringify(item)))).toEqual(
-              graces,
-            );
-            expect(after).toHaveLength(graces.length + 4);
+            const notAdas = (item: { readonly pk: string }) =>
+              !Str.includes("ada")(JSON.stringify(item)) && !item.pk.startsWith("ERASURE#");
+            expect(Arr.filter(after, notAdas)).toEqual(graces);
+            // And one journal entry, naming Ada only by a hash of her random user ID, until its
+            // TTL runs out one day after the 7-day recovery window.
+            const journal = `ERASURE#${createHash("sha256").update("usr_ada").digest("hex")}`;
+            expect(Arr.filter(after, (item) => item.pk.startsWith("ERASURE#"))).toEqual([
+              { pk: journal, sk: "ERASURE", attributes: ["expiresAt", "pk", "sk"] },
+            ]);
+            expect(after).toHaveLength(graces.length + 5);
 
             // The username is never given out again, and nobody owns it.
             const username = yield* Username.parse("ada");

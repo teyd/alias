@@ -1399,10 +1399,15 @@ describe("inbound pipeline on custom domains (PLAN.md §20.18.2)", () => {
         yield* customDomain("open.example", "verified", { isCatchAllEnabled: true });
         yield* recipient("ada@mail.example");
         const { event } = yield* receive({ recipients: ["a@open.example", "b@open.example"] });
-        expect(yield* Pipeline.handle(event)).toEqual([
-          { _tag: "Forwarded" },
-          { _tag: "Dropped", reason: "creation-limited" },
-        ]);
+        // Recipients are planned concurrently, so either one may get the single allowance.
+        const outcomes = yield* Pipeline.handle(event);
+        expect(outcomes).toHaveLength(2);
+        expect(outcomes).toEqual(
+          expect.arrayContaining([
+            { _tag: "Forwarded" },
+            { _tag: "Dropped", reason: "creation-limited" },
+          ]),
+        );
       }),
       { ...Limits.defaults, aliasesCreatedPerDay: 1 },
     ),

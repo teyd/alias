@@ -58,6 +58,36 @@ describe("Address.reverseToken", () => {
   );
 });
 
+describe("Address length limits", () => {
+  it.effect("lets reverse aliases run past 64 octets, but not plain local parts", () =>
+    Effect.gen(function* () {
+      const token = "a".repeat(120);
+      const reverse = yield* Address.parse(`shop+r.${token}@user1.alias.test`);
+      expect(Address.reverseToken(reverse)).toEqual(Option.some({ aliasLocal: "shop", token }));
+      const plain = yield* Effect.exit(Address.parse(`${"a".repeat(65)}@alias.test`));
+      expect(Exit.isFailure(plain)).toBe(true);
+      const longAlias = yield* Effect.exit(Address.parse(`${"a".repeat(65)}+r.abc@alias.test`));
+      expect(Exit.isFailure(longAlias)).toBe(true);
+    }),
+  );
+
+  it.effect("rejects addresses longer than 254 characters", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(Address.parse(`shop+r.${"a".repeat(240)}@alias.test`));
+      expect(Exit.isFailure(exit)).toBe(true);
+    }),
+  );
+
+  it.effect("formats reverse addresses on the alias's own domain", () =>
+    Effect.gen(function* () {
+      const alias = yield* Address.parse("shop@mydomain.example");
+      expect(Address.format(Address.reverseAddress(alias, "abc"))).toBe(
+        "shop+r.abc@mydomain.example",
+      );
+    }),
+  );
+});
+
 /** Hands out the given bytes in order, as many as each call asks for. */
 const scriptedCrypto = (bytes: ReadonlyArray<number>) => {
   let offset = 0;

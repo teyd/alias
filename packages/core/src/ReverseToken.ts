@@ -1,5 +1,4 @@
 import * as Arr from "effect/Array";
-import * as Brand from "effect/Brand";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -8,6 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as Address from "./Address.ts";
 import * as Base32 from "./internal/base32.ts";
+import * as Keyring from "./Keyring.ts";
 import { concat, constantTimeEqual, isEmptyBytes, utf8 } from "./internal/bytes.ts";
 import { hmacSha256 } from "./internal/hmac.ts";
 
@@ -39,14 +39,8 @@ const HAS_SENDER = 0b0001;
 const HAS_CONTACT = 0b0010;
 const FIELD_BITS = 0b1111;
 const MAC_BYTES = 10;
-const MIN_SECRET_BYTES = 32;
 const MAX_CONTACT_BYTES = 64;
-const MAX_KEY_VERSION = 255;
 const DOMAIN_SEPARATOR = utf8("alias/reverse-token/v1\u0000");
-
-class InvalidKeyring extends Schema.TaggedError<InvalidKeyring>()("InvalidKeyring", {
-  reason: Schema.String,
-}) {}
 
 class UnencodableSubject extends Schema.TaggedError<UnencodableSubject>()("UnencodableSubject", {
   reason: Schema.String,
@@ -55,18 +49,6 @@ class UnencodableSubject extends Schema.TaggedError<UnencodableSubject>()("Unenc
 class InvalidReverseToken extends Schema.TaggedError<InvalidReverseToken>()("InvalidReverseToken", {
   reason: Schema.Literals(["malformed", "unknown-key", "bad-signature"]),
 }) {}
-
-export interface Key {
-  readonly version: number;
-  readonly secret: Redacted.Redacted<Uint8Array>;
-}
-
-/** Mints with `current`; verifies with `current` or any `retired` key. Build with {@link keyring}. */
-export type Keyring = Brand.Branded<
-  { readonly current: Key; readonly retired: ReadonlyArray<Key> },
-  "ReverseTokenKeyring"
->;
-const Keyring = Brand.nominal<Keyring>();
 
 /** Who a reply goes to. At least one field is set. */
 export interface Subject {
@@ -78,34 +60,7 @@ export interface Claims extends Subject {
   readonly keyVersion: number;
 }
 
-/**
- * Validates the keys once, at startup: versions are distinct bytes and every secret has at
- * least 256 bits. Rotate by minting with a new `current` and keeping the old key in `retired`
- * for as long as replies to old mail should work.
- */
-export const keyring = Effect.fn("ReverseToken.keyring")(function* (keys: {
-  readonly current: Key;
-  readonly retired: ReadonlyArray<Key>;
-}) {
-  const all = Arr.prepend(keys.retired, keys.current);
-  if (
-    !Arr.every(
-      all,
-      (key) => Number.isInteger(key.version) && key.version >= 0 && key.version <= MAX_KEY_VERSION,
-    )
-  ) {
-    return yield* new InvalidKeyring({ reason: "key versions must be integers from 0 to 255" });
-  }
-  if (Arr.dedupe(Arr.map(all, (key) => key.version)).length !== all.length) {
-    return yield* new InvalidKeyring({ reason: "key versions must be distinct" });
-  }
-  if (!Arr.every(all, (key) => Redacted.value(key.secret).length >= MIN_SECRET_BYTES)) {
-    return yield* new InvalidKeyring({ reason: "secrets need at least 32 bytes" });
-  }
-  return Keyring({ current: keys.current, retired: keys.retired });
-});
-
-const sign = (key: Key, alias: Address.MailAddress, unsigned: Uint8Array) =>
+const sign = (key: Keyring.Key, alias: Address.MailAddress, unsigned: Uint8Array) =>
   hmacSha256(
     Redacted.value(key.secret),
     concat([DOMAIN_SEPARATOR, utf8(Address.format(alias)), new Uint8Array([0]), unsigned]),
@@ -128,7 +83,7 @@ const hasLoneSurrogate = (text: string) => /\p{Surrogate}/u.test(text);
  * 120 characters or more); a contact id keeps the token short.
  */
 export const mint = Effect.fn("ReverseToken.mint")(function* (
-  keys: Keyring,
+  keys: Keyring.Keyring,
   alias: Address.MailAddress,
   subject: Subject,
 ) {
@@ -202,7 +157,7 @@ const readFields = (header: number, body: Uint8Array): Option.Option<Subject> =>
  * compared in constant time and before any field is trusted.
  */
 export const verify = Effect.fn("ReverseToken.verify")(function* (
-  keys: Keyring,
+  keys: Keyring.Keyring,
   alias: Address.MailAddress,
   token: string,
 ) {
@@ -221,13 +176,10 @@ export const verify = Effect.fn("ReverseToken.verify")(function* (
     return yield* new InvalidReverseToken({ reason: "malformed" });
   }
   const keyVersion = bytes[1] ?? 0;
-  const key = yield* Option.match(
-    Arr.findFirst(Arr.prepend(keys.retired, keys.current), (key) => key.version === keyVersion),
-    {
-      onNone: () => Effect.fail(new InvalidReverseToken({ reason: "unknown-key" })),
-      onSome: Effect.succeed,
-    },
-  );
+  const key = yield* Option.match(Keyring.find(keys, keyVersion), {
+    onNone: () => Effect.fail(new InvalidReverseToken({ reason: "unknown-key" })),
+    onSome: Effect.succeed,
+  });
   const unsigned = bytes.subarray(0, bytes.length - MAC_BYTES);
   const expected = yield* sign(key, alias, unsigned);
   if (!constantTimeEqual(expected, bytes.subarray(bytes.length - MAC_BYTES))) {

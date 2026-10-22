@@ -1,6 +1,6 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { ReverseToken, SharedDomains, Username } from "@alias/core";
+import { Keyring, ReverseToken, SharedDomains, Username } from "@alias/core";
 import { AliasRepo, ContactRepo, RecipientRepo, UserRepo, WebhookRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { freshQueue, TestQueue } from "@alias/webhooks/testing";
@@ -909,7 +909,7 @@ describe("inbound pipeline (fakecloud)", () => {
         Effect.gen(function* () {
           yield* alias();
           yield* recipient("ada@mail.example");
-          const keyring = yield* ReverseKeys.parse(keys);
+          const keyring = yield* Keyring.parse(keys);
           const legacy = yield* ReverseToken.mint(
             keyring,
             { local: "shop", domain: "alias.test" },

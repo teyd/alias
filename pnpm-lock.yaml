@@ -589,6 +589,9 @@ importers:
 
   packages/aws:
     dependencies:
+      '@alias/core':
+        specifier: workspace:*
+        version: link:../core
       '@distilled.cloud/aws':
         specifier: 'catalog:'
         version: 1.0.0-rc.15(effect@4.0.5)

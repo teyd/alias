@@ -42,7 +42,7 @@ const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
 
 /**
  * Reverse-alias signing keys for the inbound Lambda (PLAN.md §20.14): `<version>:<base64url
- * secret>` entries, the first one minting (`ReverseKeys.parse` in `apps/inbound`; secrets of at
+ * secret>` entries, the first one minting (`Keyring.parse` in `@alias/core`; secrets of at
  * least 32 bytes). They live in an SSM Parameter Store `SecureString` (standard tier, free) that
  * the Lambda reads at cold start. This stack only names the parameter and grants reading it; it
  * never holds the value, so the value stays out of the Alchemy state and the Lambda console.

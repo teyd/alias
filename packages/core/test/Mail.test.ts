@@ -7,7 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { Address, Mail, ReverseToken } from "../src/index.ts";
+import { Address, Keyring, Mail, ReverseToken } from "../src/index.ts";
 import { newsletter, newsletterBody, newsletterHeaders, ownerReply } from "./support/fixtures.ts";
 import { binary, bytes, mailbox, split, textParts, values } from "./support/mime.ts";
 
@@ -410,7 +410,7 @@ describe("Mail.reply", () => {
 layer(NodeCrypto.layer)((it) => {
   it.effect("forward and reply round-trip through a real reverse token", () =>
     Effect.gen(function* () {
-      const keys = yield* ReverseToken.keyring({
+      const keys = yield* Keyring.make({
         current: { version: 1, secret: Redacted.make(new Uint8Array(32).fill(3)) },
         retired: [],
       });

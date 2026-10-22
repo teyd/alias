@@ -597,6 +597,9 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
       expect(yield* reason(impostor.url.replace("client.json", "missing.json"))).toBe(
         "client-metadata-unavailable",
       );
+      // A document that never ends is cut off at 5 KiB, without waiting for the timeout.
+      const endless = yield* DocumentHost.make(() => ({}), { isEndless: true });
+      expect(yield* reason(endless.url)).toBe("client-metadata-unavailable");
       // Not fetchable under the URL policy: link-local and metadata addresses, no path.
       expect(yield* reason("https://169.254.169.254/latest/meta-data")).toBe("unknown-client");
       expect(yield* reason("https://claude.ai/")).toBe("unknown-client");

@@ -8,9 +8,10 @@ const decodeAddress = Schema.decodeUnknownOption(Schema.Struct({ port: Schema.Nu
 /**
  * A host on 127.0.0.1, port 0, serving one JSON document at `/client.json`, as an OAuth client
  * publishes its Client ID Metadata Document. `document` gets the document's own URL, so it can
- * name itself (or, to test refusals, something else). Counts the fetches.
+ * name itself (or, to test refusals, something else). Counts the fetches. `isEndless` streams a
+ * document that never ends instead, chunked.
  */
-export const make = (document: (url: string) => unknown) =>
+export const make = (document: (url: string) => unknown, options: { isEndless?: boolean } = {}) =>
   Effect.acquireRelease(
     Effect.callback<{
       readonly url: string;
@@ -26,7 +27,11 @@ export const make = (document: (url: string) => unknown) =>
           return response.end();
         }
         response.setHeader("content-type", "application/json");
-        return response.end(JSON.stringify(document(url)));
+        if (options.isEndless !== true) return response.end(JSON.stringify(document(url)));
+        // Chunked, with no length, and never ending: only a reader that counts stops it.
+        response.write(`{"client_id":${JSON.stringify(url)},"client_name":"`);
+        const flood = setInterval(() => response.write("x".repeat(64 * 1024)), 1);
+        return response.on("close", () => clearInterval(flood));
       });
       server.listen(0, "127.0.0.1", () => {
         const port = Option.getOrElse(

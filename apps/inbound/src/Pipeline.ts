@@ -279,6 +279,7 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
       Effect.succeed(
         Policy.automatedReply(signals, record.ses.mail).pipe(
           Option.orElse(() => Policy.rejectReply(record.ses.receipt, from, recipients)),
+          Option.orElse(() => Policy.rejectAmbiguousSender(signals, from)),
           Option.map((reason): Refusal => Plan.Drop({ reason })),
         ),
       ),

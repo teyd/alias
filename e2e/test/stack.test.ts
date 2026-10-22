@@ -680,6 +680,29 @@ describe("emulated stack", () => {
           { _tag: "Dropped", reason: "unauthenticated-reply" },
         ]);
 
+        // The owner's address first, a second mailbox after it: which one DMARC passed for is
+        // open, so it doesn't count as the owner's reply (PLAN.md §20.25).
+        const ambiguous = yield* Effect.forEach(
+          [
+            `From: ${bob.mailbox}\r\nFrom: mallory@evil.example`,
+            `From: ${bob.mailbox}, mallory@evil.example`,
+          ],
+          (from) =>
+            Effect.flatMap(
+              smtpRaw({
+                from: bob.mailbox,
+                to: reverse,
+                raw: `${from}\r\nTo: ${reverse}\r\nSubject: Send as Bob\r\n\r\nspoofed\r\n`,
+              }),
+              invoke,
+            ),
+          { concurrency: 1 },
+        );
+        expect(ambiguous).toEqual([
+          [{ _tag: "Dropped", reason: "foreign-reply-sender" }],
+          [{ _tag: "Dropped", reason: "foreign-reply-sender" }],
+        ]);
+
         expect(yield* sentTo("news@shop.example")).toEqual([]);
       }),
     );

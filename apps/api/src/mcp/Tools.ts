@@ -373,7 +373,9 @@ export const tools: ReadonlyArray<Tool> = [
     }),
     output: AliasOutput,
     annotations: writes(false, false),
-    summary: (alias) => `Created ${alias.address}.`,
+    // Summaries stand outside the fence, so they never quote stored text: an alias created on
+    // the fly has a local part the sender chose (PLAN.md §20.25).
+    summary: () => "Created the alias; its address is in the data.",
     run: (input) => {
       const byAddress = Option.map(Option.fromUndefinedOr(input.address), (address): NewAlias => ({
         _tag: "Address",
@@ -407,7 +409,7 @@ export const tools: ReadonlyArray<Tool> = [
     }),
     output: AliasOutput,
     annotations: writes(true, true),
-    summary: (alias) => `${alias.address} is now ${alias.isActive ? "active" : "disabled"}.`,
+    summary: (alias) => `The alias is now ${alias.isActive ? "active" : "disabled"}.`,
     run: (input) =>
       Aliases.update(split(input.address), { isActive: input.isActive }).pipe(
         Effect.map(aliasOutput),

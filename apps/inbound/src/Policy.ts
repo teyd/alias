@@ -140,6 +140,26 @@ export const rejectReply = (
 };
 
 /**
+ * The reply's `From` must be one field holding one mailbox, the one SES listed: with two fields
+ * or two mailboxes it is open which address DMARC was judged on, so {@link rejectReply}'s check
+ * of the first one proves nothing (PLAN.md §20.25).
+ */
+export const rejectAmbiguousSender = (
+  signals: Mail.Signals,
+  from: Option.Option<string>,
+): Option.Option<Extract<DropReason, "foreign-reply-sender">> => {
+  const [only, ...others] = signals.from;
+  const isUnambiguous =
+    only !== undefined &&
+    Arr.isArrayEmpty(others) &&
+    Mail.isSingleMailbox(only) &&
+    Option.exists(Mail.parseSender(only), (found) =>
+      Option.exists(from, (address) => found.address.toLowerCase() === address.toLowerCase()),
+    );
+  return isUnambiguous ? Option.none() : Option.some("foreign-reply-sender");
+};
+
+/**
  * More `Received` fields than this is a loop. RFC 5321 §6.3 recommends counting them; 50 is
  * Postfix's `hopcount_limit`. Real mail crosses a handful of hops.
  */

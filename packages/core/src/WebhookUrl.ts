@@ -100,6 +100,8 @@ const NON_PUBLIC_V6: ReadonlyArray<readonly [ReadonlyArray<number>, number]> = [
   [[0x20, 0x01, 0x00, 0x00], 23], // 2001::/23 IETF protocols (Teredo, ORCHID, …)
   [[0x20, 0x01, 0x0d, 0xb8], 32], // documentation
   [[0x20, 0x02], 16], // 6to4
+  [[0x3f, 0xff, 0x00], 20], // 3fff::/20 documentation (RFC 9637)
+  [[0x5f, 0x00], 16], // 5f00::/16 SRv6 SIDs (RFC 9602)
   [[0x00, 0x64, 0xff, 0x9b, 0x00, 0x01], 48], // local-use NAT64
   [[0xfc], 7], // unique local
   [[0xfe, 0x80], 10], // link-local
@@ -138,7 +140,11 @@ export const isAllowedAddress = (address: string, options: Options): boolean =>
       }),
   });
 
-const isLocalName = (host: string) => host === "localhost" || Str.endsWith(".localhost")(host);
+/** `localhost`, its subdomains, and either with the root's trailing dot (`localhost.`). */
+const isLocalName = (host: string) => {
+  const name = Str.endsWith(".")(host) ? host.slice(0, -1) : host;
+  return name === "localhost" || Str.endsWith(".localhost")(name);
+};
 
 /** The URL to post to, or why it may not be one. */
 export const check = (input: string, options: Options): Result.Result<URL, Refusal> => {
@@ -165,7 +171,10 @@ export const check = (input: string, options: Options): Result.Result<URL, Refus
       ? Result.succeed(url)
       : Result.fail("not-public-host");
   }
-  // A single label (`intranet`) resolves through search domains; `localhost` never leaves.
-  if (!Str.includes(".")(host) || isLocalName(host)) return Result.fail("not-public-host");
+  // A single label (`intranet`, `intranet.`) resolves through search domains or names a TLD;
+  // `localhost` never leaves.
+  if (!Str.includes(".")(host.replace(/\.$/, "")) || isLocalName(host)) {
+    return Result.fail("not-public-host");
+  }
   return Result.succeed(url);
 };

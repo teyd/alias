@@ -15,6 +15,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Alias             | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |             |
  * | ForwardQuota      | `ALIAS#<domain>#<localPart>` | `FORWARDS#<hour>`      |                 |                          | `expiresAt` |
  * | User              | `USER#<userId>`              | `USER`                 |                 |                          |             |
+ * | UserSettings      | `USER#<userId>`              | `SETTINGS`             |                 |                          |             |
+ * | AliasQuota        | `USER#<userId>`              | `ALIASES#<date>`       |                 |                          | `expiresAt` |
  * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                 |                          |             |
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                 |                          |             |
  * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                 |                          | `expiresAt` |
@@ -42,7 +44,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * A ForwardQuota counts the mail the inbound Lambda forwarded for an alias in one UTC hour
  * (`2026-10-22T09`), next to the alias in its partition; the hourly cap is one conditional
  * UpdateItem on it. It outlives its hour by an hour and is never read after, so a deleted alias
- * leaves nothing behind for long. MailQuota works the same way (`Quota.ts`).
+ * leaves nothing behind for long. MailQuota and AliasQuota (aliases created on the fly per user
+ * and UTC day) work the same way (`Quota.ts`).
+ *
+ * UserSettings holds the user's account choices; a user without one has the defaults. The inbound
+ * Lambda finds a subdomain's owner through the Username item (exact username, not just the same
+ * skeleton) and reads their settings with a second GetItem.
  *
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing

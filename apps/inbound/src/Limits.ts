@@ -15,10 +15,17 @@ export class Limits extends Context.Service<
      * of defence against a loop the other checks miss, and against floods (PLAN.md §19.2).
      */
     readonly forwardsPerHour: number;
+    /**
+     * Aliases created on the fly per user and UTC day (PLAN.md §19.2: rate-limit on-the-fly
+     * creation). Past it, mail to new addresses is dropped as `creation-limited`; existing
+     * aliases keep working.
+     */
+    readonly aliasesCreatedPerDay: number;
   }
 >()("@alias/inbound/Limits") {}
 
 export const defaults: Limits["Service"] = {
   maxMessageBytes: 25 * 1024 * 1024,
   forwardsPerHour: 100,
+  aliasesCreatedPerDay: 20,
 };

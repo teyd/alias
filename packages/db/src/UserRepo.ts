@@ -1,11 +1,13 @@
 import { Username } from "@alias/core";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
@@ -25,6 +27,17 @@ export interface NewUser {
   readonly username: Username.Username;
   readonly createdAt: DateTime.Utc;
 }
+
+/** What the user chose for their account. A user who never chose anything has the defaults. */
+export interface UserSettings {
+  /**
+   * Mail to an unknown address on the user's own subdomain creates that alias on the fly instead
+   * of being dropped. Opt-in: off by default.
+   */
+  readonly isOnTheFlyEnabled: boolean;
+}
+
+const defaultSettings: UserSettings = { isOnTheFlyEnabled: false };
 
 /** The username, or a lookalike of it (same `Username.skeleton`), already belongs to someone. */
 export class UsernameTaken extends Schema.TaggedError<UsernameTaken>()("UsernameTaken", {
@@ -52,6 +65,19 @@ export class UserRepo extends Context.Service<
     readonly isUsernameTaken: (
       username: Username.Username,
     ) => Effect.Effect<boolean, DatabaseError>;
+    /**
+     * The user with exactly this username (lowercase, as subdomains carry it). A lookalike that
+     * merely shares its skeleton finds none.
+     */
+    readonly findByUsername: (
+      username: string,
+    ) => Effect.Effect<Option.Option<User>, DatabaseError>;
+    readonly settings: (userId: string) => Effect.Effect<UserSettings, DatabaseError>;
+    /** Applies the given changes and returns the settings as stored afterwards. */
+    readonly updateSettings: (
+      userId: string,
+      changes: Partial<UserSettings>,
+    ) => Effect.Effect<UserSettings, DatabaseError>;
   }
 >()("@alias/db/UserRepo") {}
 
@@ -61,6 +87,18 @@ const userKey = (userId: string) => ({ pk: { S: `USER#${userId}` }, sk: { S: "US
 const usernameKey = (username: string) => ({
   pk: { S: `USERNAME#${Username.skeleton(username)}` },
   sk: { S: "USERNAME" },
+});
+
+/** Settings live next to the user, in their partition; no item means the defaults. */
+const settingsKey = (userId: string) => ({ pk: { S: `USER#${userId}` }, sk: { S: "SETTINGS" } });
+
+const SettingsItem = Item.codec(
+  Schema.Struct({ isOnTheFlyEnabled: Schema.optionalKey(Attribute.BOOL) }),
+  "UserSettings",
+);
+
+const withDefaults = (stored: { readonly isOnTheFlyEnabled?: boolean }): UserSettings => ({
+  isOnTheFlyEnabled: stored.isOnTheFlyEnabled ?? defaultSettings.isOnTheFlyEnabled,
 });
 
 const UserItem = Item.codec(
@@ -78,6 +116,25 @@ const mustNotExist = "attribute_not_exists(pk)";
 const make = Effect.fn("UserRepo.make")(function* () {
   const table = yield* DynamoTable;
   const client = yield* Effect.context<Database>();
+
+  const findById = (userId: string) =>
+    DynamoDB.getItem({ TableName: table.name, Key: userKey(userId), ConsistentRead: true }).pipe(
+      Effect.mapError(databaseError("GetItem")),
+      Effect.flatMap((result) => UserItem.decodeOption(Option.fromUndefinedOr(result.Item))),
+      Effect.provide(client),
+    );
+
+  const settings = (userId: string) =>
+    DynamoDB.getItem({
+      TableName: table.name,
+      Key: settingsKey(userId),
+      ConsistentRead: true,
+    }).pipe(
+      Effect.mapError(databaseError("GetItem")),
+      Effect.flatMap((result) => SettingsItem.decodeOption(Option.fromUndefinedOr(result.Item))),
+      Effect.map(Option.match({ onNone: () => defaultSettings, onSome: withDefaults })),
+      Effect.provide(client),
+    );
 
   return UserRepo.of({
     register: Effect.fn("UserRepo.register")(function* (user, passkey) {
@@ -119,12 +176,7 @@ const make = Effect.fn("UserRepo.make")(function* () {
       );
     }),
 
-    findById: (userId) =>
-      DynamoDB.getItem({ TableName: table.name, Key: userKey(userId), ConsistentRead: true }).pipe(
-        Effect.mapError(databaseError("GetItem")),
-        Effect.flatMap((result) => UserItem.decodeOption(Option.fromUndefinedOr(result.Item))),
-        Effect.provide(client),
-      ),
+    findById,
 
     isUsernameTaken: (username) =>
       DynamoDB.getItem({
@@ -136,6 +188,45 @@ const make = Effect.fn("UserRepo.make")(function* () {
         Effect.map((result) => P.isNotUndefined(result.Item)),
         Effect.provide(client),
       ),
+
+    findByUsername: Effect.fn("UserRepo.findByUsername")(function* (username) {
+      const claim = yield* DynamoDB.getItem({
+        TableName: table.name,
+        Key: usernameKey(username),
+        ConsistentRead: true,
+      }).pipe(
+        Effect.mapError(databaseError("GetItem")),
+        Effect.flatMap((result) => UsernameItem.decodeOption(Option.fromUndefinedOr(result.Item))),
+        Effect.provide(client),
+      );
+      const owner = Option.filter(claim, (found) => found.username === username);
+      return Option.isNone(owner) ? Option.none() : yield* findById(owner.value.userId);
+    }),
+
+    settings,
+
+    updateSettings: Effect.fn("UserRepo.updateSettings")(function* (userId, changes) {
+      const values = R.getSomes<string, DynamoDB.AttributeValue>({
+        isOnTheFlyEnabled: Option.map(
+          Option.fromUndefinedOr(changes.isOnTheFlyEnabled),
+          (isEnabled) => ({ BOOL: isEnabled }),
+        ),
+      });
+      const names = R.keys(values);
+      if (!Arr.isArrayNonEmpty(names)) return yield* settings(userId);
+      const result = yield* DynamoDB.updateItem({
+        TableName: table.name,
+        Key: settingsKey(userId),
+        UpdateExpression: `SET ${Arr.join(
+          Arr.map(names, (name) => `#${name} = :${name}`),
+          ", ",
+        )}`,
+        ExpressionAttributeNames: R.fromEntries(Arr.map(names, (name) => [`#${name}`, name])),
+        ExpressionAttributeValues: R.mapKeys(values, (name) => `:${name}`),
+        ReturnValues: "ALL_NEW",
+      }).pipe(Effect.mapError(databaseError("UpdateItem")), Effect.provide(client));
+      return withDefaults(yield* SettingsItem.decode({ ...result.Attributes }));
+    }),
   });
 });
 

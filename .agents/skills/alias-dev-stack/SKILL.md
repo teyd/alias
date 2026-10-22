@@ -17,7 +17,9 @@ description: Use when starting, debugging, or poking the local Alias stack (fake
 
 On start, the api creates the table from `Table.spec` and seeds `shop@alias.test` for a demo user whose verified forwarding address is `demo@mailbox.test` (`ALIAS_DEV_RECIPIENT` overrides it). Inbound creates the `alias-spool` bucket and verifies the dev domains (`alias.test`, `custom.test`) as SES sending identities on fakecloud. It signs reverse aliases with a fixed dev key unless `ALIAS_REVERSE_TOKEN_KEYS` is set. All of this is idempotent across restarts.
 
-fakecloud accepts a sender only on an exactly verified domain, while AWS also accepts its subdomains (PLAN.md §20.5). Mail to aliases on `<user>.alias.test` is therefore dropped as `rejected` in dev until that subdomain is verified too.
+fakecloud accepts a sender only on an exactly verified domain, while AWS also accepts its subdomains (PLAN.md §20.5). So, in dev only, `apps/api/bin/dev.ts` verifies `<username>.<shared domain>` as an SES identity whenever someone signs up. Users created before that hook existed (or seeded straight into the table) still get their subdomain mail dropped as `rejected` until you verify it: `aws sesv2 create-email-identity --email-identity ada.alias.test --endpoint-url http://localhost:$ALIAS_FAKECLOUD_PORT --region eu-west-1`.
+
+On-the-fly aliases: turn them on with `PATCH /v1/settings {"isOnTheFlyEnabled": true}` (signed in), then mail any new address on your subdomain; the inbound log shows `inbound alias created on the fly` before `inbound forwarded`.
 
 ## Common tasks
 

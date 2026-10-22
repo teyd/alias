@@ -73,6 +73,19 @@ describe("route", () => {
     }),
   );
 
+  it.effect("names the subdomain's owner, where aliases may be created on the fly", () =>
+    Effect.gen(function* () {
+      expect(yield* route("new@User1.alias.test", shared)).toMatchObject({
+        _tag: "Forward",
+        username: Option.some("user1"),
+      });
+      expect(yield* route("k7m2qx9p@alias.test", shared)).toMatchObject({
+        _tag: "Forward",
+        username: Option.none(),
+      });
+    }),
+  );
+
   it.effect("sends reverse aliases down the reply path, on the alias they belong to", () =>
     Effect.gen(function* () {
       expect(yield* route("shop+r.abc234@user1.alias.test", shared)).toMatchObject({

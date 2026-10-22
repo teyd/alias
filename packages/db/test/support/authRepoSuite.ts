@@ -107,6 +107,49 @@ export const authRepoSuite = (
         );
       });
 
+      describe("UserRepo lookups and settings", () => {
+        it.effect("finds a user by their exact username, not by a lookalike", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const users = yield* UserRepo.UserRepo;
+              yield* users.register(yield* user("john"), passkey());
+
+              expect(yield* users.findByUsername("john")).toEqual(
+                Option.some({ id: "usr_1", username: "john", createdAt: at(1_000) }),
+              );
+              // Same skeleton ("0" looks like "o"), so taken, but a different username.
+              expect(yield* users.isUsernameTaken(yield* Username.parse("j0hn"))).toBe(true);
+              expect(yield* users.findByUsername("j0hn")).toEqual(Option.none());
+              expect(yield* users.findByUsername("grace")).toEqual(Option.none());
+            }),
+          ),
+        );
+
+        it.effect("starts with on-the-fly aliases off and stores the user's choice", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const users = yield* UserRepo.UserRepo;
+              yield* users.register(yield* user("ada"), passkey());
+              expect(yield* users.settings("usr_1")).toEqual({ isOnTheFlyEnabled: false });
+
+              expect(yield* users.updateSettings("usr_1", { isOnTheFlyEnabled: true })).toEqual({
+                isOnTheFlyEnabled: true,
+              });
+              expect(yield* users.updateSettings("usr_1", {})).toEqual({ isOnTheFlyEnabled: true });
+              expect(yield* users.settings("usr_1")).toEqual({ isOnTheFlyEnabled: true });
+              expect(yield* users.settings("usr_2")).toEqual({ isOnTheFlyEnabled: false });
+
+              yield* users.updateSettings("usr_1", { isOnTheFlyEnabled: false });
+              expect(yield* users.settings("usr_1")).toEqual({ isOnTheFlyEnabled: false });
+              // Settings sit next to the user without disturbing it.
+              expect(yield* users.findById("usr_1")).toEqual(
+                Option.some(expect.objectContaining({ username: "ada" })),
+              );
+            }),
+          ),
+        );
+      });
+
       describe("PasskeyRepo", () => {
         it.effect("records the signature counter of the last login", () =>
           withRepos(

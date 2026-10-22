@@ -21,6 +21,7 @@ import type { MailSettings } from "./MailSettings.ts";
 import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Sessions.ts";
+import { SettingsLive } from "./settings.ts";
 
 const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
   handlers.handle("health", () => Effect.succeed({ status: "ok" as const })),
@@ -48,7 +49,7 @@ export type Services =
  * elsewhere.
  */
 const ApiLive = HttpApiBuilder.layer(Api).pipe(
-  Layer.provide([SystemLive, AuthLive, AccountLive, AliasesLive, RecipientsLive]),
+  Layer.provide([SystemLive, AuthLive, AccountLive, AliasesLive, RecipientsLive, SettingsLive]),
   Layer.provide(authenticationLayer),
   Layer.provide(Repositories),
   Layer.provide([HttpServer.layerServices, NodeCrypto.layer]),

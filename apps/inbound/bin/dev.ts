@@ -74,8 +74,8 @@ const prepare = Effect.fn("inbound.dev.prepare")(function* () {
   yield* untilFakeCloudIsUp(Inbound.ensureSpool(spoolBucket)).pipe(Effect.provide(awsClient));
   const domains = yield* devDomains;
   // fakecloud only accepts senders on an exactly verified domain, while AWS also accepts the
-  // subdomains (PLAN.md §20.5). Mail to `<user>.alias.test` aliases is refused until the
-  // subdomain is verified too.
+  // subdomains (PLAN.md §20.5). `apps/api/bin/dev.ts` verifies each user's subdomains when they
+  // sign up, so mail to `<user>.alias.test` aliases can be sent.
   yield* untilFakeCloudIsUp(
     Effect.forEach(domains, Transport.ensureIdentity, { concurrency: 1, discard: true }),
   ).pipe(Effect.provide(awsClient));

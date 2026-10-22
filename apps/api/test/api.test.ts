@@ -451,4 +451,35 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
       expect(Arr.map(responses, (response) => response.status)).toEqual([401, 401, 401, 401, 401]);
     }).pipe(Effect.scoped),
   );
+
+  it.effect("turns on-the-fly aliases on and off per user, off by default", () =>
+    Effect.gen(function* () {
+      const { browser: open } = yield* api;
+      const ada = yield* signedIn(open, "ada");
+      const grace = yield* signedIn(open, "grace");
+      const off = { status: 200, body: { isOnTheFlyEnabled: false } };
+      const on = { status: 200, body: { isOnTheFlyEnabled: true } };
+
+      expect(yield* ada.browser.get("/v1/settings")).toMatchObject(off);
+      expect(yield* ada.browser.patch("/v1/settings", { isOnTheFlyEnabled: true })).toMatchObject(
+        on,
+      );
+      expect(yield* ada.browser.patch("/v1/settings", {})).toMatchObject(on);
+      expect(yield* ada.browser.get("/v1/settings")).toMatchObject(on);
+      // Someone else's setting is their own.
+      expect(yield* grace.browser.get("/v1/settings")).toMatchObject(off);
+      expect((yield* ada.browser.patch("/v1/settings", { isOnTheFlyEnabled: "yes" })).status).toBe(
+        400,
+      );
+      expect(yield* ada.browser.patch("/v1/settings", { isOnTheFlyEnabled: false })).toMatchObject(
+        off,
+      );
+
+      const anonymous = open();
+      expect((yield* anonymous.get("/v1/settings")).status).toBe(401);
+      expect((yield* anonymous.patch("/v1/settings", { isOnTheFlyEnabled: true })).status).toBe(
+        401,
+      );
+    }).pipe(Effect.scoped),
+  );
 });

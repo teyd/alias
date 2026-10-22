@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# The token can read the repository and nothing else; actions are pinned by commit, so a moved
+# tag can't change what runs (PLAN.md §20.25).
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -13,9 +18,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # Installs Node, pnpm, Java, and fakecloud from mise.toml and verifies them against mise.lock.
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
@@ -44,10 +49,10 @@ jobs:
           - "@alias/e2e"
           - "@alias/browser"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # Installs Node, pnpm, Java, and fakecloud from mise.toml and verifies them against mise.lock.
-      - uses: jdx/mise-action@v5
-      - uses: actions/cache@v4
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/alias
           key: dynamodb-local-${{ hashFiles('tools/aws-emulators/src/DynamoDbLocal.ts') }}
@@ -60,7 +65,7 @@ jobs:
         run: |
           echo "version=$(sed -n 's/^  playwright: //p' pnpm-workspace.yaml)" >> "$GITHUB_OUTPUT"
       - if: matrix.package == '@alias/browser'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -71,9 +76,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # Installs Node, pnpm, Java, and fakecloud from mise.toml and verifies them against mise.lock.
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @alias/web build
       # The publishable SDK bundle: JS plus inlined declarations, only `effect` left external.
@@ -85,12 +90,12 @@ jobs:
   cli-binary:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # Installs Node, pnpm, Java, fakecloud and Bun from mise.toml and verifies them against mise.lock.
-      - uses: jdx/mise-action@v5
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm cli:compile linux-x64 darwin-arm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: alias-cli
           path: apps/cli/dist/alias-*

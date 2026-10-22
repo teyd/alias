@@ -1,16 +1,19 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { ReverseToken, SharedDomains, Username } from "@alias/core";
-import { AliasRepo, ContactRepo, RecipientRepo, UserRepo } from "@alias/db";
+import { AliasRepo, ContactRepo, RecipientRepo, UserRepo, WebhookRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
+import { freshQueue, TestQueue } from "@alias/webhooks/testing";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
+import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as Redacted from "effect/Redacted";
 import { Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
@@ -28,18 +31,21 @@ const aws = Layer.unwrap(
 
 const pipeline = (limits?: Limits.Limits["Service"]) =>
   Layer.unwrap(
-    Effect.sync(() =>
-      Pipeline.layer(
+    Effect.sync(() => {
+      // One queue: the pipeline publishes to it, tests read it (`TestQueue`).
+      const queue = freshQueue();
+      return Pipeline.layer(
         Layer.mergeAll(
           freshTable(),
+          queue,
           Transport.ses.pipe(Layer.provide(aws)),
           Spool.layer(bucket).pipe(Layer.provide(aws)),
           SharedDomains.layer("alias.test"),
           ReverseKeys.layer(keys),
         ),
         limits,
-      ),
-    ),
+      ).pipe(Layer.provideMerge(queue));
+    }),
   );
 
 /** Each test gets its own fakecloud, so sent mail and the spool start empty. */
@@ -250,7 +256,78 @@ const spoolHolds = (messageId: string) =>
     Effect.catchTag("MessageGone", () => Effect.succeed(false)),
   );
 
+/** The webhook jobs on the test's queue: what the delivery Lambda would post. */
+const queuedJobs = Effect.fn("queuedJobs")(function* () {
+  const { queueUrl } = yield* TestQueue;
+  const { Messages = [] } = yield* SQS.receiveMessage({
+    QueueUrl: queueUrl,
+    MaxNumberOfMessages: 10,
+  });
+  return Arr.map(Messages, (message) => message.Body ?? "");
+});
+
 describe("inbound pipeline (fakecloud)", () => {
+  it.effect("tells the owner's webhooks what happened, without content or sender addresses", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        yield* alias();
+        yield* WebhookRepo.WebhookRepo.use((repo) =>
+          repo.create({
+            id: "wh_1",
+            userId: "usr_1",
+            url: "https://hooks.example.com/",
+            eventTypes: ["mail.forwarded", "mail.blocked", "alias.created"],
+            secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+            createdAt: DateTime.makeUnsafe(0),
+          }),
+        ).pipe(Effect.provide(WebhookRepo.layer));
+        const forwarded = yield* receive({ recipients: ["shop@alias.test"] });
+        yield* Pipeline.handle(forwarded.event);
+        // A redelivery publishes nothing new.
+        yield* Pipeline.handle(forwarded.event);
+        const spam = yield* receive({
+          recipients: ["shop@alias.test"],
+          verdicts: { spam: "FAIL" },
+        });
+        yield* Pipeline.handle(spam.event);
+        const onTheFly = yield* receive({ recipients: ["club@user1.alias.test"] });
+        yield* Pipeline.handle(onTheFly.event);
+
+        const bodies = yield* queuedJobs();
+        const events = Arr.map(bodies, (body) => JSON.parse(body).event);
+        const [contact] = yield* contacts;
+        expect(
+          Arr.sort(
+            Arr.map(events, (event) => String(event.type)),
+            Order.String,
+          ),
+        ).toEqual(["alias.created", "mail.blocked", "mail.forwarded", "mail.forwarded"]);
+        expect(events).toContainEqual({
+          type: "mail.forwarded",
+          timestamp: expect.any(String),
+          data: { aliasId: "al_shop", address: "shop@alias.test", contactId: contact?.id },
+        });
+        expect(events).toContainEqual({
+          type: "mail.blocked",
+          timestamp: expect.any(String),
+          data: { aliasId: "al_shop", address: "shop@alias.test", reason: "spam" },
+        });
+        expect(events).toContainEqual({
+          type: "alias.created",
+          timestamp: expect.any(String),
+          data: {
+            aliasId: expect.any(String),
+            address: "club@user1.alias.test",
+            origin: "on-the-fly",
+          },
+        });
+        expect(bodies.join("\n")).not.toContain("store.example");
+        expect(bodies.join("\n")).not.toContain("Order confirmed");
+      }),
+    ),
+  );
+
   it.effect("forwards to the owner's default recipient through a reverse alias", () =>
     withPipeline(
       Effect.gen(function* () {

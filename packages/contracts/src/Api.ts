@@ -5,6 +5,7 @@ import { requires } from "./Scopes.ts";
 import { RecipientsGroup } from "./Recipients.ts";
 import { SettingsGroup } from "./Settings.ts";
 import { TokensGroup } from "./Tokens.ts";
+import { WebhooksGroup } from "./Webhooks.ts";
 
 const Health = Schema.Struct({
   status: Schema.Literal("ok"),
@@ -199,4 +200,5 @@ export const Api = HttpApi.make("alias")
   .add(ContactsGroup)
   .add(RecipientsGroup)
   .add(SettingsGroup)
-  .add(TokensGroup);
+  .add(TokensGroup)
+  .add(WebhooksGroup);

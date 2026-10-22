@@ -2,12 +2,15 @@ import { AwsClient, SendingEvent, SnsEvent, Transport } from "@alias/aws";
 import bounceRecord from "@alias/aws/fixtures/ses-event-bounce.json" with { type: "json" };
 import snsEvent from "@alias/aws/fixtures/sns-lambda-event.json" with { type: "json" };
 import { FakeCloud } from "@alias/aws-emulators";
-import { RecipientRepo } from "@alias/db";
+import { RecipientRepo, WebhookRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
+import { freshQueue, TestQueue } from "@alias/webhooks/testing";
 import { SnsSubscriber } from "@alias/lambda-emulator";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
+import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -29,16 +32,19 @@ const aws = Layer.unwrap(
 );
 
 const feedback = Layer.unwrap(
-  Effect.sync(() =>
-    Feedback.layer(
+  Effect.sync(() => {
+    // One queue: the feedback handler publishes to it, tests read it (`TestQueue`).
+    const queue = freshQueue();
+    return Feedback.layer(
       Layer.mergeAll(
         freshTable(),
+        queue,
         Transport.layer({ configurationSet: Option.some(CONFIGURATION_SET) }).pipe(
           Layer.provide(aws),
         ),
       ),
-    ),
-  ),
+    ).pipe(Layer.provideMerge(queue));
+  }),
 );
 
 /** The configuration set with an SNS destination, and the emulated Lambda subscription. */
@@ -136,6 +142,16 @@ describe("feedback Lambda (fakecloud SES events → SNS → Lambda event)", () =
     withFeedback((subscriber) =>
       Effect.gen(function* () {
         yield* recipient(BOUNCE);
+        yield* WebhookRepo.WebhookRepo.use((repo) =>
+          repo.create({
+            id: "wh_1",
+            userId: "usr_1",
+            url: "https://hooks.example.com/",
+            eventTypes: ["recipient.bounced"],
+            secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+            createdAt: DateTime.makeUnsafe(0),
+          }),
+        ).pipe(Effect.provide(WebhookRepo.layer));
         yield* send(BOUNCE, "forward");
         const event = yield* nextEvent(subscriber);
 
@@ -150,6 +166,19 @@ describe("feedback Lambda (fakecloud SES events → SNS → Lambda event)", () =
         expect(yield* Feedback.handle(event)).toEqual([
           { _tag: "Bounced", suppressed: 1, marked: 1 },
         ]);
+
+        // The owner's webhook hears of it, twice with one webhook-id, which receivers dedupe.
+        const { queueUrl } = yield* TestQueue;
+        const { Messages = [] } = yield* SQS.receiveMessage({
+          QueueUrl: queueUrl,
+          MaxNumberOfMessages: 10,
+        });
+        const jobs = Arr.map(Messages, (message) => JSON.parse(message.Body ?? "null"));
+        expect(Arr.map(jobs, (job) => job.event)).toEqual([
+          { type: "recipient.bounced", timestamp: expect.any(String), data: { address: BOUNCE } },
+          { type: "recipient.bounced", timestamp: expect.any(String), data: { address: BOUNCE } },
+        ]);
+        expect(jobs[0]?.id).toBe(jobs[1]?.id);
       }),
     ),
   );

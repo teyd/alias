@@ -19,6 +19,7 @@ import {
   SessionRepo,
   TokenRepo,
   UserRepo,
+  WebhookRepo,
 } from "../../src/index.ts";
 import { freshTable } from "./database.ts";
 
@@ -32,6 +33,7 @@ const repos = Layer.mergeAll(
   SessionRepo.layer,
   TokenRepo.layer,
   UserRepo.layer,
+  WebhookRepo.layer,
 );
 
 type Repos =
@@ -42,6 +44,7 @@ type Repos =
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
   | UserRepo.UserRepo
+  | WebhookRepo.WebhookRepo
   | Dynamo.Database;
 
 /** Every item in the table, keys and all, as `{ pk, sk, attribute names }`, sorted by key. */
@@ -115,6 +118,16 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
         }),
       ),
     { concurrency: 1, discard: true },
+  );
+  yield* WebhookRepo.WebhookRepo.use((webhooks) =>
+    webhooks.create({
+      id: `wh_${name}`,
+      userId,
+      url: `https://hooks.${name}.example/`,
+      eventTypes: ["mail.forwarded"],
+      secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+      createdAt: at(1_000),
+    }),
   );
   yield* users.updateSettings(userId, { isOnTheFlyEnabled: true });
   yield* recipients.add(

@@ -17,6 +17,9 @@
     },
     "tools/aws-emulators": {
       "entry": ["bin/*.ts"]
+    },
+    "apps/webhooks": {
+      "entry": ["src/handler.ts!", "bin/*.ts"]
     }
   },
   "includeEntryExports": true

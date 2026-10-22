@@ -10,13 +10,15 @@ import {
   SessionRepo,
   TokenRepo,
   UserRepo,
+  WebhookRepo,
 } from "@alias/db";
+import { Publisher, type UrlPolicy } from "@alias/webhooks";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
-import type { Transport } from "@alias/aws";
+import type { MessageQueue, Transport } from "@alias/aws";
 import type { SharedDomains } from "@alias/core";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
@@ -27,6 +29,7 @@ import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Authentication.ts";
 import { SettingsLive } from "./settings.ts";
 import { TokensLive } from "./tokens.ts";
+import { WebhooksLive } from "./webhooks.ts";
 
 const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
   handlers.handle("health", () => Effect.succeed({ status: "ok" as const })),
@@ -42,15 +45,21 @@ const Repositories = Layer.mergeAll(
   ChallengeRepo.layer,
   RecipientRepo.layer,
   TokenRepo.layer,
+  WebhookRepo.layer,
 );
 
-/** What callers provide: the database, the WebAuthn relying party, the shared domains and outgoing mail. */
+/**
+ * What callers provide: the database, the WebAuthn relying party, the shared domains, outgoing
+ * mail, and the webhook queue and URL policy.
+ */
 export type Services =
   | Dynamo.Database
   | RelyingParty
   | SharedDomains.SharedDomains
   | Transport.Transport
-  | MailSettings;
+  | MailSettings
+  | MessageQueue.MessageQueue
+  | UrlPolicy.UrlPolicy;
 
 /**
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
@@ -66,9 +75,10 @@ const ApiLive = HttpApiBuilder.layer(Api).pipe(
     RecipientsLive,
     SettingsLive,
     TokensLive,
+    WebhooksLive,
   ]),
   Layer.provide(authenticationLayer),
-  Layer.provide(Repositories),
+  Layer.provide(Layer.merge(Repositories, Publisher.layer)),
   Layer.provide([HttpServer.layerServices, NodeCrypto.layer]),
 );
 

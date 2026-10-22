@@ -10,6 +10,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { DeleteAccount } from "@/components/DeleteAccount";
 import { Page } from "@/components/Page";
 import { ApiTokens } from "@/components/settings/ApiTokens";
+import { Webhooks } from "@/components/settings/Webhooks";
 import { Separator } from "@/components/ui/separator";
 import { domainsQuery } from "@/lib/aliases";
 import { meQuery } from "@/lib/session";
@@ -98,6 +99,13 @@ const Settings = () => {
           description="Let the CLI and your scripts call the API as you, limited to the scopes you pick."
         >
           <ApiTokens />
+        </Section>
+        <Separator />
+        <Section
+          title="Webhooks"
+          description="Signed HTTPS requests to your endpoint when aliases change, mail is forwarded or blocked, or a destination bounces."
+        >
+          <Webhooks />
         </Section>
         {Option.match(me.data ?? Option.none(), {
           onNone: () => null,

@@ -1,5 +1,7 @@
-import { SendingEvent, type SnsEvent, Transport } from "@alias/aws";
+import { type MessageQueue, SendingEvent, type SnsEvent, Transport } from "@alias/aws";
 import { type Dynamo, RecipientRepo } from "@alias/db";
+import { Publisher } from "@alias/webhooks";
+import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -37,6 +39,23 @@ const ignored = (reason: Extract<Outcome, { _tag: "Ignored" }>["reason"]) =>
 const parseTime = (timestamp: string) =>
   Option.getOrElse(DateTime.make(timestamp), () => DateTime.makeUnsafe(0));
 
+/** Tells the user's webhooks that one of their forwarding addresses bounces. */
+const announceBounce = Effect.fn("Feedback.announceBounce")(function* (
+  userId: string,
+  address: string,
+  event: SendingEvent.Bounce,
+) {
+  yield* (yield* Publisher.Publisher).publish(
+    userId,
+    {
+      type: "recipient.bounced",
+      timestamp: DateTime.formatIso(parseTime(event.bounce.timestamp)),
+      data: { address },
+    },
+    `${event.mail.messageId}:${address}`,
+  );
+});
+
 const bounced = Effect.fn("Feedback.bounced")(function* (event: SendingEvent.Bounce) {
   if (event.bounce.bounceType !== "Permanent") return ignored("transient-bounce");
   const transport = yield* Transport.Transport;
@@ -51,7 +70,10 @@ const bounced = Effect.fn("Feedback.bounced")(function* (event: SendingEvent.Bou
     ? []
     : yield* Effect.forEach(
         addresses,
-        (address) => recipients.markBounced(userId.value, address, at),
+        (address) =>
+          Effect.tap(recipients.markBounced(userId.value, address, at), (isMarked) =>
+            isMarked ? announceBounce(userId.value, address, event) : Effect.void,
+          ),
         { concurrency: 1 },
       );
   return Outcome.cases.Bounced.make({
@@ -106,8 +128,10 @@ export const handle = Effect.fn("Feedback.handle")(function* (event: SnsEvent.Sn
   });
 });
 
-/** What callers provide: the table and SES (for the suppression list). */
-export type Services = Dynamo.Database | Transport.Transport;
+/** What callers provide: the table, SES (for the suppression list) and the webhook queue. */
+export type Services = Dynamo.Database | Transport.Transport | MessageQueue.MessageQueue;
 
 export const layer = <E, R>(services: Layer.Layer<Services, E, R>) =>
-  RecipientRepo.layer.pipe(Layer.provideMerge(services));
+  Layer.merge(RecipientRepo.layer, Publisher.layer.pipe(Layer.provide(NodeCrypto.layer))).pipe(
+    Layer.provideMerge(services),
+  );

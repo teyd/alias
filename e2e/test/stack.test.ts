@@ -1,12 +1,22 @@
 import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
-import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
+import {
+  AwsClient,
+  Inbound,
+  type MessageQueue,
+  SesEvent,
+  SnsEvent,
+  SqsEvent,
+  Transport,
+} from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains, Username } from "@alias/core";
+import { SharedDomains, Username, Webhook } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Feedback, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
-import { FunctionUrlServer, SnsSubscriber } from "@alias/lambda-emulator";
+import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
+import { Delivery, Egress, UrlPolicy } from "@alias/webhooks";
+import { Receiver, TestQueue, freshQueue } from "@alias/webhooks/testing";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -15,6 +25,7 @@ import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -36,6 +47,10 @@ const aws = Layer.unwrap(
 const spoolBucket = "alias-spool";
 const spool = Layer.effectDiscard(Inbound.ensureSpool(spoolBucket)).pipe(Layer.provide(aws));
 const database = freshTable();
+/** The webhook queue every producer publishes to and the delivery Lambda polls (PLAN.md §20.20). */
+const webhookQueue = freshQueue();
+/** Webhook receivers in this test listen on 127.0.0.1 over http, which production refuses. */
+const urlPolicy = UrlPolicy.layer({ isLoopbackAllowed: true });
 const origin = "https://alias.test";
 const sharedDomains = SharedDomains.layer("alias.test");
 /** Every send names it; its SNS destination reports bounces and complaints (PLAN.md §20.11). */
@@ -78,6 +93,8 @@ const api = Layer.unwrap(
         MailSettings.layer(Option.some("no-reply@alias.test")).pipe(
           Layer.provideMerge(sharedDomains),
         ),
+        Layer.succeedContext(yield* Effect.context<MessageQueue.MessageQueue>()),
+        urlPolicy,
       ),
     );
     yield* Effect.addFinalizer(() => Effect.promise(dispose));
@@ -99,6 +116,7 @@ const reverseKeys = Layer.unwrap(
 const inbound = Pipeline.layer(
   Layer.mergeAll(
     database,
+    webhookQueue,
     sending,
     Spool.layer(spoolBucket).pipe(Layer.provide(aws)),
     sharedDomains,
@@ -137,12 +155,37 @@ const ses = SesEmulator.layer({
 }).pipe(Layer.provide([aws, spool]));
 
 /** The feedback Lambda on the same table and SES. */
-const feedback = Feedback.layer(Layer.mergeAll(database, sending));
+const feedback = Feedback.layer(Layer.mergeAll(database, sending, webhookQueue));
+
+/** The webhook delivery Lambda behind the emulated SQS event source mapping of the queue. */
+const delivery = Layer.effect(
+  SqsEventSource.SqsEventSource,
+  Effect.gen(function* () {
+    const { queueUrl } = yield* TestQueue;
+    const context = yield* Layer.build(
+      Delivery.layer(
+        Layer.mergeAll(
+          database,
+          webhookQueue,
+          Delivery.production,
+          NodeCrypto.layer,
+          Egress.layer,
+        ).pipe(Layer.provideMerge(urlPolicy)),
+      ),
+    );
+    return yield* SqsEventSource.make({
+      queueUrl,
+      handler: (event) =>
+        SqsEvent.decode(event).pipe(Effect.flatMap(Delivery.handle), Effect.provide(context)),
+    });
+  }),
+).pipe(Layer.provide(Layer.merge(webhookQueue, aws)));
 
 const stack = Layer.mergeAll(
-  api.pipe(Layer.provide(database)),
+  api.pipe(Layer.provide(Layer.merge(database, webhookQueue))),
   inbound,
   feedback,
+  delivery,
   feedbackTopic,
   ses,
   aws,
@@ -346,6 +389,53 @@ describe("emulated stack", () => {
         const revoked = yield* call(`/v1/tokens/${minted.body.id}`, { cookie, method: "DELETE" });
         expect(revoked.status).toBe(204);
         expect((yield* call("/v1/aliases", { bearer })).status).toBe(401);
+      }),
+    );
+
+    it.effect("posts a signed mail.forwarded event to the owner's webhook endpoint", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const hooked = yield* owner("hooked");
+        const receiver = yield* Receiver.make();
+        const registered = yield* call("/v1/webhooks", {
+          cookie: hooked.cookie,
+          body: { url: receiver.url, eventTypes: ["mail.forwarded"] },
+        });
+        expect(registered.status).toBe(201);
+        const secret = String(registered.body.secret);
+
+        const event = yield* smtp({
+          from: '"Store" <orders@store.example>',
+          to: hooked.alias,
+          subject: "Your order",
+          text: "Secret order details",
+        });
+        expect(yield* invoke(event)).toEqual([{ _tag: "Forwarded" }]);
+        const lambda = yield* SqsEventSource.SqsEventSource;
+        expect(yield* lambda.poll).toEqual({ received: 1, deleted: 1 });
+
+        const [request] = receiver.received;
+        expect(receiver.received).toHaveLength(1);
+        const isAuthentic = yield* Webhook.verify({
+          secret,
+          id: request?.headers["webhook-id"] ?? "",
+          timestamp: Number(request?.headers["webhook-timestamp"]),
+          signature: request?.headers["webhook-signature"] ?? "",
+          body: request?.body ?? "",
+          // The stack runs on the test clock; the receiver checks against the same one.
+          nowSeconds: Math.floor(DateTime.toEpochMillis(yield* DateTime.now) / 1000),
+        });
+        expect(isAuthentic).toBe(true);
+        const [contact] = (yield* call(`/v1/aliases/${hooked.alias.split("@")[1]}/shop/contacts`, {
+          cookie: hooked.cookie,
+        })).body;
+        expect(JSON.parse(request?.body ?? "null")).toEqual({
+          type: "mail.forwarded",
+          timestamp: expect.any(String),
+          data: { aliasId: expect.any(String), address: hooked.alias, contactId: contact.id },
+        });
+        // Metadata only: no content, subject or sender address.
+        expect(request?.body).not.toMatch(/store\.example|order/i);
       }),
     );
 

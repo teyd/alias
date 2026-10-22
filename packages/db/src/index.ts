@@ -11,3 +11,4 @@ export * as SessionRepo from "./SessionRepo.ts";
 export * as Table from "./Table.ts";
 export * as TokenRepo from "./TokenRepo.ts";
 export * as UserRepo from "./UserRepo.ts";
+export * as WebhookRepo from "./WebhookRepo.ts";

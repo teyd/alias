@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "@alias/aws": "workspace:*",
+    "@alias/contracts": "workspace:*",
     "@alias/core": "workspace:*",
     "@alias/db": "workspace:*",
+    "@alias/webhooks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:"
   },

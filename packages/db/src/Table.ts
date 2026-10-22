@@ -23,6 +23,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                            |                           |             |
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                            |                           |             |
  * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                            |                           | `expiresAt` |
+ * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
  * | Username          | `USERNAME#<skeleton>`        | `USERNAME`             |                            |                           |             |
  * | Passkey           | `PASSKEY#<credentialId>`     | `PASSKEY`              | `PASSKEYS#<userId>`        | `PASSKEY#<credentialId>`  |             |
  * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              | `SESSIONS#<userId>`        | `SESSION#<sha256(token)>` | `expiresAt` |
@@ -83,6 +84,10 @@ import { DynamoTable } from "./Dynamo.ts";
  * alias list); revoking deletes the item by its key. An expiring token carries `expiresAt`, so TTL
  * removes it later. AuthFailures counts failed token attempts per hashed client address and UTC
  * hour, like the other quota items.
+ *
+ * A Webhook is one of the user's webhook endpoints, in their partition: every published event
+ * lists the user's webhooks with one strongly consistent Query (`begins_with(sk, "WEBHOOK#")`),
+ * and a delivery reads its endpoint (URL, secrets) with one GetItem.
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

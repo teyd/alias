@@ -19,6 +19,7 @@ import { SharedDomains } from "@alias/core";
 import { Dynamo, Table } from "@alias/db";
 import { SnsSubscriber } from "@alias/lambda-emulator";
 import { SesEmulator } from "@alias/ses-emulator";
+import { WebhookQueue } from "@alias/webhooks";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
 import * as SSM from "@distilled.cloud/aws/ssm";
@@ -59,10 +60,14 @@ const reverseKeys = Layer.unwrap(
   ).pipe(Effect.as(ReverseKeys.fromParameter(reverseKeysParameter))),
 ).pipe(Layer.provide(awsClient));
 
+/** The webhook queue the pipeline and the feedback handler publish to (`apps/webhooks`). */
+const webhookQueue = WebhookQueue.dev.pipe(Layer.provide(awsClient));
+
 const pipeline = Pipeline.layer(
   Layer.mergeAll(
     Dynamo.emulator(fakecloudUrl, "alias"),
     sending,
+    webhookQueue,
     Spool.layer(spoolBucket).pipe(Layer.provide(awsClient)),
     sharedDomains,
     reverseKeys,
@@ -135,7 +140,11 @@ const relayFeedback = Effect.fn("inbound.dev.relayFeedback")(function* () {
   const handle = (event: SnsSubscriber.SnsLambdaEvent) =>
     SnsEvent.decode(event).pipe(
       Effect.flatMap(Feedback.handle),
-      Effect.provide(Feedback.layer(Layer.merge(Dynamo.emulator(fakecloudUrl, "alias"), sending))),
+      Effect.provide(
+        Feedback.layer(
+          Layer.mergeAll(Dynamo.emulator(fakecloudUrl, "alias"), sending, webhookQueue),
+        ),
+      ),
       Effect.catch((error) => Effect.logError("feedback failed; SNS would retry", error)),
     );
   yield* Queue.take(subscriber.events).pipe(Effect.flatMap(handle), Effect.forever);

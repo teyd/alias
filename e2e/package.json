@@ -17,6 +17,7 @@
     "@alias/inbound": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
     "@alias/ses-emulator": "workspace:*",
+    "@alias/webhooks": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",

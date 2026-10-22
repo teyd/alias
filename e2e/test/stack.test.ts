@@ -158,6 +158,62 @@ const oauthClient = () => {
   return { provider, state };
 };
 
+/**
+ * The OAuth dance of the official MCP SDK client against the stack, as a host runs it: no token,
+ * 401 → protected resource metadata → authorization server metadata → dynamic registration →
+ * PKCE, the browser sent to the consent page, where the signed-in user (`cookie`) grants
+ * `scopes`; then the redirect, whose `iss` the client checks before redeeming the code.
+ * Returns a way to connect, as a 2026-07-28 (`auto`) or 2025 (`legacy`) client.
+ */
+const authorizeMcp = (cookie: string, scopes: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const { url } = yield* FunctionUrlServer.FunctionUrlServer;
+    const oauth = oauthClient();
+    const transport = () =>
+      new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+        authProvider: oauth.provider,
+        fetch: viaStack(url),
+      });
+    const refused = yield* Effect.promise(() =>
+      new Client({ name: "stack-test", version: "1.0.0" }).connect(transport()).then(
+        () => undefined,
+        (error: Error) => error,
+      ),
+    );
+    expect(refused).toBeInstanceOf(UnauthorizedError);
+    const authorize = oauth.state.authorizationUrl ?? new URL("about:blank");
+    expect(`${authorize.origin}${authorize.pathname}`).toBe(`${origin}/oauth/authorize`);
+    const request = R.fromEntries(authorize.searchParams);
+    expect(request).toMatchObject({
+      response_type: "code",
+      client_id: expect.stringMatching(/^mcp_/),
+      code_challenge_method: "S256",
+      redirect_uri: "http://127.0.0.1:33418/callback",
+      resource: `${origin}/mcp`,
+      state: "stack-state",
+    });
+    const shown = yield* call("/v1/oauth/authorization", { cookie, body: request });
+    expect(shown.body.client).toMatchObject({ name: "SDK stack test", isLocalRedirect: true });
+    const decided = yield* call("/v1/oauth/authorization/decision", {
+      cookie,
+      body: { request, isApproved: true, scopes: [...scopes] },
+    });
+    const back = new URL(decided.body.redirectTo);
+    yield* Effect.promise(() => transport().finishAuth(back.searchParams));
+    expect(oauth.state.tokens).toMatchObject({ token_type: "Bearer", scope: scopes.join(" ") });
+    const connect = (mode: "auto" | "legacy", configure: (client: Client) => void = () => {}) =>
+      Effect.promise(async () => {
+        const client = new Client(
+          { name: "stack-test", version: "1.0.0" },
+          { versionNegotiation: { mode }, capabilities: { elicitation: { url: {} } } },
+        );
+        configure(client);
+        await client.connect(transport());
+        return client;
+      });
+    return { connect };
+  });
+
 /** Header fields of a raw message, unfolded, in order. */
 const fields = (raw: string) =>
   Arr.map((raw.split("\r\n\r\n")[0] ?? "").replace(/\r\n[ \t]/g, " ").split("\r\n"), (line) => {
@@ -342,62 +398,10 @@ describe("emulated stack", () => {
 
     it.effect("connects the official MCP client through OAuth with PKCE, both protocol eras", () =>
       Effect.gen(function* () {
-        const { url } = yield* FunctionUrlServer.FunctionUrlServer;
         const { cookie } = yield* signUp("mcp-user");
-        const oauth = oauthClient();
-        const transport = () =>
-          new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
-            authProvider: oauth.provider,
-            fetch: viaStack(url),
-          });
-        const connect = (mode: "auto" | "legacy") =>
-          Effect.promise(async () => {
-            const client = new Client(
-              { name: "stack-test", version: "1.0.0" },
-              { versionNegotiation: { mode } },
-            );
-            await client.connect(transport());
-            return client;
-          });
+        const { connect } = yield* authorizeMcp(cookie, ["aliases:read", "aliases:write"]);
 
-        // 1. No token: 401 → protected resource metadata → authorization server metadata →
-        //    dynamic registration → PKCE, and the browser is sent to the consent page.
-        const refused = yield* Effect.promise(() =>
-          new Client({ name: "stack-test", version: "1.0.0" }).connect(transport()).then(
-            () => undefined,
-            (error: Error) => error,
-          ),
-        );
-        expect(refused).toBeInstanceOf(UnauthorizedError);
-        const authorize = oauth.state.authorizationUrl ?? new URL("about:blank");
-        expect(`${authorize.origin}${authorize.pathname}`).toBe(`${origin}/oauth/authorize`);
-        const request = R.fromEntries(authorize.searchParams);
-        expect(request).toMatchObject({
-          response_type: "code",
-          client_id: expect.stringMatching(/^mcp_/),
-          code_challenge_method: "S256",
-          redirect_uri: "http://127.0.0.1:33418/callback",
-          resource: `${origin}/mcp`,
-          state: "stack-state",
-        });
-
-        // 2. The user consents in the signed-in web app, granting two of the four scopes.
-        const shown = yield* call("/v1/oauth/authorization", { cookie, body: request });
-        expect(shown.body.client).toMatchObject({ name: "SDK stack test", isLocalRedirect: true });
-        const decided = yield* call("/v1/oauth/authorization/decision", {
-          cookie,
-          body: { request, isApproved: true, scopes: ["aliases:read", "aliases:write"] },
-        });
-        const back = new URL(decided.body.redirectTo);
-
-        // 3. The redirect reaches the client, which checks `iss` and redeems the code.
-        yield* Effect.promise(() => transport().finishAuth(back.searchParams));
-        expect(oauth.state.tokens).toMatchObject({
-          token_type: "Bearer",
-          scope: "aliases:read aliases:write",
-        });
-
-        // 4. A 2026-07-28 client: stateless, with server/discover.
+        // A 2026-07-28 client: stateless, with server/discover.
         const modern = yield* connect("auto");
         expect(modern.getNegotiatedProtocolVersion()).toBe("2026-07-28");
         expect(modern.getServerVersion()).toMatchObject({ name: "alias" });
@@ -415,7 +419,7 @@ describe("emulated stack", () => {
         });
         yield* Effect.promise(() => modern.close());
 
-        // 5. A client that opens with `initialize` (the SDK's default) gets the same tools.
+        // A client that opens with `initialize` (the SDK's default) gets the same tools.
         const legacy = yield* connect("legacy");
         expect(legacy.getNegotiatedProtocolVersion()).toBe("2025-11-25");
         const listed = yield* Effect.promise(() =>
@@ -433,6 +437,70 @@ describe("emulated stack", () => {
         expect((yield* call("/v1/oauth/grants", { cookie })).body).toMatchObject([
           { clientName: "SDK stack test", scopes: ["aliases:read", "aliases:write"] },
         ]);
+      }),
+    );
+
+    it.effect("sends mail an MCP client drafted only after the user sends it in the web app", () =>
+      Effect.gen(function* () {
+        const { url } = yield* FunctionUrlServer.FunctionUrlServer;
+        const ida = yield* owner("ida");
+        // Grace writes to the alias, which makes her a contact.
+        const event = yield* smtp({
+          from: '"Grace" <grace@store.example>',
+          to: ida.alias,
+          subject: "Your order",
+          text: "When would you like it delivered?",
+        });
+        expect(yield* invoke(event)).toEqual([{ _tag: "Forwarded" }]);
+
+        const { connect } = yield* authorizeMcp(ida.cookie, ["contacts:read", "mail:send"]);
+        const approvals: Array<string> = [];
+        const client = yield* connect("auto", (sdk) =>
+          // The host's URL elicitation: here the user opens the page and presses Send.
+          sdk.setRequestHandler("elicitation/create", async (request) => {
+            const page = new URL(request.params.mode === "url" ? request.params.url : "x:");
+            approvals.push(page.pathname);
+            const sent = await fetch(`${url}/v1${page.pathname}/send`, {
+              method: "POST",
+              headers: { cookie: ida.cookie, origin },
+            });
+            expect(sent.status).toBe(200);
+            return { action: "accept" };
+          }),
+        );
+        const contacts = yield* Effect.promise(() =>
+          client.callTool({ name: "list_contacts", arguments: { address: ida.alias } }),
+        );
+        const contact = Schema.decodeUnknownSync(
+          Schema.Struct({
+            structuredContent: Schema.Struct({
+              contacts: Schema.Tuple([
+                Schema.Struct({ id: Schema.String, address: Schema.String }),
+              ]),
+            }),
+          }),
+        )(contacts).structuredContent.contacts[0];
+        expect(contact.address).toBe("grace@store.example");
+        expect(yield* sentTo("grace@store.example")).toEqual([]);
+
+        const result = yield* Effect.promise(() =>
+          client.callTool({
+            name: "send_mail",
+            arguments: {
+              from: ida.alias,
+              contactId: contact.id,
+              subject: "Delivery",
+              text: "Tuesday works, thanks!",
+            },
+          }),
+        );
+        expect(result).toMatchObject({ isError: false, structuredContent: { status: "sent" } });
+        expect(approvals).toEqual([expect.stringMatching(/^\/outbox\/drf_/)]);
+        const [mail] = yield* sentTo("grace@store.example");
+        expect(mail?.from).toBe(ida.alias);
+        expect(Option.getOrNull(field(mail?.text ?? "", "subject"))).toBe("Delivery");
+        expect(mail?.text).not.toContain(ida.mailbox);
+        yield* Effect.promise(() => client.close());
       }),
     );
 

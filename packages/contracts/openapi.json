@@ -4469,7 +4469,8 @@
                             "recipients:read",
                             "recipients:write",
                             "settings:read",
-                            "settings:write"
+                            "settings:write",
+                            "mail:send"
                           ]
                         }
                       },
@@ -4572,7 +4573,8 @@
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
-                          "settings:write"
+                          "settings:write",
+                          "mail:send"
                         ]
                       }
                     },
@@ -4660,7 +4662,8 @@
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
-                          "settings:write"
+                          "settings:write",
+                          "mail:send"
                         ]
                       }
                     ],
@@ -4677,7 +4680,8 @@
                         "recipients:read",
                         "recipients:write",
                         "settings:read",
-                        "settings:write"
+                        "settings:write",
+                        "mail:send"
                       ]
                     }
                   },
@@ -5665,7 +5669,8 @@
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
-                          "settings:write"
+                          "settings:write",
+                          "mail:send"
                         ]
                       }
                     },
@@ -5982,7 +5987,8 @@
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
-                          "settings:write"
+                          "settings:write",
+                          "mail:send"
                         ]
                       }
                     },
@@ -6234,7 +6240,8 @@
                         "recipients:read",
                         "recipients:write",
                         "settings:read",
-                        "settings:write"
+                        "settings:write",
+                        "mail:send"
                       ]
                     }
                   }
@@ -6299,7 +6306,8 @@
                             "recipients:read",
                             "recipients:write",
                             "settings:read",
-                            "settings:write"
+                            "settings:write",
+                            "mail:send"
                           ]
                         }
                       },
@@ -6424,6 +6432,417 @@
         "summary": "Disconnect an MCP client and revoke its tokens",
         "description": "Session only: API tokens are refused."
       }
+    },
+    "/v1/outbox/{draftId}": {
+      "get": {
+        "tags": [
+          "outbox"
+        ],
+        "operationId": "outbox.get",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "contactName": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "clientName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "sent",
+                        "discarded",
+                        "expired"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "from",
+                    "to",
+                    "subject",
+                    "text",
+                    "clientName",
+                    "status",
+                    "createdAt",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DraftNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Show a drafted email",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/outbox/{draftId}/send": {
+      "post": {
+        "tags": [
+          "outbox"
+        ],
+        "operationId": "outbox.send",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "contactName": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "clientName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "sent",
+                        "discarded",
+                        "expired"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "from",
+                    "to",
+                    "subject",
+                    "text",
+                    "clientName",
+                    "status",
+                    "createdAt",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DraftNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DraftClosed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftClosedEncoded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "SendFailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendFailedEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a drafted email, once",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/outbox/{draftId}/discard": {
+      "post": {
+        "tags": [
+          "outbox"
+        ],
+        "operationId": "outbox.discard",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "contactName": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "clientName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "sent",
+                        "discarded",
+                        "expired"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "from",
+                    "to",
+                    "subject",
+                    "text",
+                    "clientName",
+                    "status",
+                    "createdAt",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DraftNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DraftClosed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftClosedEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Discard a drafted email",
+        "description": "Session only: API tokens are refused."
+      }
     }
   },
   "components": {
@@ -6464,7 +6883,8 @@
               "recipients:read",
               "recipients:write",
               "settings:read",
-              "settings:write"
+              "settings:write",
+              "mail:send"
             ]
           }
         },
@@ -6485,6 +6905,89 @@
         },
         "required": [
           "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "DraftClosedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "DraftClosed"
+            ]
+          },
+          "draftId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "sent",
+              "discarded",
+              "expired"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "draftId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "DraftNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "DraftNotFound"
+            ]
+          },
+          "draftId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "draftId"
+        ],
+        "additionalProperties": false
+      },
+      "SendFailedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "SendFailed"
+            ]
+          },
+          "draftId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "inactive-alias",
+              "unknown-contact",
+              "blocked-contact",
+              "limit-reached",
+              "rejected",
+              "unavailable"
+            ]
+          },
+          "isRetryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "_tag",
+          "draftId",
+          "reason",
+          "isRetryable"
         ],
         "additionalProperties": false
       },
@@ -7270,6 +7773,10 @@
     {
       "name": "consent",
       "description": "The signed-in person's side of an MCP client's authorization (the web app's `/oauth/authorize` page), and the connected apps it created. Session-only."
+    },
+    {
+      "name": "outbox",
+      "description": "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them. Session-only: no token sends mail."
     }
   ]
 }

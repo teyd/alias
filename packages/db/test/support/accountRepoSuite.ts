@@ -21,6 +21,7 @@ import {
   DomainRepo,
   Dynamo,
   OAuthRepo,
+  OutboxRepo,
   RecipientRepo,
   SessionRepo,
   TokenRepo,
@@ -37,6 +38,7 @@ const repos = Layer.mergeAll(
   ContactRepo.layer,
   DomainRepo.layer,
   OAuthRepo.layer,
+  OutboxRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
   TokenRepo.layer,
@@ -50,6 +52,7 @@ type Repos =
   | ContactRepo.ContactRepo
   | DomainRepo.DomainRepo
   | OAuthRepo.OAuthRepo
+  | OutboxRepo.OutboxRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
@@ -78,7 +81,7 @@ const scan = Effect.fn("scan")(function* () {
 /**
  * One user with one of everything the service stores about a user: sessions, tokens, a connected
  * app (its grant, a used and a current refresh token, two access tokens, the redeemed code and
- * one waiting), settings, a recipient, a creation quota, a custom domain, live and deleted aliases
+ * one waiting), a drafted email and a day's send count, settings, a recipient, a creation quota, a custom domain, live and deleted aliases
  * on a shared domain, on their subdomain and on their custom domain, contacts, counters, and a
  * deletion that stopped halfway.
  */
@@ -184,6 +187,27 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     { ...issued(0).refresh, usedAt: Option.none() },
     issued(1),
     at(9_000_000_000_000),
+  );
+  yield* OutboxRepo.OutboxRepo.use((outbox) =>
+    Effect.andThen(
+      outbox.create({
+        id: `drf_${name}`,
+        userId,
+        aliasId: `al_${name}`,
+        aliasDomain: "alias.test",
+        aliasLocal: `${name}-shared`,
+        contactId: "c0ntact00000001x",
+        to: "grace@store.example",
+        contactName: Option.none(),
+        subject: "Hello",
+        text: "Hi",
+        clientName: "Claude",
+        createdAt: at(1_000),
+        pendingUntil: at(9_000_000_000_000),
+        expiresAt: at(9_000_000_000_000),
+      }),
+      outbox.reserveSend(userId, at(1_000), 50),
+    ),
   );
   yield* WebhookRepo.WebhookRepo.use((webhooks) =>
     webhooks.create({

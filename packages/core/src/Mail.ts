@@ -1,4 +1,6 @@
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
+import { Base64 } from "effect/encoding";
 import * as Effect from "effect/Effect";
 import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
@@ -10,7 +12,7 @@ import * as ImageProxy from "./ImageProxy.ts";
 import { decode as decodeWords } from "./internal/encodedWords.ts";
 import * as Headers from "./internal/headers.ts";
 import * as Mime from "./internal/mime.ts";
-import { mailboxField, sanitize } from "./internal/phrase.ts";
+import { mailboxField, sanitize, textField } from "./internal/phrase.ts";
 import { scrub } from "./internal/scrub.ts";
 import * as Trackers from "./internal/trackers.ts";
 
@@ -276,6 +278,37 @@ export const reply = Effect.fn("Mail.reply")(function* (
     `Message-ID: <${options.messageId.replace(/[^\w.-]/g, "")}@${options.alias.domain}>`,
   ]);
 });
+
+/**
+ * A new plain-text message from an alias to a contact (PLAN.md §20.24): `From` the alias, `To` the
+ * contact, a fresh `Message-ID` on the alias's domain like a reply's. The subject is untrusted
+ * text (an assistant wrote it), so it becomes one safe header line, encoded-words where needed;
+ * the body is UTF-8 in base64, which no line of it can break out of. CRLF throughout.
+ */
+export const compose = (message: {
+  readonly alias: Address.MailAddress;
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+  readonly messageId: string;
+  readonly date: DateTime.Utc;
+}): Uint8Array => {
+  const body = Base64.encode(new TextEncoder().encode(message.text.replace(/\r?\n/g, "\r\n")));
+  const lines = [
+    `From: ${Address.format(message.alias)}`,
+    `To: ${sanitize(message.to)}`,
+    textField("Subject", message.subject, "\r\n"),
+    `Date: ${DateTime.toDateUtc(message.date).toUTCString()}`,
+    `Message-ID: <${message.messageId.replace(/[^\w.-]/g, "")}@${message.alias.domain}>`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    ...Arr.map(Arr.chunksOf(Array.from(body), 76), (chunk) => chunk.join("")),
+    "",
+  ];
+  return new TextEncoder().encode(lines.join("\r\n"));
+};
 
 /** What the header block says about where a message came from, for the loop and bounce checks. */
 export interface Signals {

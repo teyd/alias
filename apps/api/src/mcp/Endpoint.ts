@@ -123,15 +123,36 @@ const authenticate = Effect.fn("Mcp.authenticate")(function* () {
   return access.value;
 });
 
-/** A tool call's answer as a `CallToolResult`. */
-const toolResult = (outcome: Tools.Outcome): Result =>
-  outcome.kind === "data"
-    ? {
-        content: [{ type: "text", text: Tools.fence(outcome.summary, outcome.data) }],
-        structuredContent: outcome.data,
-        isError: false,
-      }
-    : { content: [{ type: "text", text: outcome.message }], isError: true };
+/**
+ * A tool call's answer: a `CallToolResult`, or an `InputRequiredResult` (2026-07-28 MRTR) asking
+ * the client to open a URL for its user, then retry with `requestState`.
+ */
+const toolAnswer = (outcome: Tools.Outcome): Answer => {
+  if (outcome.kind === "input-required") {
+    return result(
+      {
+        inputRequests: {
+          approve: {
+            method: "elicitation/create",
+            params: { mode: "url", message: outcome.message, url: outcome.url },
+          },
+        },
+        requestState: outcome.requestState,
+      },
+      false,
+      "input_required",
+    );
+  }
+  return result(
+    outcome.kind === "data"
+      ? {
+          content: [{ type: "text", text: Tools.fence(outcome.summary, outcome.data) }],
+          structuredContent: outcome.data,
+          isError: false,
+        }
+      : { content: [{ type: "text", text: outcome.message }], isError: true },
+  );
+};
 
 const toolList = Arr.map(Tools.tools, (tool) => ({
   name: tool.name,
@@ -151,14 +172,15 @@ type Answer =
       readonly kind: "result";
       readonly result: Result;
       readonly isCacheable: boolean;
+      readonly resultType: "complete" | "input_required";
     }
   | { readonly kind: "error"; readonly code: number; readonly message: string };
 
-const result = (value: Result, isCacheable = false): Answer => ({
-  kind: "result",
-  result: value,
-  isCacheable,
-});
+const result = (
+  value: Result,
+  isCacheable = false,
+  resultType: "complete" | "input_required" = "complete",
+): Answer => ({ kind: "result", result: value, isCacheable, resultType });
 const invalidParams = (message: string): Answer => ({
   kind: "error",
   code: Protocol.ErrorCode.invalidParams,
@@ -168,8 +190,10 @@ const invalidParams = (message: string): Answer => ({
 const callTool = Effect.fn("Mcp.callTool")(function* (
   access: OAuthRepo.Access,
   params: Protocol.Message["params"],
+  canOpenUrl: boolean,
 ) {
   const issuer = yield* Issuer;
+  const oauth = yield* OAuthRepo.OAuthRepo;
   const call = Schema.decodeUnknownOption(Protocol.CallToolParams)(params ?? {});
   if (Option.isNone(call)) return invalidParams("tools/call needs a tool name.");
   const tool = Arr.findFirst(Tools.tools, (candidate) => candidate.name === call.value.name);
@@ -193,18 +217,38 @@ const callTool = Effect.fn("Mcp.callTool")(function* (
       ),
     );
   }
+  const grant = yield* Effect.orDie(oauth.findGrant(access.grantId));
+  const context = Tools.CallContext.of({
+    canOpenUrl,
+    requestState: Option.fromUndefinedOr(call.value.requestState),
+    approval: Option.map(
+      Schema.decodeUnknownOption(Protocol.Approval)(call.value.inputResponses ?? {}),
+      (answer) => answer.approve.action,
+    ),
+    clientName: Option.match(grant, {
+      onNone: () => "An app",
+      onSome: (found) => found.clientName,
+    }),
+    draftUrl: (draftId) => `${issuer.issuer}/outbox/${draftId}`,
+  });
   const outcome = yield* tool.value
     .call(call.value.arguments ?? {})
-    .pipe(Effect.provideService(CurrentUser, { userId: access.userId, username: access.username }));
-  return result(toolResult(outcome));
+    .pipe(
+      Effect.provideService(CurrentUser, { userId: access.userId, username: access.username }),
+      Effect.provideService(Tools.CallContext, context),
+    );
+  return toolAnswer(outcome);
 });
 
 const capabilities = { tools: { listChanged: false } };
 
-/** The methods both eras share. */
-const common = (access: OAuthRepo.Access, message: Protocol.Message) => {
+/**
+ * The methods both eras share. Only modern requests declare capabilities, so only they can be
+ * asked to open a URL; legacy ones would need a server-to-client request on a stream.
+ */
+const common = (access: OAuthRepo.Access, message: Protocol.Message, canOpenUrl: boolean) => {
   if (message.method === "tools/list") return Effect.succeed(result({ tools: toolList }, true));
-  if (message.method === "tools/call") return callTool(access, message.params);
+  if (message.method === "tools/call") return callTool(access, message.params, canOpenUrl);
   return Effect.succeed<Answer>({
     kind: "error",
     code: Protocol.ErrorCode.methodNotFound,
@@ -255,7 +299,7 @@ const modern = Effect.fn("Mcp.modern")(function* (
           },
           true,
         )
-      : yield* common(access, message);
+      : yield* common(access, message, Protocol.canOpenUrl(message.params));
   if (answer.kind === "error") {
     // An unknown method is a 404 on this revision, so clients can tell it from a legacy server.
     const status = answer.code === Protocol.ErrorCode.methodNotFound ? 404 : 200;
@@ -263,7 +307,7 @@ const modern = Effect.fn("Mcp.modern")(function* (
   }
   const complete = {
     ...answer.result,
-    resultType: "complete",
+    resultType: answer.resultType,
     _meta: { [Protocol.META.serverInfo]: SERVER_INFO },
   };
   // Lists are the same for every token of a user, and change only with the server (2026-07-28
@@ -296,7 +340,7 @@ const legacy = Effect.fn("Mcp.legacy")(function* (
     });
   }
   if (message.method === "ping") return rpcResult(id, {});
-  const answer = yield* common(access, message);
+  const answer = yield* common(access, message, false);
   return answer.kind === "error"
     ? rpcError(Option.some(id), answer.code, answer.message, 200)
     : rpcResult(id, answer.result);

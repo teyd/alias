@@ -11,7 +11,8 @@ import { Problem } from "@/components/states";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SCOPE_LABELS, callOAuth, consentQuery, redirectOf } from "@/lib/oauth";
+import { callOAuth, consentQuery, redirectOf } from "@/lib/oauth";
+import { SCOPE_LABELS } from "@/lib/scopes";
 import { meQuery } from "@/lib/session";
 
 /**

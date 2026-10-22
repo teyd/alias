@@ -70,6 +70,7 @@ export const modernRequest = (
   id: number,
   method: string,
   params: Readonly<Record<string, Schema.Json>> = {},
+  capabilities: Readonly<Record<string, Schema.Json>> = {},
 ) => ({
   jsonrpc: "2.0",
   id,
@@ -79,7 +80,7 @@ export const modernRequest = (
     _meta: {
       "io.modelcontextprotocol/protocolVersion": "2026-07-28",
       "io.modelcontextprotocol/clientInfo": { name: "test", version: "1" },
-      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientCapabilities": capabilities,
     },
   },
 });
@@ -95,16 +96,21 @@ export const post = (
     headers: { authorization: `Bearer ${token}`, ...headers },
   }).post("/mcp", body);
 
-/** A modern `tools/call`, headers and all. */
+/**
+ * A modern `tools/call`, headers and all. `extra` adds params (MRTR's `requestState` and
+ * `inputResponses`); `capabilities` is what the client declares.
+ */
 export const callTool = (
   api: Api,
   token: string,
   name: string,
   args: Readonly<Record<string, Schema.Json>> = {},
+  extra: Readonly<Record<string, Schema.Json>> = {},
+  capabilities: Readonly<Record<string, Schema.Json>> = {},
 ) =>
   post(
     api,
     token,
-    modernRequest(7, "tools/call", { name, arguments: args }),
+    modernRequest(7, "tools/call", { name, arguments: args, ...extra }, capabilities),
     modernHeaders("tools/call", name),
   );

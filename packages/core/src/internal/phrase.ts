@@ -48,6 +48,34 @@ const encodedWords = (text: string): ReadonlyArray<string> =>
     (chunk) => `=?UTF-8?B?${Base64.encode(utf8(chunk))}?=`,
   );
 
+/** `name:` and `tokens`, separated by spaces and folded before a token that would pass 78. */
+const fold = (name: string, tokens: ReadonlyArray<string>, lineEnding: LineEnding): string =>
+  Arr.reduce(
+    tokens,
+    { text: `${name}:`, column: name.length + 1, isLineStart: true },
+    (line, token) =>
+      !line.isLineStart && line.column + 1 + token.length > MAX_LINE
+        ? {
+            text: `${line.text}${lineEnding} ${token}`,
+            column: 1 + token.length,
+            isLineStart: false,
+          }
+        : {
+            text: `${line.text} ${token}`,
+            column: line.column + 1 + token.length,
+            isLineStart: false,
+          },
+  ).text;
+
+/**
+ * A complete unstructured field (`Subject`) holding untrusted `text`: made one safe line
+ * ({@link sanitize}), then printable ASCII as words, anything else as encoded-words, folded.
+ */
+export const textField = (name: string, text: string, lineEnding: LineEnding): string => {
+  const safe = sanitize(text);
+  return fold(name, isPlainAscii(safe) ? safe.split(" ") : encodedWords(safe), lineEnding);
+};
+
 /**
  * A complete `name: display <address>` field, folded at whitespace to stay within 78
  * characters where it can. The display name is quoted when it is short printable ASCII and
@@ -64,20 +92,5 @@ export const mailboxField = (
     isPlainAscii(display) && name.length + 2 + quoted.length <= MAX_LINE
       ? [quoted]
       : encodedWords(display);
-  return Arr.reduce(
-    [...phrase, `<${address}>`],
-    { text: `${name}:`, column: name.length + 1, isLineStart: true },
-    (line, token) =>
-      !line.isLineStart && line.column + 1 + token.length > MAX_LINE
-        ? {
-            text: `${line.text}${lineEnding} ${token}`,
-            column: 1 + token.length,
-            isLineStart: false,
-          }
-        : {
-            text: `${line.text} ${token}`,
-            column: line.column + 1 + token.length,
-            isLineStart: false,
-          },
-  ).text;
+  return fold(name, [...phrase, `<${address}>`], lineEnding);
 };

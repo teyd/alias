@@ -172,6 +172,14 @@ describe("Policy.sender", () => {
   );
 });
 
+describe("Policy.isStorableAddress", () => {
+  it("accepts addresses up to RFC 5321's 254 octets, counted in UTF-8", () => {
+    expect(Policy.isStorableAddress(`${"a".repeat(240)}@store.example`)).toBe(true);
+    expect(Policy.isStorableAddress(`${"a".repeat(241)}@store.example`)).toBe(false);
+    expect(Policy.isStorableAddress(`${"ü".repeat(121)}@store.example`)).toBe(false);
+  });
+});
+
 describe("Policy.rejectReply", () => {
   const owner = [
     recipient("ada@mail.example"),

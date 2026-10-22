@@ -1,5 +1,6 @@
 import * as Arr from "effect/Array";
 import * as Brand from "effect/Brand";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -109,6 +110,15 @@ const sign = (key: Key, alias: Address.MailAddress, unsigned: Uint8Array) =>
     Redacted.value(key.secret),
     concat([DOMAIN_SEPARATOR, utf8(Address.format(alias)), new Uint8Array([0]), unsigned]),
   ).pipe(Effect.map((mac) => mac.subarray(0, MAC_BYTES)));
+
+/**
+ * A fresh contact id for {@link mint}: 80 random bits as 16 lowercase base32 characters. Short,
+ * so a reverse alias stays short however long the contact's own address is, and unguessable, so
+ * a deleted contact's id is never handed out again.
+ */
+export const newContactId = Effect.fn("ReverseToken.newContactId")(function* () {
+  return Base32.encode(yield* (yield* Crypto.Crypto).randomBytes(10));
+});
 
 const hasLoneSurrogate = (text: string) => /\p{Surrogate}/u.test(text);
 

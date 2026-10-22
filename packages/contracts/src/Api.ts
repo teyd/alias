@@ -68,6 +68,25 @@ export class AliasNotFound extends Schema.TaggedError<AliasNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
+/** Someone who wrote to an alias. Replies through its reverse alias reach it unless blocked. */
+const Contact = Schema.Struct({
+  id: Schema.String,
+  address: Schema.String,
+  /** The display name it first wrote with. */
+  name: Schema.OptionFromOptionalKey(Schema.String),
+  /** Mail from a blocked contact is dropped (and counted as blocked), and so are replies to it. */
+  isBlocked: Schema.Boolean,
+  createdAt: Schema.DateTimeUtcFromString,
+});
+export type Contact = typeof Contact.Type;
+
+/** No such contact on this alias. */
+export class ContactNotFound extends Schema.TaggedError<ContactNotFound>()(
+  "ContactNotFound",
+  { contactId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
 const SystemGroup = HttpApiGroup.make("system").add(
   HttpApiEndpoint.get("health", "/health", { success: Health }),
 );
@@ -112,10 +131,43 @@ const AliasesGroup = HttpApiGroup.make("aliases")
   .middleware(Authentication)
   .prefix("/v1");
 
+const ContactAddress = { ...AliasAddress, contactId: Schema.String };
+
+/**
+ * An alias's contacts, created as people write to it. Signed-in only, on the caller's own aliases;
+ * other users' aliases answer `AliasNotFound`. Deleting a contact revokes its reverse alias; if it
+ * writes again, it becomes a new contact with a new one.
+ */
+const ContactsGroup = HttpApiGroup.make("contacts")
+  .add(
+    HttpApiEndpoint.get("list", "/aliases/:domain/:local/contacts", {
+      params: AliasAddress,
+      success: Schema.Array(Contact),
+      error: AliasNotFound,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.patch("update", "/aliases/:domain/:local/contacts/:contactId", {
+      params: ContactAddress,
+      payload: Schema.Struct({ isBlocked: Schema.Boolean }),
+      success: Contact,
+      error: [AliasNotFound, ContactNotFound],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("remove", "/aliases/:domain/:local/contacts/:contactId", {
+      params: ContactAddress,
+      error: [AliasNotFound, ContactNotFound],
+    }),
+  )
+  .middleware(Authentication)
+  .prefix("/v1");
+
 export const Api = HttpApi.make("alias")
   .add(SystemGroup)
   .add(AuthGroup)
   .add(AccountGroup)
   .add(AliasesGroup)
+  .add(ContactsGroup)
   .add(RecipientsGroup)
   .add(SettingsGroup);

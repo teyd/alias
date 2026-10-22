@@ -2,6 +2,7 @@ import { Api } from "@alias/contracts";
 import {
   AliasRepo,
   ChallengeRepo,
+  ContactRepo,
   type Dynamo,
   PasskeyRepo,
   RecipientRepo,
@@ -17,6 +18,7 @@ import type { Transport } from "@alias/aws";
 import type { SharedDomains } from "@alias/core";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
+import { ContactsLive } from "./contacts.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
@@ -29,6 +31,7 @@ const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
 
 const Repositories = Layer.mergeAll(
   AliasRepo.layer,
+  ContactRepo.layer,
   UserRepo.layer,
   PasskeyRepo.layer,
   SessionRepo.layer,
@@ -49,7 +52,15 @@ export type Services =
  * elsewhere.
  */
 const ApiLive = HttpApiBuilder.layer(Api).pipe(
-  Layer.provide([SystemLive, AuthLive, AccountLive, AliasesLive, RecipientsLive, SettingsLive]),
+  Layer.provide([
+    SystemLive,
+    AuthLive,
+    AccountLive,
+    AliasesLive,
+    ContactsLive,
+    RecipientsLive,
+    SettingsLive,
+  ]),
   Layer.provide(authenticationLayer),
   Layer.provide(Repositories),
   Layer.provide([HttpServer.layerServices, NodeCrypto.layer]),

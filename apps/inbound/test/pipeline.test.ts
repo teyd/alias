@@ -1,7 +1,7 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains, Username } from "@alias/core";
-import { AliasRepo, RecipientRepo, UserRepo } from "@alias/db";
+import { ReverseToken, SharedDomains, Username } from "@alias/core";
+import { AliasRepo, ContactRepo, RecipientRepo, UserRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
@@ -202,6 +202,21 @@ const subdomainOwner = Effect.fn("subdomainOwner")(function* (isOnTheFlyEnabled:
 
 const aliasAt = (domain: string, localPart: string) =>
   AliasRepo.AliasRepo.use((repo) => repo.findByAddress(domain, localPart));
+
+const contacts = ContactRepo.ContactRepo.use((repo) => repo.list("al_shop"));
+
+/** Forwards one message from `from` to shop@alias.test and returns the reverse alias it got. */
+const forwardFrom = Effect.fn("forwardFrom")(function* (from: string) {
+  const { event } = yield* receive({ from, recipients: ["shop@alias.test"] });
+  const outcomes = yield* Pipeline.handle(event);
+  return { outcomes, reverse: Arr.last(yield* sent).pipe(Option.map((email) => email.from)) };
+});
+
+/** The owner, authenticated, replies to `reverse`. */
+const replyTo = Effect.fn("replyTo")(function* (reverse: string) {
+  const { event } = yield* receive({ from: "ada@mail.example", recipients: [reverse] });
+  return yield* Pipeline.handle(event);
+});
 
 const sent = FakeCloud.sentEmails();
 
@@ -645,6 +660,144 @@ describe("inbound pipeline (fakecloud)", () => {
         expect(yield* sent).toHaveLength(2);
       }),
     ),
+  );
+
+  it.effect("creates a contact on a sender's first message and keeps its reverse alias", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const first = yield* forwardFrom('"Shop" <Orders@Store.example>');
+        const second = yield* forwardFrom("orders@store.example");
+
+        expect([first.outcomes, second.outcomes]).toEqual([
+          [{ _tag: "Forwarded" }],
+          [{ _tag: "Forwarded" }],
+        ]);
+        expect(second.reverse).toEqual(first.reverse);
+        expect(yield* contacts).toEqual([
+          expect.objectContaining({
+            address: "Orders@Store.example",
+            name: Option.some("Shop"),
+            isBlocked: false,
+          }),
+        ]);
+
+        expect(yield* replyTo(Option.getOrElse(first.reverse, () => ""))).toEqual([
+          { _tag: "Replied" },
+        ]);
+        expect(Arr.last(yield* sent).pipe(Option.map((email) => email.to))).toEqual(
+          Option.some(["Orders@Store.example"]),
+        );
+      }),
+    ),
+  );
+
+  it.effect("drops a blocked contact's mail as blocked, and replies to it", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const { reverse } = yield* forwardFrom("spammy@store.example");
+        const [contact] = yield* contacts;
+        yield* ContactRepo.ContactRepo.use((repo) =>
+          repo.setBlocked("al_shop", contact?.id ?? "", true),
+        );
+
+        expect((yield* forwardFrom("spammy@store.example")).outcomes).toEqual([
+          { _tag: "Dropped", reason: "blocked-contact" },
+        ]);
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([
+          { _tag: "Dropped", reason: "blocked-contact" },
+        ]);
+        expect(yield* sent).toHaveLength(1);
+        expect(yield* counters).toEqual(Option.some([1, 1]));
+
+        // Unblocked, both directions work again.
+        yield* ContactRepo.ContactRepo.use((repo) =>
+          repo.setBlocked("al_shop", contact?.id ?? "", false),
+        );
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([{ _tag: "Replied" }]);
+      }),
+    ),
+  );
+
+  it.effect("drops replies to a deleted contact, even after the sender writes again", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const old = yield* forwardFrom("orders@store.example");
+        const [contact] = yield* contacts;
+        yield* ContactRepo.ContactRepo.use((repo) => repo.delete("al_shop", contact?.id ?? ""));
+
+        expect(yield* replyTo(Option.getOrElse(old.reverse, () => ""))).toEqual([
+          { _tag: "Dropped", reason: "unknown-contact" },
+        ]);
+        const fresh = yield* forwardFrom("orders@store.example");
+        expect(fresh.reverse).not.toEqual(old.reverse);
+        expect(yield* replyTo(Option.getOrElse(old.reverse, () => ""))).toEqual([
+          { _tag: "Dropped", reason: "unknown-contact" },
+        ]);
+        expect(yield* replyTo(Option.getOrElse(fresh.reverse, () => ""))).toEqual([
+          { _tag: "Replied" },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("gives long sender addresses a short reverse alias that replies reach", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const long = `${"newsletter.".repeat(18)}x@bounces.mail.store.example`;
+        expect(long.length).toBeGreaterThan(200);
+        const { outcomes, reverse } = yield* forwardFrom(long);
+
+        expect(outcomes).toEqual([{ _tag: "Forwarded" }]);
+        // Within RFC 5321's 64-octet local part, which a sender-carrying token couldn't be.
+        expect(Option.getOrElse(reverse, () => "").split("@")[0]?.length).toBeLessThanOrEqual(64);
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([{ _tag: "Replied" }]);
+        expect(Arr.last(yield* sent).pipe(Option.map((email) => email.to))).toEqual(
+          Option.some([long]),
+        );
+        // Longer than any real address: nothing to key a contact by.
+        const absurd = yield* forwardFrom(`${"x".repeat(250)}@store.example`);
+        expect(absurd.outcomes).toEqual([{ _tag: "Dropped", reason: "unencodable-sender" }]);
+      }),
+    ),
+  );
+
+  it.effect(
+    "keeps verifying reverse aliases minted before contacts, unless the sender is blocked",
+    () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* alias();
+          yield* recipient("ada@mail.example");
+          const keyring = yield* ReverseKeys.parse(keys);
+          const legacy = yield* ReverseToken.mint(
+            keyring,
+            { local: "shop", domain: "alias.test" },
+            { sender: Option.some("old@store.example"), contactId: Option.none() },
+          );
+          const reverse = `shop+r.${legacy}@alias.test`;
+
+          expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
+          expect(Arr.last(yield* sent).pipe(Option.map((email) => email.to))).toEqual(
+            Option.some(["old@store.example"]),
+          );
+
+          // The same sender writes again, becomes a contact, and the owner blocks it.
+          yield* forwardFrom("old@store.example");
+          const [contact] = yield* contacts;
+          yield* ContactRepo.ContactRepo.use((repo) =>
+            repo.setBlocked("al_shop", contact?.id ?? "", true),
+          );
+          expect(yield* replyTo(reverse)).toEqual([{ _tag: "Dropped", reason: "blocked-contact" }]);
+        }),
+      ),
   );
 
   it.effect("drops what SES refuses for the message itself", () =>

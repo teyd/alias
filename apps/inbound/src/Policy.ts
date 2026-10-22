@@ -26,10 +26,14 @@ export const DropReason = Schema.Literals([
   "spam",
   // Neither a `From` address nor an envelope sender to reply to.
   "no-sender",
-  // The sender address is too long for a reverse alias; contacts (phase 4) will fix that.
+  // The sender address is longer than any real address (RFC 5321: 254 octets).
   "unencodable-sender",
+  // Mail from a contact the owner blocked, or a reply to one.
+  "blocked-contact",
   // A reverse alias whose token we didn't sign for this alias.
   "bad-token",
+  // A reverse alias whose contact was deleted.
+  "unknown-contact",
   // A reply without DKIM and DMARC passing: the owner's address may be spoofed.
   "unauthenticated-reply",
   // A reply from someone other than the alias owner's verified recipients.
@@ -86,6 +90,13 @@ export const forwardTarget = (
     recipients,
     (recipient) => recipient.isDefault && Option.isSome(recipient.verifiedAt),
   );
+
+/** RFC 5321 §4.5.3.1.3: a path holds at most 256 octets, so an address at most 254. */
+const MAX_ADDRESS_BYTES = 254;
+
+/** An address short enough to be a real one, and so to key a contact by. */
+export const isStorableAddress = (address: string): boolean =>
+  new TextEncoder().encode(address).length <= MAX_ADDRESS_BYTES;
 
 /** Who wrote the mail: the first `From` mailbox SES parsed, else the envelope sender. */
 export const sender = (mail: SesEvent.SesMail): Option.Option<Mail.Sender> =>

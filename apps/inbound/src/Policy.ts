@@ -15,6 +15,8 @@ export const DropReason = Schema.Literals([
   // Not a valid address, or a domain we don't serve yet.
   "unroutable",
   "unknown-alias",
+  // Past the owner's daily allowance of aliases created on the fly.
+  "creation-limited",
   "inactive-alias",
   // Inbox mode (temp mail) stores mail instead of forwarding it: roadmap phase 7.
   "inbox-mode",

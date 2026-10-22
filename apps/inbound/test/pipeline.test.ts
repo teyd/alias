@@ -1,7 +1,7 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains } from "@alias/core";
-import { AliasRepo, RecipientRepo } from "@alias/db";
+import { SharedDomains, Username } from "@alias/core";
+import { AliasRepo, RecipientRepo, UserRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
@@ -180,6 +180,28 @@ const recipient = Effect.fn("recipient")(function* (
     );
   }
 });
+
+/** Registers `user1` the way the API does, with on-the-fly aliases on or off. */
+const subdomainOwner = Effect.fn("subdomainOwner")(function* (isOnTheFlyEnabled: boolean) {
+  const users = yield* UserRepo.UserRepo;
+  const createdAt = DateTime.makeUnsafe(0);
+  yield* users.register(
+    { id: "usr_1", username: yield* Username.parse("user1"), createdAt },
+    {
+      id: "cred_1",
+      userId: "usr_1",
+      publicKey: new Uint8Array([1]),
+      counter: 0,
+      transports: [],
+      createdAt,
+    },
+  );
+  yield* users.updateSettings("usr_1", { isOnTheFlyEnabled });
+  yield* recipient("ada@mail.example");
+});
+
+const aliasAt = (domain: string, localPart: string) =>
+  AliasRepo.AliasRepo.use((repo) => repo.findByAddress(domain, localPart));
 
 const sent = FakeCloud.sentEmails();
 
@@ -507,6 +529,120 @@ describe("inbound pipeline (fakecloud)", () => {
         expect(yield* sent).toHaveLength(1);
         // Only the alias's own mail is counted; refused replies never were.
         expect(yield* counters).toEqual(Option.some([1, 0]));
+      }),
+    ),
+  );
+
+  it.effect("creates an alias on the fly for mail to a new address on an opted-in subdomain", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        const first = yield* receive({ recipients: ["New@User1.alias.test"] });
+        const again = yield* receive({ recipients: ["new@user1.alias.test"] });
+
+        expect(yield* Pipeline.handle(first.event)).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* aliasAt("user1.alias.test", "new")).toEqual(
+          Option.some(
+            expect.objectContaining({
+              userId: "usr_1",
+              mode: "forward",
+              isActive: true,
+              forwardedCount: 1,
+            }),
+          ),
+        );
+        expect(yield* Pipeline.handle(again.event)).toEqual([{ _tag: "Forwarded" }]);
+        const forwardedFrom = Arr.map(yield* sent, (email) => email.from);
+        expect(forwardedFrom).toEqual([
+          expect.stringMatching(/^new\+r\.[a-z2-7]+@user1\.alias\.test$/),
+          expect.stringMatching(/^new\+r\.[a-z2-7]+@user1\.alias\.test$/),
+        ]);
+        expect(yield* AliasRepo.AliasRepo.use((repo) => repo.listByUser("usr_1"))).toHaveLength(1);
+      }),
+    ),
+  );
+
+  it.effect("creates nothing unless the subdomain's owner opted in", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(false);
+        const { event } = yield* receive({
+          recipients: ["new@user1.alias.test", "new@nobody.alias.test", "new@alias.test"],
+        });
+
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+          { _tag: "Dropped", reason: "unknown-alias" },
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* aliasAt("user1.alias.test", "new")).toEqual(Option.none());
+        expect(yield* sent).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("never creates an alias for spam, a virus or a reverse alias", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        const spam = yield* receive({
+          recipients: ["spam@user1.alias.test"],
+          verdicts: { spam: "FAIL" },
+        });
+        const virus = yield* receive({
+          recipients: ["virus@user1.alias.test"],
+          verdicts: { virus: "FAIL" },
+        });
+        const reply = yield* receive({ recipients: ["reply+r.abcd@user1.alias.test"] });
+
+        expect(yield* Pipeline.handle(spam.event)).toEqual([{ _tag: "Dropped", reason: "spam" }]);
+        expect(yield* Pipeline.handle(virus.event)).toEqual([{ _tag: "Dropped", reason: "virus" }]);
+        expect(yield* Pipeline.handle(reply.event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* AliasRepo.AliasRepo.use((repo) => repo.listByUser("usr_1"))).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("caps aliases created on the fly per user and day; existing ones keep working", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        const outcomes = yield* Effect.forEach(
+          ["one@user1.alias.test", "two@user1.alias.test", "one@user1.alias.test"],
+          (address) =>
+            Effect.flatMap(receive({ recipients: [address] }), ({ event }) =>
+              Pipeline.handle(event),
+            ),
+          { concurrency: 1 },
+        );
+
+        expect(Arr.flatten(outcomes)).toEqual([
+          { _tag: "Forwarded" },
+          { _tag: "Dropped", reason: "creation-limited" },
+          { _tag: "Forwarded" },
+        ]);
+        expect(yield* aliasAt("user1.alias.test", "two")).toEqual(Option.none());
+      }),
+      { ...Limits.defaults, aliasesCreatedPerDay: 1 },
+    ),
+  );
+
+  it.effect("creates one alias when two messages to a new address arrive at once", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        const first = yield* receive({ recipients: ["race@user1.alias.test"] });
+        const second = yield* receive({ recipients: ["race@user1.alias.test"] });
+
+        const outcomes = yield* Effect.all(
+          [Pipeline.handle(first.event), Pipeline.handle(second.event)],
+          { concurrency: 2 },
+        );
+        expect(outcomes).toEqual([[{ _tag: "Forwarded" }], [{ _tag: "Forwarded" }]]);
+        expect(yield* AliasRepo.AliasRepo.use((repo) => repo.listByUser("usr_1"))).toHaveLength(1);
+        expect(yield* sent).toHaveLength(2);
       }),
     ),
   );

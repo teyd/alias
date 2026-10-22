@@ -7,8 +7,11 @@
  *
  * The demo alias belongs to a demo user with one verified forwarding address, so mail sent to it
  * over SMTP comes out forwarded in fakecloud's sent mail.
+ *
+ * Dev-only hook: when someone signs up, their subdomain of each shared domain is verified as its
+ * own SES identity on fakecloud (see `verifySubdomains`).
  */
-import { AwsClient, Transport } from "@alias/aws";
+import { AwsClient, type FunctionUrl, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
 import { AliasRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
@@ -18,6 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import { MailSettings, makeFunctionUrlHandler, RelyingParty } from "../src/index.ts";
 
 const port = Number(process.env.ALIAS_API_PORT ?? 8787);
@@ -34,6 +38,29 @@ const relyingParty = RelyingParty.layer({
 });
 /** Where the demo alias forwards to. Read it in fakecloud's sent mail; nothing leaves the machine. */
 const demoRecipient = process.env.ALIAS_DEV_RECIPIENT ?? "demo@mailbox.test";
+
+const Registered = Schema.fromJsonString(Schema.Struct({ username: Schema.String }));
+
+/**
+ * fakecloud doesn't let a verified domain cover its subdomains, while AWS does (PLAN.md §20.5).
+ * Without this, mail to aliases on a new user's subdomain (`shop@ada.alias.test`) would be
+ * forwarded by the pipeline and then refused by fakecloud's SES as an unverified sender. So,
+ * in dev only, a successful sign-up verifies `<username>.<shared domain>` for every shared
+ * domain. Production needs nothing of the kind: the shared domain's identity covers them all.
+ */
+const verifySubdomains = Effect.fn("api.dev.verifySubdomains")(function* (
+  event: FunctionUrl.FunctionUrlEvent,
+  result: FunctionUrl.FunctionUrlResult,
+) {
+  if (event.rawPath !== "/v1/auth/register" || result.statusCode !== 200) return;
+  const { username } = yield* Schema.decodeUnknownEffect(Registered)(result.body ?? "");
+  const domains = yield* SharedDomains.SharedDomains;
+  yield* Effect.forEach(domains, (domain) => Transport.ensureIdentity(`${username}.${domain}`), {
+    concurrency: 1,
+    discard: true,
+  });
+  yield* Effect.logInfo(`dev: verified ${username}'s subdomains as SES identities`);
+});
 
 const seed = Effect.fn("api.dev.seed")(function* () {
   yield* Table.ensure();
@@ -77,9 +104,20 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
   const { handle } = makeFunctionUrlHandler(Layer.mergeAll(database, relyingParty, mail));
+  const devHooks = Layer.merge(sharedDomains, AwsClient.emulator(fakecloudUrl));
   const server = yield* FunctionUrlServer.make({
     port,
-    handler: (event) => Effect.runPromise(handle(event)),
+    handler: (event) =>
+      Effect.runPromise(
+        handle(event).pipe(
+          Effect.tap((result) =>
+            verifySubdomains(event, result).pipe(
+              Effect.catch((error) => Effect.logError("dev: subdomain verification failed", error)),
+            ),
+          ),
+          Effect.provide(devHooks),
+        ),
+      ),
     functionName: "alias-api",
   });
   yield* Effect.logInfo(

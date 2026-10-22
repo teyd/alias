@@ -96,6 +96,15 @@ export class AliasRepo extends Context.Service<
       now: DateTime.Utc,
       maxPerHour: number,
     ) => Effect.Effect<boolean, DatabaseError>;
+    /**
+     * Counts one alias created on the fly (by mail to the user's subdomain) against the user's
+     * allowance of `maxPerDay` for the UTC day `now` falls in. False when it is used up.
+     */
+    readonly reserveCreation: (
+      userId: string,
+      now: DateTime.Utc,
+      maxPerDay: number,
+    ) => Effect.Effect<boolean, DatabaseError>;
   }
 >()("@alias/db/AliasRepo") {}
 
@@ -112,6 +121,12 @@ const forwardQuotaKey = (domain: string, localPart: string, hour: string) => ({
 });
 
 const userKey = (userId: string) => `USER#${userId}`;
+
+/** The user's count of aliases created on the fly in one UTC day, in their partition. */
+const creationQuotaKey = (userId: string, day: string) => ({
+  pk: { S: userKey(userId) },
+  sk: { S: `ALIASES#${day}` },
+});
 
 /** Zero-padded so string order on the index matches creation order. */
 const userSortKey = (alias: NewAlias) =>
@@ -293,6 +308,13 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         hour,
         maxPerHour,
       ).pipe(Effect.provide(client));
+    },
+
+    reserveCreation: (userId, now, maxPerDay) => {
+      const day = Quota.window(now, "day");
+      return Quota.reserve(table, creationQuotaKey(userId, day.label), day, maxPerDay).pipe(
+        Effect.provide(client),
+      );
     },
   });
 });

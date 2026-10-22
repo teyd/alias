@@ -236,6 +236,30 @@ export const aliasRepoSuite = (
           }).pipe(Effect.provide(AliasRepo.layer.pipe(Layer.provideMerge(freshTable())))),
       );
 
+      it.effect(
+        "allows up to the daily on-the-fly creations per user, and the next day afresh",
+        () =>
+          withRepo(
+            Effect.gen(function* () {
+              const repo = yield* AliasRepo.AliasRepo;
+              const morning = at("2026-10-22T00:00:00Z");
+              const night = at("2026-10-22T23:59:59Z");
+              const results = yield* Effect.all(
+                Arr.replicate(repo.reserveCreation("usr_1", morning, 3), 5),
+                { concurrency: "unbounded" },
+              );
+              expect(results.filter((isReserved) => isReserved)).toHaveLength(3);
+              expect(yield* repo.reserveCreation("usr_1", night, 3)).toBe(false);
+              expect(yield* repo.reserveCreation("usr_2", night, 3)).toBe(true);
+              expect(yield* repo.reserveCreation("usr_1", at("2026-10-23T00:00:00Z"), 3)).toBe(
+                true,
+              );
+              // The quota never shows up as an alias.
+              expect(yield* repo.listByUser("usr_1")).toEqual([]);
+            }),
+          ),
+      );
+
       it.effect("counting a deleted alias fails instead of recreating it", () =>
         withRepo(
           Effect.gen(function* () {

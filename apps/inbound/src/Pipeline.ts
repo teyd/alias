@@ -1,6 +1,13 @@
 import { type Inbound, type SesEvent, Transport } from "@alias/aws";
 import { Address, Mail, ReverseToken, SharedDomains } from "@alias/core";
-import { AliasRepo, type DatabaseError, DeliveryRepo, type Dynamo, RecipientRepo } from "@alias/db";
+import {
+  AliasRepo,
+  type DatabaseError,
+  DeliveryRepo,
+  type Dynamo,
+  RecipientRepo,
+  UserRepo,
+} from "@alias/db";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -10,6 +17,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Limits from "./Limits.ts";
 import * as Policy from "./Policy.ts";
@@ -161,6 +169,50 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   });
 });
 
+/**
+ * Creates the alias for mail to an unknown address on a user's subdomain, if that user opted in
+ * (PLAN.md §3.2 step 1). Spam and viruses never create one, and each user may create only
+ * `Limits.aliasesCreatedPerDay` this way. A concurrent creation of the same address is fine:
+ * both then use the one that was stored.
+ */
+const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
+  record: Record,
+  address: Address.MailAddress,
+  username: string,
+) {
+  const users = yield* UserRepo.UserRepo;
+  const aliases = yield* AliasRepo.AliasRepo;
+  const owner = yield* users.findByUsername(username);
+  if (Option.isNone(owner)) return Result.fail<Policy.DropReason>("unknown-alias");
+  if (!(yield* users.settings(owner.value.id)).isOnTheFlyEnabled) {
+    return Result.fail<Policy.DropReason>("unknown-alias");
+  }
+  const screened = Policy.screen(record.ses.receipt, "drop");
+  if (Option.isSome(screened)) return Result.fail<Policy.DropReason>(screened.value);
+  const now = yield* DateTime.now;
+  const { aliasesCreatedPerDay } = yield* Limits.Limits;
+  if (!(yield* aliases.reserveCreation(owner.value.id, now, aliasesCreatedPerDay))) {
+    return Result.fail<Policy.DropReason>("creation-limited");
+  }
+  const ulid = yield* Effect.orDie((yield* Crypto.Crypto).randomULID);
+  yield* aliases
+    .insert({
+      id: `al_${ulid.toLowerCase()}`,
+      userId: owner.value.id,
+      domain: address.domain,
+      localPart: address.local,
+      mode: "forward",
+      createdAt: DateTime.toEpochMillis(now),
+    })
+    .pipe(Effect.catchTag("AliasTaken", () => Effect.void));
+  yield* Effect.logInfo("inbound alias created on the fly");
+  const created = yield* aliases.findByAddress(address.domain, address.local);
+  return Option.match(created, {
+    onNone: () => Result.fail<Policy.DropReason>("unknown-alias"),
+    onSome: Result.succeed,
+  });
+});
+
 /** Decides what to do for one recipient. Reads the table, never the message. */
 const plan = Effect.fn("Pipeline.plan")(function* (record: Record, recipient: string) {
   const routed = yield* route(recipient, yield* SharedDomains.SharedDomains);
@@ -169,8 +221,15 @@ const plan = Effect.fn("Pipeline.plan")(function* (record: Record, recipient: st
     routed.alias.domain,
     routed.alias.local,
   );
-  if (Option.isNone(found)) return Plan.Drop({ reason: "unknown-alias" });
-  const alias = found.value;
+  const resolved = yield* Option.match(found, {
+    onSome: (alias) => Effect.succeed(Result.succeed(alias)),
+    onNone: () =>
+      Route.$is("Forward")(routed) && Option.isSome(routed.username)
+        ? createOnTheFly(record, routed.alias, routed.username.value)
+        : Effect.succeed(Result.fail<Policy.DropReason>("unknown-alias")),
+  });
+  if (Result.isFailure(resolved)) return Plan.Drop({ reason: resolved.failure });
+  const alias = resolved.success;
   if (!alias.isActive) return Plan.Block({ alias, reason: "inactive-alias" });
   const screened = Policy.screen(record.ses.receipt, Policy.spamAction(alias));
   if (Option.isSome(screened)) return Plan.Block({ alias, reason: screened.value });
@@ -308,6 +367,7 @@ export const layer = <E, R>(
     AliasRepo.layer,
     RecipientRepo.layer,
     DeliveryRepo.layer,
+    UserRepo.layer,
     NodeCrypto.layer,
     Layer.succeed(Limits.Limits, limits),
   ).pipe(Layer.provideMerge(services));

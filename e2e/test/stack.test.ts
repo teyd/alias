@@ -104,12 +104,20 @@ const stack = Layer.mergeAll(api.pipe(Layer.provide(database)), inbound, ses, aw
 );
 
 /** A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. */
-const call = (path: string, init: { readonly body?: Schema.Json; readonly cookie?: string } = {}) =>
+const call = (
+  path: string,
+  init: {
+    readonly body?: Schema.Json;
+    readonly cookie?: string;
+    readonly method?: "GET" | "POST" | "PATCH";
+  } = {},
+) =>
   Effect.gen(function* () {
     const { url } = yield* FunctionUrlServer.FunctionUrlServer;
     const headers = new Headers({ "content-type": "application/json", origin });
     if (init.cookie !== undefined) headers.set("cookie", init.cookie);
-    const request: RequestInit = { method: init.body === undefined ? "GET" : "POST", headers };
+    const method = init.method ?? (init.body === undefined ? "GET" : "POST");
+    const request: RequestInit = { method, headers };
     if (init.body !== undefined) request.body = JSON.stringify(init.body);
     const response = yield* Effect.promise(() => fetch(`${url}${path}`, request));
     const text = yield* Effect.promise(() => response.text());
@@ -423,6 +431,44 @@ describe("emulated stack", () => {
         // The confirmation mail and the one forward; nothing went back to the shop.
         expect(yield* sentTo(dora.mailbox)).toHaveLength(2);
         expect(yield* sentTo("news@shop.example")).toEqual([]);
+      }),
+    );
+
+    it.effect("forwards the first mail to a new address on my subdomain once I opt in", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const erin = yield* owner("erin");
+        const mail = (to: string) =>
+          smtp({ from: "hello@club.example", to, subject: "Welcome", text: "Glad you joined." });
+
+        expect(yield* invoke(yield* mail("club@erin.alias.test"))).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+
+        const enabled = yield* call("/v1/settings", {
+          cookie: erin.cookie,
+          method: "PATCH",
+          body: { isOnTheFlyEnabled: true },
+        });
+        expect(enabled).toMatchObject({ status: 200, body: { isOnTheFlyEnabled: true } });
+
+        expect(yield* invoke(yield* mail("Club@Erin.alias.test"))).toEqual([{ _tag: "Forwarded" }]);
+        const forwarded = (yield* sentTo(erin.mailbox)).at(-1);
+        expect(forwarded?.from).toMatch(/^club\+r\.[a-z2-7]+@erin\.alias\.test$/);
+        expect(forwarded?.text).toContain("Glad you joined.");
+
+        // The new alias is the user's own, like one made in the web app.
+        const listed = yield* call("/v1/aliases", { cookie: erin.cookie });
+        expect(listed.body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ address: "club@erin.alias.test", isActive: true }),
+          ]),
+        );
+
+        // Someone else's subdomain is not mine to fill.
+        expect(yield* invoke(yield* mail("club@frank.alias.test"))).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
       }),
     );
 

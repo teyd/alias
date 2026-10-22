@@ -35,9 +35,23 @@ export interface UserSettings {
    * of being dropped. Opt-in: off by default.
    */
   readonly isOnTheFlyEnabled: boolean;
+  /**
+   * What forwarding does with remote images (PLAN.md §20.19): `block-trackers` removes tracking
+   * pixels and images from known trackers, the default; `off` leaves every image alone.
+   */
+  readonly imageProtection: ImageProtection;
+  /** Forwarding strips click-tracking parameters from links. Off by default: it may break some. */
+  readonly isLinkCleaningEnabled: boolean;
 }
 
-const defaultSettings: UserSettings = { isOnTheFlyEnabled: false };
+const ImageProtection = Schema.Literals(["off", "block-trackers"]);
+type ImageProtection = typeof ImageProtection.Type;
+
+const defaultSettings: UserSettings = {
+  isOnTheFlyEnabled: false,
+  imageProtection: "block-trackers",
+  isLinkCleaningEnabled: false,
+};
 
 /** The username, or a lookalike of it (same `Username.skeleton`), already belongs to someone. */
 export class UsernameTaken extends Schema.TaggedError<UsernameTaken>()("UsernameTaken", {
@@ -96,12 +110,19 @@ export const usernameKey = (username: string) => ({
 const settingsKey = (userId: string) => ({ pk: { S: `USER#${userId}` }, sk: { S: "SETTINGS" } });
 
 const SettingsItem = Item.codec(
-  Schema.Struct({ isOnTheFlyEnabled: Schema.optionalKey(Attribute.BOOL) }),
+  Schema.Struct({
+    isOnTheFlyEnabled: Schema.optionalKey(Attribute.BOOL),
+    imageProtection: Schema.optionalKey(Attribute.S.pipe(Schema.decodeTo(ImageProtection))),
+    isLinkCleaningEnabled: Schema.optionalKey(Attribute.BOOL),
+  }),
   "UserSettings",
 );
 
-const withDefaults = (stored: { readonly isOnTheFlyEnabled?: boolean }): UserSettings => ({
+/** Each setting never stored has its default. */
+const withDefaults = (stored: Partial<UserSettings>): UserSettings => ({
   isOnTheFlyEnabled: stored.isOnTheFlyEnabled ?? defaultSettings.isOnTheFlyEnabled,
+  imageProtection: stored.imageProtection ?? defaultSettings.imageProtection,
+  isLinkCleaningEnabled: stored.isLinkCleaningEnabled ?? defaultSettings.isLinkCleaningEnabled,
 });
 
 const UserItem = Item.codec(
@@ -217,6 +238,13 @@ const make = Effect.fn("UserRepo.make")(function* () {
       const values = R.getSomes<string, DynamoDB.AttributeValue>({
         isOnTheFlyEnabled: Option.map(
           Option.fromUndefinedOr(changes.isOnTheFlyEnabled),
+          (isEnabled) => ({ BOOL: isEnabled }),
+        ),
+        imageProtection: Option.map(Option.fromUndefinedOr(changes.imageProtection), (value) => ({
+          S: value,
+        })),
+        isLinkCleaningEnabled: Option.map(
+          Option.fromUndefinedOr(changes.isLinkCleaningEnabled),
           (isEnabled) => ({ BOOL: isEnabled }),
         ),
       });

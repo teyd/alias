@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import { Switch } from "@/components/ui/switch";
-import { setOnTheFly, settingsQuery } from "@/lib/settings";
+import { settingsQuery, updateSettings } from "@/lib/settings";
 
 /** The opt-in for aliases created by the first mail to a new address on the user's subdomain. */
 export const OnTheFlySetting = ({ subdomains }: { readonly subdomains: ReadonlyArray<string> }) => {
   const queryClient = useQueryClient();
   const settings = useQuery(settingsQuery);
   const update = useMutation({
-    mutationFn: setOnTheFly,
+    mutationFn: updateSettings,
     onSuccess: (stored) => queryClient.setQueryData(settingsQuery.queryKey, stored),
   });
 
@@ -37,7 +37,7 @@ export const OnTheFlySetting = ({ subdomains }: { readonly subdomains: ReadonlyA
           aria-describedby="on-the-fly-description"
           checked={settings.data?.isOnTheFlyEnabled ?? false}
           disabled={!settings.isSuccess || update.isPending}
-          onCheckedChange={(isEnabled) => update.mutate(isEnabled)}
+          onCheckedChange={(isEnabled) => update.mutate({ isOnTheFlyEnabled: isEnabled })}
         />
       </div>
     ),

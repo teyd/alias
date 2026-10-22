@@ -973,6 +973,47 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
+  it.effect("removes tracking pixels by default and follows the owner's tracker settings", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const newsletter = new TextEncoder().encode(
+          [
+            'From: "Shop" <shop@store.example>',
+            "To: shop@alias.test",
+            "Subject: Fall sale",
+            "MIME-Version: 1.0",
+            "Content-Type: text/html; charset=utf-8",
+            "",
+            '<a href="https://store.example/sale?utm_source=mail&amp;id=7">Sale</a>',
+            '<img src="https://store.us1.list-manage.com/track/open.php?u=1" width="1" height="1">',
+            "",
+          ].join("\r\n"),
+        );
+        const forwarded = Effect.fn("forwarded")(function* () {
+          const { event } = yield* receive({ recipients: ["shop@alias.test"], raw: newsletter });
+          expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+          return text(Arr.last(yield* sent).pipe(Option.flatMap((email) => email.raw)));
+        });
+
+        const blocked = yield* forwarded();
+        expect(blocked).not.toContain("list-manage.com");
+        expect(blocked).toContain("utm_source=mail");
+        expect(header(blocked, "X-Alias-Trackers-Removed")).toEqual(Option.some("1"));
+
+        yield* UserRepo.UserRepo.use((users) =>
+          users.updateSettings("usr_1", { imageProtection: "off", isLinkCleaningEnabled: true }),
+        );
+        const cleaned = yield* forwarded();
+        expect(cleaned).toContain("list-manage.com/track/open.php");
+        expect(cleaned).toContain('<a href="https://store.example/sale?id=7">');
+        expect(header(cleaned, "X-Alias-Trackers-Removed")).toEqual(Option.none());
+        expect(header(cleaned, "X-Alias-Links-Cleaned")).toEqual(Option.some("1"));
+      }),
+    ),
+  );
+
   it.effect("stops forwarding to a recipient SES reported as hard-bouncing", () =>
     withPipeline(
       Effect.gen(function* () {

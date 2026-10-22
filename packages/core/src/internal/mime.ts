@@ -24,7 +24,9 @@ export interface TextPart {
 }
 
 /** Returns the new content, or none to keep the part exactly as it was. */
-export type Rewrite = (part: TextPart) => Option.Option<string>;
+export type Rewrite<E = never, R = never> = (
+  part: TextPart,
+) => Effect.Effect<Option.Option<string>, E, R>;
 
 interface ContentType {
   readonly type: string;
@@ -122,11 +124,11 @@ const codecs: R.ReadonlyRecord<string, Codec> = {
 /** Line breaks after the last base64 line, kept around the re-encoded text. */
 const TRAILING_BREAKS = /(?:\r?\n)*$/;
 
-const rewriteLeaf = (
+const rewriteLeaf = <E, R>(
   message: Headers.Message,
   type: ContentType,
-  rewrite: Rewrite,
-): Option.Option<Uint8Array> => {
+  rewrite: Rewrite<E, R>,
+): Effect.Effect<Option.Option<Uint8Array>, E, R> => {
   const isAttachment = Option.exists(first(message, "content-disposition"), (value) =>
     /^\s*attachment\b/i.test(value),
   );
@@ -135,33 +137,34 @@ const rewriteLeaf = (
     (type.subtype !== "plain" && type.subtype !== "html") ||
     isAttachment
   ) {
-    return Option.none();
+    return Effect.succeedNone;
   }
   const encoding = Option.getOrElse(first(message, "content-transfer-encoding"), () => "7bit")
     .trim()
     .toLowerCase();
-  const codec = R.get(codecs, encoding);
   const rest = toBinary(message.rest);
   // `rest` starts with the blank line that ends the header block (absent when there is no body).
   const blank = /^\r?\n/.exec(rest)?.[0] ?? "";
   const body = rest.slice(blank.length);
   const eol = message.lineEnding;
-  return Option.flatMap(codec, (found) =>
-    found.decode(body).pipe(
-      Option.flatMap((content) =>
-        rewrite({
-          subtype: type.subtype === "html" ? "html" : "plain",
-          charset: Option.getOrElse(
-            R.get(type.parameters, "charset"),
-            () => "us-ascii",
-          ).toLowerCase(),
-          content,
-        }).pipe(Option.filter((changed) => changed !== content)),
+  const decoded = Option.flatMap(R.get(codecs, encoding), (codec) =>
+    Option.map(codec.decode(body), (content) => ({ codec, content })),
+  );
+  if (Option.isNone(decoded)) return Effect.succeedNone;
+  const { codec, content } = decoded.value;
+  return rewrite({
+    subtype: type.subtype === "html" ? "html" : "plain",
+    charset: Option.getOrElse(R.get(type.parameters, "charset"), () => "us-ascii").toLowerCase(),
+    content,
+  }).pipe(
+    Effect.map((rewritten) =>
+      rewritten.pipe(
+        Option.filter((changed) => changed !== content),
+        Option.map((changed) => {
+          const trailing = encoding === "base64" ? (TRAILING_BREAKS.exec(body)?.[0] ?? "") : "";
+          return fromBinary(blank + codec.encode(changed, eol) + trailing);
+        }),
       ),
-      Option.map((changed) => {
-        const trailing = encoding === "base64" ? (TRAILING_BREAKS.exec(body)?.[0] ?? "") : "";
-        return fromBinary(blank + found.encode(changed, eol) + trailing);
-      }),
     ),
   );
 };
@@ -218,10 +221,10 @@ const parseEntity = (raw: Uint8Array): Effect.Effect<Headers.Message> =>
   );
 
 /** The entity's body after `rewrite`, or none when nothing in it changed. */
-const rewriteEntity = (
+const rewriteEntity = <E, R>(
   message: Headers.Message,
-  rewrite: Rewrite,
-): Effect.Effect<Option.Option<Uint8Array>> => {
+  rewrite: Rewrite<E, R>,
+): Effect.Effect<Option.Option<Uint8Array>, E, R> => {
   const type = Option.match(first(message, "content-type"), {
     // A message without Content-Type is text/plain, and so is a part (RFC 2045 §5.2).
     onNone: () => DEFAULT_TYPE,
@@ -230,7 +233,7 @@ const rewriteEntity = (
   const boundary = R.get(type.parameters, "boundary");
   // Attached messages (message/rfc822) are not text parts, so they pass unchanged.
   if (type.type !== "multipart" || Option.isNone(boundary)) {
-    return Effect.succeed(rewriteLeaf(message, type, rewrite));
+    return rewriteLeaf(message, type, rewrite);
   }
   const pieces = splitMultipart(message.rest, boundary.value);
   return Effect.forEach(
@@ -262,10 +265,10 @@ const rewriteEntity = (
 };
 
 /** The message with `rewrite` applied to its text parts; byte for byte the same where it isn't. */
-export const rewriteText = (
+export const rewriteText = <E, R>(
   message: Headers.Message,
-  rewrite: Rewrite,
-): Effect.Effect<Headers.Message> =>
+  rewrite: Rewrite<E, R>,
+): Effect.Effect<Headers.Message, E, R> =>
   Effect.map(rewriteEntity(message, rewrite), (changed) =>
     Option.match(changed, { onNone: () => message, onSome: (rest) => ({ ...message, rest }) }),
   );

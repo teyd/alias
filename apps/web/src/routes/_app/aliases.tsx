@@ -12,6 +12,7 @@ import { ContactsSheet } from "@/components/aliases/ContactsSheet";
 import { CreateAliasDialog } from "@/components/aliases/CreateAliasDialog";
 import { DeleteAliasDialog } from "@/components/aliases/DeleteAliasDialog";
 import { OnTheFlySetting } from "@/components/aliases/OnTheFlySetting";
+import { TrackerSettings } from "@/components/aliases/TrackerSettings";
 import { Page } from "@/components/Page";
 import { EmptyState, LoadFailed, SkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -155,6 +156,7 @@ const Aliases = () => {
       </div>
 
       {domains.isSuccess && <OnTheFlySetting subdomains={domains.data.subdomains} />}
+      <TrackerSettings />
 
       {aliases.isError ? (
         <LoadFailed what="your aliases" onRetry={() => void aliases.refetch()} />

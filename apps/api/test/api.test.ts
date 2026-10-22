@@ -486,6 +486,41 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("blocks trackers by default and stores the tracker settings per user", () =>
+    Effect.gen(function* () {
+      const { browser: open } = yield* api;
+      const ada = yield* signedIn(open, "ada");
+      const grace = yield* signedIn(open, "grace");
+      const defaults = {
+        isOnTheFlyEnabled: false,
+        imageProtection: "block-trackers",
+        isLinkCleaningEnabled: false,
+      };
+
+      expect(yield* ada.browser.get("/v1/settings")).toMatchObject({ status: 200, body: defaults });
+      const changed = { ...defaults, imageProtection: "off", isLinkCleaningEnabled: true };
+      expect(
+        yield* ada.browser.patch("/v1/settings", {
+          imageProtection: "off",
+          isLinkCleaningEnabled: true,
+        }),
+      ).toMatchObject({ status: 200, body: changed });
+      expect(yield* ada.browser.get("/v1/settings")).toMatchObject({ status: 200, body: changed });
+      expect(yield* grace.browser.get("/v1/settings")).toMatchObject({
+        status: 200,
+        body: defaults,
+      });
+      // Only the modes there are; a later mode can't be stored before it exists.
+      expect(
+        (yield* ada.browser.patch("/v1/settings", { imageProtection: "proxy-everything" })).status,
+      ).toBe(400);
+      expect((yield* ada.browser.patch("/v1/settings", { isLinkCleaningEnabled: 1 })).status).toBe(
+        400,
+      );
+      expect(yield* ada.browser.get("/v1/settings")).toMatchObject({ status: 200, body: changed });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("lists an alias's contacts and blocks, unblocks and deletes them", () =>
     Effect.gen(function* () {
       const { browser: open, seedAlias, seedContact } = yield* api;

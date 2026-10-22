@@ -1,0 +1,50 @@
+From: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Reply-To: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+X-Alias-Forwarded: shop@ada.alias.test
+X-Alias-Trackers-Removed: 1
+Received: from mx.store.example (mx.store.example [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+To: shop@ada.alias.test
+Subject: Invoice 2026-1042
+Date: Wed, 21 Oct 2026 16:10:00 +0000
+Message-ID: <invoice-1042@store.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-a1"
+
+--mixed-a1
+Content-Type: multipart/related; boundary="related-b2"
+
+--related-b2
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<html><body>
+<p><img src="cid:banner@store.example" width="600" height="200" alt="Banner"></p>
+<p>Your invoice is attached. <a href="https://store.example/account?utm_source=invoice">Your account</a></p>
+
+</body></html>
+
+--related-b2
+Content-Type: image/gif
+Content-ID: <banner@store.example>
+Content-Transfer-Encoding: base64
+Content-Disposition: inline
+
+R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==
+--related-b2--
+
+--mixed-a1
+Content-Type: application/pdf; name="invoice-1042.pdf"
+Content-Disposition: attachment; filename="invoice-1042.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSBpbnZvaWNlCjEgMCBvYmogPDwgL1R5cGUgL0NhdGFsb2cgPj4gZW5kb2JqCnRyYWlsZXIgPDwgL1Jvb3QgMSAwIFIgPj4KJSVFT0YK
+--mixed-a1
+Content-Type: text/html; charset=utf-8; name="terms.html"
+Content-Disposition: attachment; filename="terms.html"
+
+<p>Terms</p><img src="https://u1.ct.sendgrid.net/wf/open?upn=attached" width="1" height="1">
+--mixed-a1--

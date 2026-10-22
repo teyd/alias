@@ -1,0 +1,34 @@
+Return-Path: <bounce-mc.us1_123.456-shop=ada.alias.test@mx.laden.example>
+Received: from mx.laden.example (mx.laden.example [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+X-SES-Spam-Verdict: PASS
+X-SES-Virus-Verdict: PASS
+Authentication-Results: amazonses.com;
+ spf=pass smtp.mailfrom=mx.laden.example;
+ dkim=pass header.i=@store.example;
+ dmarc=pass header.from=store.example;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=store.example; s=k1;
+	h=from:to:subject:date:message-id; bh=fZ3w8p0yvB1q8Hk0JQyZ8Yw9V4nC2Yt5u1oQe2kLq6c=;
+	b=c2lnbmVkIGJ5IHRoZSBzdG9yZQ==
+From: =?ISO-8859-1?Q?Laden_K=F6ln?= <info@laden.example>
+To: shop@ada.alias.test
+Subject: =?ISO-8859-1?Q?Gr=FC=DFe?=
+Date: Wed, 21 Oct 2026 16:15:00 +0000
+Message-ID: <gruesse-1@laden.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+<html><body>
+<!--[if gte mso 9]><v:image src=3D"https://img.laden.example/kopf.jpg" styl=
+e=3D"width:600px;height:120px" /><![endif]-->
+<table background=3D"https://emailtracking.laden.example/open/abc.gif" widt=
+h=3D"600"><tr>
+<td style=3D"background:#fff url(https://img.laden.example/muster.png) repe=
+at">Sch=F6ne Gr=FC=DFe aus K=F6ln, Ihr Laden-Team</td>
+</tr></table>
+<img src=3D"https://img.laden.example/o.gif?id=3Dabc" border=3D0 width=3D1 =
+height=3D1>
+</body></html>
+

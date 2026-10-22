@@ -1,0 +1,39 @@
+Return-Path: <bounce-mc.us1_123.456-shop=ada.alias.test@o1.ptr4567.sendgrid.net>
+Received: from o1.ptr4567.sendgrid.net (o1.ptr4567.sendgrid.net [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+X-SES-Spam-Verdict: PASS
+X-SES-Virus-Verdict: PASS
+Authentication-Results: amazonses.com;
+ spf=pass smtp.mailfrom=o1.ptr4567.sendgrid.net;
+ dkim=pass header.i=@store.example;
+ dmarc=pass header.from=store.example;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=store.example; s=k1;
+	h=from:to:subject:date:message-id; bh=fZ3w8p0yvB1q8Hk0JQyZ8Yw9V4nC2Yt5u1oQe2kLq6c=;
+	b=c2lnbmVkIGJ5IHRoZSBzdG9yZQ==
+From: Store Shipping <shipping@store.example>
+To: shop@ada.alias.test
+Subject: Your order has shipped
+Date: Wed, 21 Oct 2026 16:05:00 +0000
+Message-ID: <abc.def@geopod-ismtpd-3>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGhlYWQ+PHN0eWxlPgpAbWVkaWEgcHJpbnQgeyAjX3QgeyBiYWNrZ3JvdW5kLWltYWdl
+OiB1cmwoJ2h0dHBzOi8vdTQ1NjcuY3Quc2VuZGdyaWQubmV0L3dmL29wZW4/dXBuPXByaW50LWFi
+YycpIH0gfQouZm9vdGVyIHsgY29sb3I6ICM5OTkgfQo8L3N0eWxlPjwvaGVhZD48Ym9keT4KPGRp
+diBpZD0iX3QiPjwvZGl2Pgo8cD5Zb3VyIG9yZGVyICMxMDQyIGhhcyBzaGlwcGVkLjwvcD4KPHA+
+PGltZyBzcmM9Imh0dHBzOi8vY2RuLnN0b3JlLmV4YW1wbGUvcGFyY2VsLnBuZyIgYWx0PSJQYXJj
+ZWwiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCI+PC9wPgo8cD48YSBocmVmPSJodHRwczovL3U0NTY3
+LmN0LnNlbmRncmlkLm5ldC9scy9jbGljaz91cG49dHJhY2stYWJjIj5UcmFjayB5b3VyIHBhcmNl
+bDwvYT48L3A+CjxpbWcgc3JjPSJodHRwczovL2Nkbi5zdG9yZS5leGFtcGxlL3NwYWNlci5naWYi
+IHN0eWxlPSJ3aWR0aDoxcHghaW1wb3J0YW50O2hlaWdodDoxcHghaW1wb3J0YW50O2JvcmRlcjow
+O21hcmdpbjowO3BhZGRpbmc6MCIgYWx0PSIiIC8+CjxpbWcgc3JjPSJodHRwczovL3U0NTY3LmN0
+LnNlbmRncmlkLm5ldC93Zi9vcGVuP3Vwbj1vcGVuLWFiYyIgYWx0PSIiIHdpZHRoPSIxIiBoZWln
+aHQ9IjEiIGJvcmRlcj0iMCIgc3R5bGU9ImhlaWdodDoxcHggIWltcG9ydGFudDt3aWR0aDoxcHgg
+IWltcG9ydGFudDtib3JkZXItd2lkdGg6MCAhaW1wb3J0YW50O21hcmdpbi10b3A6MCAhaW1wb3J0
+YW50O21hcmdpbi1ib3R0b206MCAhaW1wb3J0YW50O21hcmdpbi1yaWdodDowICFpbXBvcnRhbnQ7
+bWFyZ2luLWxlZnQ6MCAhaW1wb3J0YW50O3BhZGRpbmctdG9wOjAgIWltcG9ydGFudDtwYWRkaW5n
+LWJvdHRvbTowICFpbXBvcnRhbnQ7cGFkZGluZy1yaWdodDowICFpbXBvcnRhbnQ7cGFkZGluZy1s
+ZWZ0OjAgIWltcG9ydGFudDsiLz4KPC9ib2R5PjwvaHRtbD4K

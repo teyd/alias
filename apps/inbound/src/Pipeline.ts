@@ -194,6 +194,11 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     contactId: Option.some(contact.id),
   }).pipe(Effect.option);
   if (Option.isNone(token)) return Plan.Drop({ reason: "unencodable-sender" });
+  const settings = yield* (yield* UserRepo.UserRepo).settings(alias.userId);
+  const protection: Mail.Protection = {
+    images: settings.imageProtection,
+    isLinkCleaningEnabled: settings.isLinkCleaningEnabled,
+  };
   const aliases = yield* AliasRepo.AliasRepo;
   const { forwardsPerHour } = yield* Limits.Limits;
   const admit = Effect.fn("Pipeline.admitForward")(function* (signals: Mail.Signals) {
@@ -215,7 +220,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     contactId: Option.some(contact.id),
     admit,
     rewrite: (raw) =>
-      Mail.forward(raw, { alias: address, sender: sender.value, token: token.value }),
+      Mail.forward(raw, { alias: address, sender: sender.value, token: token.value, protection }),
     envelope: {
       from: Address.format(Address.reverseAddress(address, token.value)),
       to: [target.value.address],

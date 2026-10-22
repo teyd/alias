@@ -1,4 +1,6 @@
-# Reply corpus (PLAN.md §19.2, point 11)
+# Mail corpus (PLAN.md §19.2, point 11)
+
+## Replies
 
 Anonymized replies the way the major clients write them, as SES stores them (CRLF, trace and
 signature headers on top). `Mail.test.ts` runs `Mail.reply` on each `<name>.eml` and compares the
@@ -20,3 +22,22 @@ The owner is `Ada Lovelace` (`ada@mailbox.example`, `ada.work@office.example`), 
 The expected files are reviewed snapshots. After a deliberate change, regenerate them from the
 test's inputs, read every diff (decode quoted-printable and base64 parts), and commit them with
 the change.
+
+## Forwards (tracker protection, PLAN.md §20.19)
+
+Newsletters and notifications as SES stores them. `Trackers.test.ts` runs `Mail.forward` on each
+`forward-<name>.eml` (images `block-trackers`; link cleaning on except for `related-attachment`)
+and compares the result byte for byte with `forward-<name>.expected.eml`. Forwarding the output
+again must change no body byte, and the test-side MIME decoder must find no tracker in any inline
+text part.
+
+| File                         | Shape                                                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `forward-mailchimp`          | Mailchimp: plain 7bit + HTML quoted-printable, `list-manage.com/track/open.php` pixel, UTM and `mc_*` links             |
+| `forward-sendgrid-base64`    | SendGrid: base64 HTML, `/wf/open` pixel, a 1 px spacer, a `@media print` CSS tracker, a click redirect (kept)           |
+| `forward-related-attachment` | multipart/mixed + related: `cid:` banner (kept), `display:none` pixel, a PDF and an attached HTML file (both untouched) |
+| `forward-latin1-qp`          | ISO-8859-1 quoted-printable: tracker `background` attribute, unquoted `width=1 height=1`, Outlook VML comment           |
+| `forward-nothing-to-protect` | Visible images and plain links only: the body must come through byte for byte                                           |
+
+The expected outputs were read back with Python's `email` package: only the trackers and tracking
+parameters listed above differ, and every non-text part decodes to the same bytes.

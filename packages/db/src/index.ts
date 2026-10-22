@@ -13,6 +13,7 @@ export * as MessageRepo from "./MessageRepo.ts";
 export * as PasskeyRepo from "./PasskeyRepo.ts";
 export * as ProxyRepo from "./ProxyRepo.ts";
 export * as RecipientRepo from "./RecipientRepo.ts";
+export * as SentRepo from "./SentRepo.ts";
 export * as SessionRepo from "./SessionRepo.ts";
 export * as Table from "./Table.ts";
 export * as TokenRepo from "./TokenRepo.ts";

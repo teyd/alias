@@ -15,7 +15,7 @@ import {
   TooManyPendingRecipients,
 } from "@alias/contracts";
 import { Address, Pgp, SharedDomains } from "@alias/core";
-import { RecipientRepo } from "@alias/db";
+import { RecipientRepo, SentRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -48,6 +48,7 @@ const view = (recipient: RecipientRepo.Recipient, now: DateTime.Utc) => ({
   isDefault: recipient.isDefault,
   createdAt: recipient.createdAt,
   bouncedAt: recipient.bouncedAt,
+  bounceReason: recipient.bounceReason,
   complainedAt: recipient.complainedAt,
   encryption: Option.map(recipient.encryption, (encryption) => ({
     publicKey: encryption.publicKey,
@@ -126,7 +127,7 @@ const sendConfirmation = Effect.fn("recipients.sendConfirmation")(function* (
         Effect.logWarning("suppression list not updated", error.reason),
       ),
     );
-  yield* transport
+  const messageId = yield* transport
     .send(raw, {
       from: settings.sender,
       to: [recipient.address],
@@ -143,6 +144,12 @@ const sendConfirmation = Effect.fn("recipients.sendConfirmation")(function* (
           ),
       }),
     );
+  yield* SentRepo.remember({
+    messageId,
+    userId: user.userId,
+    kind: "confirmation",
+    recipientId: Option.some(recipient.id),
+  });
 });
 
 const list = Effect.fn("recipients.list")(function* () {
@@ -198,6 +205,7 @@ const add = Effect.fn("recipients.add")(function* (requested: string) {
       lastSentAt: now,
       isDefault: false,
       bouncedAt: Option.none(),
+      bounceReason: Option.none(),
       complainedAt: Option.none(),
       encryption: Option.none(),
     },
@@ -221,9 +229,14 @@ const confirm = Effect.fn("recipients.confirm")(function* (recipientId: string, 
   return view(yield* findOwned(recipientId), now);
 });
 
+/**
+ * Mails a new confirmation link: for a pending recipient, or to resume forwarding to a verified
+ * one that was paused because it bounced (PLAN.md §20.28). Opening the link proves the mailbox
+ * takes mail again; only then does forwarding resume.
+ */
 const resend = Effect.fn("recipients.resend")(function* (recipientId: string) {
   const recipient = yield* findOwned(recipientId);
-  if (Option.isSome(recipient.verifiedAt)) {
+  if (Option.isSome(recipient.verifiedAt) && Option.isNone(recipient.bouncedAt)) {
     return yield* new RecipientAlreadyVerified({ recipientId });
   }
   const now = yield* DateTime.now;
@@ -320,7 +333,8 @@ type RecipientServices =
   | MailSettings
   | SharedDomains.SharedDomains
   | Transport.Transport
-  | RecipientRepo.RecipientRepo;
+  | RecipientRepo.RecipientRepo
+  | SentRepo.SentRepo;
 
 export const RecipientsLive = HttpApiBuilder.group(Api, "recipients", (handlers) =>
   Effect.map(Effect.context<RecipientServices>(), (services) =>

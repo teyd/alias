@@ -590,7 +590,8 @@ export default Alchemy.Stack(
       ],
     });
     // Least privilege: aliases, recipients and contacts are read by key or one partition Query;
-    // counters, quotas and delivery claims are single-item writes. A new contact and its id are
+    // counters, quotas, delivery claims and sent records (§20.28) are single-item writes. A new
+    // contact and its id are
     // one TransactWriteItems, which IAM authorizes per item: PutItem for the two items, and
     // ConditionCheckItem for the check that their alias still exists (PLAN.md §20.15). No index.
     yield* inbound.bind("DataAccess", {
@@ -663,13 +664,15 @@ export default Alchemy.Stack(
     });
     yield* AWS.SES.ActiveReceiptRuleSet("Active", { ruleSetName: ruleSet.ruleSetName });
 
-    // Bounces and complaints (PLAN.md §20.11): every send names the configuration set, whose
-    // event destination publishes BOUNCE and COMPLAINT to an SNS topic that invokes the feedback
-    // Lambda. SES itself suppresses hard-bounced addresses for this set; complaints only get
-    // recorded, so one "spam" click doesn't stop a user's forwarding.
+    // Bounces and complaints (PLAN.md §20.11, §20.28): every send names the configuration set,
+    // whose event destination publishes BOUNCE and COMPLAINT to an SNS topic that invokes the
+    // feedback Lambda. The set overrides the account's suppression settings with no reasons, so
+    // SES adds nothing to the suppression list by itself: SES calls a refused message's content a
+    // hard bounce too, and one crafted message must not stop a user's forwarding. The feedback
+    // Lambda suppresses only addresses that are gone; complaints only get recorded.
     yield* AWS.SES.ConfigurationSet("Events", {
       configurationSetName,
-      suppressedReasons: ["BOUNCE"],
+      suppressedReasons: [],
     });
     const feedbackTopic = yield* AWS.SNS.Topic("SesEvents", {});
     yield* AWS.SES.ConfigurationSetEventDestination("FeedbackTopic", {
@@ -692,13 +695,14 @@ export default Alchemy.Stack(
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
     });
     yield* feedback.bind("AsyncFailures", { policyStatements: [sendAsyncFailures] });
-    // Marks recipients (one UpdateItem each), suppresses addresses, and tells the user's webhooks
-    // (one Query for their endpoints, then SendMessage), nothing else.
+    // Reads the send a bounce is about (GetItem), lists the user's recipients and counts their
+    // recent hard bounces (Query, PutItem), marks recipients (UpdateItem), suppresses addresses,
+    // and tells the user's webhooks (one Query for their endpoints, then SendMessage).
     yield* feedback.bind("Feedback", {
       policyStatements: [
         {
           Effect: "Allow",
-          Action: ["dynamodb:UpdateItem", "dynamodb:Query"],
+          Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"],
           Resource: [tableArn],
         },
         { Effect: "Allow", Action: ["ses:PutSuppressedDestination"], Resource: "*" },

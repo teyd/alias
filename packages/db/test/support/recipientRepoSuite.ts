@@ -2,6 +2,7 @@ import type { DynamoDbEndpoint, EmulatorFailure } from "@alias/aws-emulators";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -80,6 +81,7 @@ export const recipientRepoSuite = (
               lastSentAt: at(1_000),
               isDefault: false,
               bouncedAt: Option.none(),
+              bounceReason: Option.none(),
               complainedAt: Option.none(),
               encryption: Option.none(),
             });
@@ -334,16 +336,21 @@ export const recipientRepoSuite = (
             const repo = yield* RecipientRepo.RecipientRepo;
             yield* repo.add(recipient(), confirmation(), MAX_PENDING);
 
-            expect(yield* repo.markBounced("usr_1", "ADA@example.com", at(5_000))).toBe(true);
+            expect(
+              yield* repo.markBounced("usr_1", "ADA@example.com", at(5_000), "address-unknown"),
+            ).toBe(true);
             expect(yield* repo.markComplained("usr_1", "ada@example.com", at(6_000))).toBe(true);
             const marked = yield* get(repo, "usr_1", "rcp_1");
             expect(marked).toMatchObject({
               bouncedAt: Option.some(at(5_000)),
+              bounceReason: Option.some("address-unknown"),
               complainedAt: Option.some(at(6_000)),
             });
 
             // Another user's address, or an unknown one, is left alone and creates nothing.
-            expect(yield* repo.markBounced("usr_2", "ada@example.com", at(5_000))).toBe(false);
+            expect(
+              yield* repo.markBounced("usr_2", "ada@example.com", at(5_000), "suppressed"),
+            ).toBe(false);
             expect(yield* repo.markComplained("usr_1", "nobody@example.com", at(5_000))).toBe(
               false,
             );
@@ -353,10 +360,98 @@ export const recipientRepoSuite = (
             yield* repo.renewConfirmation(marked, confirmation({ sentAt: at(7_000) }));
             expect(yield* get(repo, "usr_1", "rcp_1")).toMatchObject({
               bouncedAt: Option.none(),
+              bounceReason: Option.none(),
               complainedAt: Option.some(at(6_000)),
             });
           }),
         ),
+      );
+
+      /** rcp_1, confirmed at 2 s with its first link. */
+      const verified = Effect.fn("verified")(function* () {
+        const repo = yield* RecipientRepo.RecipientRepo;
+        yield* repo.add(recipient(), confirmation(), MAX_PENDING);
+        yield* repo.confirm(yield* get(repo, "usr_1", "rcp_1"), "hash_1", at(2_000));
+        return yield* get(repo, "usr_1", "rcp_1");
+      });
+
+      it.effect("resumes a paused verified recipient only once a new link is confirmed", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* RecipientRepo.RecipientRepo;
+            const confirmed = yield* verified();
+            // Not paused: a verified recipient has no link to renew.
+            expect(
+              (yield* Effect.flip(
+                repo.renewConfirmation(confirmed, confirmation({ sentAt: at(3_000) })),
+              ))._tag,
+            ).toBe("RecipientChanged");
+
+            yield* repo.markBounced("usr_1", "ada@example.com", at(5_000), "repeated-bounces");
+            const paused = yield* get(repo, "usr_1", "rcp_1");
+            yield* repo.renewConfirmation(
+              paused,
+              confirmation({ tokenHash: "hash_2", sentAt: at(6_000), expiresAt: at(200_000) }),
+            );
+            const renewed = yield* get(repo, "usr_1", "rcp_1");
+            // Still paused until the owner opens the new link.
+            expect(renewed).toMatchObject({
+              bouncedAt: Option.some(at(5_000)),
+              lastSentAt: at(6_000),
+              isDefault: true,
+            });
+            expect((yield* Effect.flip(repo.confirm(renewed, "hash_1", at(7_000))))._tag).toBe(
+              "ConfirmationMismatch",
+            );
+            yield* repo.confirm(renewed, "hash_2", at(7_000));
+            expect(yield* get(repo, "usr_1", "rcp_1")).toMatchObject({
+              verifiedAt: Option.some(at(7_000)),
+              bouncedAt: Option.none(),
+              bounceReason: Option.none(),
+              isDefault: true,
+            });
+            // Single use, and the pending count wasn't touched: three more may be added.
+            expect((yield* Effect.flip(repo.confirm(renewed, "hash_2", at(8_000))))._tag).toBe(
+              "ConfirmationMismatch",
+            );
+            yield* Effect.forEach(
+              Arr.range(2, 4),
+              (n) =>
+                repo.add(
+                  recipient({ id: `rcp_${n}`, address: `a${n}@example.com` }),
+                  confirmation(),
+                  MAX_PENDING,
+                ),
+              { concurrency: 1 },
+            );
+          }),
+        ),
+      );
+
+      it.effect(
+        "counts each bounced message once, within the window and since the last confirmation",
+        () =>
+          withRepo(
+            Effect.gen(function* () {
+              const repo = yield* RecipientRepo.RecipientRepo;
+              const confirmed = yield* verified();
+              const window = Duration.seconds(100);
+              expect(yield* repo.countBounce(confirmed, "msg_1", at(10_000), window)).toBe(1);
+              // SNS delivers the same bounce again: still one message.
+              expect(yield* repo.countBounce(confirmed, "msg_1", at(10_000), window)).toBe(1);
+              expect(yield* repo.countBounce(confirmed, "msg_2", at(20_000), window)).toBe(2);
+              // msg_1 is out of the window by now.
+              expect(yield* repo.countBounce(confirmed, "msg_3", at(110_500), window)).toBe(2);
+
+              // Another recipient (or the same address added again) counts on its own.
+              const other = { ...confirmed, id: "rcp_9" };
+              expect(yield* repo.countBounce(other, "msg_4", at(110_500), window)).toBe(1);
+
+              // A confirmation (resuming) starts afresh.
+              const resumed = { ...confirmed, verifiedAt: Option.some(at(111_000)) };
+              expect(yield* repo.countBounce(resumed, "msg_5", at(112_000), window)).toBe(1);
+            }),
+          ),
       );
       const key = (
         overrides: Partial<RecipientRepo.Encryption> = {},

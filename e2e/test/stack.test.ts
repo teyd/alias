@@ -30,6 +30,7 @@ import {
 } from "@modelcontextprotocol/client";
 import {
   apiHandler,
+  bounceBack,
   inboxBucket,
   layer,
   sentTo,
@@ -984,11 +985,15 @@ describe("emulated stack", () => {
           JSON.parse(JSON.stringify(yield* Queue.take(subscriber.events))),
         );
         expect(yield* Feedback.handle(event)).toEqual([
-          { _tag: "Bounced", suppressed: 1, marked: 1 },
+          { _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 },
         ]);
         const listed = yield* call("/v1/recipients", { cookie: ivy.cookie });
         expect(listed.body).toEqual([
-          expect.objectContaining({ address: bounce, bouncedAt: expect.any(String) }),
+          expect.objectContaining({
+            address: bounce,
+            bouncedAt: expect.any(String),
+            bounceReason: "address-unknown",
+          }),
         ]);
         const suppressed = yield* SESV2.getSuppressedDestination({ EmailAddress: bounce });
         expect(suppressed.SuppressedDestination?.Reason).toBe("BOUNCE");
@@ -1002,6 +1007,78 @@ describe("emulated stack", () => {
         });
         expect(yield* invoke(forward)).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
         expect(yield* sentTo(bounce)).toHaveLength(1);
+      }),
+    );
+
+    it.effect("a crafted content bounce doesn't pause forwarding; a user-unknown one does", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const hal = yield* owner("hal");
+        const forward = (subject: string) =>
+          Effect.flatMap(
+            smtp({ from: "mallory@evil.example", to: hal.alias, subject, text: "x" }),
+            invoke,
+          );
+        const lastSent = Effect.map(sentTo(hal.mailbox), (sent) => Arr.last(sent));
+        const bounceOf = (messageId: string, status: string, diagnosticCode: string) =>
+          bounceBack({
+            messageId,
+            userId: hal.userId,
+            kind: "forward",
+            address: hal.mailbox,
+            bounceSubType: "General",
+            status,
+            diagnosticCode,
+          });
+        const paused = Effect.map(
+          call("/v1/recipients", { cookie: hal.cookie }),
+          (listed) => listed.body,
+        );
+
+        // A sender gets the owner's provider to refuse one message for good, for its content.
+        expect(yield* forward("Crafted")).toEqual([{ _tag: "Forwarded" }]);
+        const crafted = yield* lastSent;
+        expect(
+          yield* bounceOf(
+            Option.getOrElse(
+              Option.map(crafted, (email) => email.messageId),
+              () => "",
+            ),
+            "5.7.1",
+            "smtp; 550 5.7.1 Message rejected: spam content",
+          ),
+        ).toEqual([{ _tag: "Ignored", reason: "message-bounce" }]);
+        expect(yield* paused).toEqual([
+          expect.not.objectContaining({ bouncedAt: expect.anything() }),
+        ]);
+        const notSuppressed = yield* Effect.flip(
+          SESV2.getSuppressedDestination({ EmailAddress: hal.mailbox }),
+        );
+        expect(notSuppressed._tag).toBe("NotFoundException");
+        // Forwarding goes on.
+        expect(yield* forward("Next")).toEqual([{ _tag: "Forwarded" }]);
+
+        // The mailbox is then deleted: its server says so for the next message.
+        const next = yield* lastSent;
+        expect(
+          yield* bounceOf(
+            Option.getOrElse(
+              Option.map(next, (email) => email.messageId),
+              () => "",
+            ),
+            "5.1.1",
+            "smtp; 550 5.1.1 <hal@mailbox.example>: Recipient address rejected: User unknown",
+          ),
+        ).toEqual([{ _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 }]);
+        expect(yield* paused).toEqual([
+          expect.objectContaining({
+            bouncedAt: expect.any(String),
+            bounceReason: "address-unknown",
+          }),
+        ]);
+        expect(yield* forward("After")).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
+        // The confirmation and the two forwards.
+        expect(yield* sentTo(hal.mailbox)).toHaveLength(3);
       }),
     );
 

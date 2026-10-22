@@ -2,6 +2,7 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -34,15 +35,27 @@ export interface Recipient {
    */
   readonly isDefault: boolean;
   /**
-   * When SES last reported a permanent bounce for the address (PLAN.md §20.11). Forwarding to it
-   * stops; a resent confirmation clears it.
+   * When forwarding to the address was paused because it bounces (PLAN.md §20.11, §20.28). The
+   * pipeline sends it nothing more; a resent confirmation retries it (pending), and confirming
+   * one resumes it (verified).
    */
   readonly bouncedAt: Option.Option<DateTime.Utc>;
+  /** Why it was paused. None for pauses recorded before reasons were (§20.28). */
+  readonly bounceReason: Option.Option<BounceReason>;
   /** When the owner's mailbox last reported forwarded mail as spam. Recorded, nothing more. */
   readonly complainedAt: Option.Option<DateTime.Utc>;
   /** Forwarded mail is encrypted to this OpenPGP key (PLAN.md §20.21). None: sent as it is. */
   readonly encryption: Option.Option<Encryption>;
 }
+
+/**
+ * Why forwarding to a recipient is paused (PLAN.md §20.28): the receiving server said the mailbox
+ * doesn't exist (`address-unknown`), SES refused to send to it because it is on a suppression
+ * list (`suppressed`), or several of our messages bounced for good in a short time
+ * (`repeated-bounces`).
+ */
+export const BounceReason = Schema.Literals(["address-unknown", "suppressed", "repeated-bounces"]);
+export type BounceReason = typeof BounceReason.Type;
 
 /** A recipient's OpenPGP public key, as `Pgp.readKey` accepted it, and how to use it. */
 export interface Encryption {
@@ -119,12 +132,19 @@ export class RecipientRepo extends Context.Service<
       userId: string,
       recipientId: string,
     ) => Effect.Effect<Option.Option<Recipient>, DatabaseError>;
-    /** Replaces the pending token, invalidating the old one, unless the recipient changed. */
+    /**
+     * Replaces the confirmation token, invalidating the old one, unless the recipient changed.
+     * Only a pending or a paused (bounced) recipient has one; a pending one's bounce is cleared
+     * now, a paused verified one stays paused until the new token is confirmed.
+     */
     readonly renewConfirmation: (
       recipient: Recipient,
       confirmation: Confirmation,
     ) => Effect.Effect<void, RecipientChanged | DatabaseError>;
-    /** Verifies the recipient if `tokenHash` matches a live token, and uses the token up. */
+    /**
+     * Verifies the recipient if `tokenHash` matches a live token, and uses the token up. For a
+     * paused verified recipient, this resumes forwarding: the pause and its bounces are cleared.
+     */
     readonly confirm: (
       recipient: Recipient,
       tokenHash: string,
@@ -147,12 +167,28 @@ export class RecipientRepo extends Context.Service<
       userId: string,
       recipientId: string,
     ) => Effect.Effect<void, NoSuchRecipient | DatabaseError>;
-    /** Records a permanent bounce. False when the user has no recipient with this address. */
+    /**
+     * Pauses forwarding to the recipient with this address. False when the user has no
+     * recipient with this address.
+     */
     readonly markBounced: (
       userId: string,
       address: string,
       at: DateTime.Utc,
+      reason: BounceReason,
     ) => Effect.Effect<boolean, DatabaseError>;
+    /**
+     * Records that our message `messageId` to the recipient bounced for good at `at`, and returns
+     * how many distinct messages to it did so within `window` before `at`, counting none from
+     * before its last confirmation mail or confirmation. The same message counts once, however
+     * often its bounce is delivered.
+     */
+    readonly countBounce: (
+      recipient: Recipient,
+      messageId: string,
+      at: DateTime.Utc,
+      window: Duration.Duration,
+    ) => Effect.Effect<number, DatabaseError>;
     /** Records a complaint. False when the user has no recipient with this address. */
     readonly markComplained: (
       userId: string,
@@ -177,6 +213,15 @@ const recipientKey = (userId: string, address: string) => ({
 
 /** Per-user recipient state: how many are pending, and which one is the default. */
 const settingsKey = (userId: string) => ({ pk: userPartition(userId), sk: { S: "RECIPIENTS" } });
+
+/** One hard bounce of one message to one recipient, by the recipient's id (a re-added address starts afresh). */
+const bouncePrefix = (recipientId: string) => `BOUNCE#${recipientId}#`;
+const bounceKey = (userId: string, recipientId: string, messageId: string) => ({
+  pk: userPartition(userId),
+  sk: { S: `${bouncePrefix(recipientId)}${messageId}` },
+});
+
+const BounceItem = Item.codec(Schema.Struct({ at: Attribute.EpochMillis }), "Bounce");
 
 const mailQuotaKey = (userId: string, day: string) => ({
   pk: userPartition(userId),
@@ -216,6 +261,7 @@ const RecipientItem = Item.codec(
     lastSentAt: Attribute.EpochMillis,
     verifiedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
     bouncedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
+    bounceReason: Schema.OptionFromOptionalKey(Attribute.S.pipe(Schema.decodeTo(BounceReason))),
     complainedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
     encryption: Schema.OptionFromOptionalKey(EncryptionAttribute),
   }),
@@ -336,20 +382,19 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
     }).pipe(Effect.mapError(changed("TransactWriteItems", recipientId)), Effect.provide(client));
   });
 
-  /** Sets one timestamp on an existing recipient; false when there is none. */
+  /** Updates an existing recipient; false when there is none. */
   const mark = (
     userId: string,
     address: string,
-    attribute: "bouncedAt" | "complainedAt",
-    at: DateTime.Utc,
+    UpdateExpression: string,
+    ExpressionAttributeValues: Readonly<Record<string, DynamoDB.AttributeValue>>,
   ) =>
     DynamoDB.updateItem({
       TableName,
       Key: recipientKey(userId, address.toLowerCase()),
-      UpdateExpression: "SET #at = :at",
+      UpdateExpression,
       ConditionExpression: "attribute_exists(pk)",
-      ExpressionAttributeNames: { "#at": attribute },
-      ExpressionAttributeValues: { ":at": millis(at) },
+      ExpressionAttributeValues: { ...ExpressionAttributeValues },
     }).pipe(
       Effect.as(true),
       Effect.catchIf(
@@ -360,6 +405,31 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
       Effect.provide(client),
     );
 
+  /** Confirms a paused verified recipient: forwarding resumes, the old bounces stop counting. */
+  const resume = (recipient: Recipient, tokenHash: string, now: DateTime.Utc) =>
+    DynamoDB.updateItem({
+      TableName,
+      Key: recipientKey(recipient.userId, recipient.address),
+      UpdateExpression:
+        "SET verifiedAt = :now REMOVE tokenHash, tokenExpiresAt, bouncedAt, bounceReason",
+      ConditionExpression:
+        "#id = :id AND attribute_exists(verifiedAt) AND tokenHash = :hash AND tokenExpiresAt > :now",
+      ExpressionAttributeNames: { "#id": "id" },
+      ExpressionAttributeValues: {
+        ":id": { S: recipient.id },
+        ":hash": { S: tokenHash },
+        ":now": millis(now),
+      },
+    }).pipe(
+      Effect.asVoid,
+      Effect.mapError((error) =>
+        P.isTagged(error, "ConditionalCheckFailedException")
+          ? new ConfirmationMismatch({ recipientId: recipient.id })
+          : databaseError("UpdateItem")(error),
+      ),
+      Effect.provide(client),
+    );
+
   return RecipientRepo.of({
     add: Effect.fn("RecipientRepo.add")(function* (recipient, confirmation, maxPending) {
       const attributes = yield* RecipientItem.encode({
@@ -367,6 +437,7 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
         lastSentAt: confirmation.sentAt,
         verifiedAt: Option.none(),
         bouncedAt: Option.none(),
+        bounceReason: Option.none(),
         complainedAt: Option.none(),
         encryption: Option.none(),
       });
@@ -417,11 +488,14 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
       DynamoDB.updateItem({
         TableName,
         Key: recipientKey(recipient.userId, recipient.address),
-        // A fresh confirmation is a fresh try: an earlier bounce no longer counts.
-        UpdateExpression:
-          "SET tokenHash = :hash, tokenExpiresAt = :expiresAt, lastSentAt = :sentAt REMOVE bouncedAt",
-        ConditionExpression:
-          "#id = :id AND attribute_not_exists(verifiedAt) AND lastSentAt = :previous",
+        // For a pending recipient a fresh confirmation is a fresh try: an earlier bounce no
+        // longer counts. A paused verified one resumes only once the new token is confirmed.
+        UpdateExpression: Option.isNone(recipient.verifiedAt)
+          ? "SET tokenHash = :hash, tokenExpiresAt = :expiresAt, lastSentAt = :sentAt REMOVE bouncedAt, bounceReason"
+          : "SET tokenHash = :hash, tokenExpiresAt = :expiresAt, lastSentAt = :sentAt",
+        ConditionExpression: Option.isNone(recipient.verifiedAt)
+          ? "#id = :id AND attribute_not_exists(verifiedAt) AND lastSentAt = :previous"
+          : "#id = :id AND attribute_exists(verifiedAt) AND attribute_exists(bouncedAt) AND lastSentAt = :previous",
         ExpressionAttributeNames: { "#id": "id" },
         ExpressionAttributeValues: {
           ":id": { S: recipient.id },
@@ -437,34 +511,36 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
       ),
 
     confirm: (recipient, tokenHash, now) =>
-      DynamoDB.transactWriteItems({
-        TransactItems: [
-          {
-            Update: {
-              TableName,
-              Key: recipientKey(recipient.userId, recipient.address),
-              UpdateExpression: "SET verifiedAt = :now REMOVE tokenHash, tokenExpiresAt",
-              // Pending, same token, not expired. Removing the token makes it single use.
-              ConditionExpression: "#id = :id AND tokenHash = :hash AND tokenExpiresAt > :now",
-              ExpressionAttributeNames: { "#id": "id" },
-              ExpressionAttributeValues: {
-                ":id": { S: recipient.id },
-                ":hash": { S: tokenHash },
-                ":now": millis(now),
+      Option.isSome(recipient.verifiedAt)
+        ? resume(recipient, tokenHash, now)
+        : DynamoDB.transactWriteItems({
+            TransactItems: [
+              {
+                Update: {
+                  TableName,
+                  Key: recipientKey(recipient.userId, recipient.address),
+                  UpdateExpression: "SET verifiedAt = :now REMOVE tokenHash, tokenExpiresAt",
+                  // Pending, same token, not expired. Removing the token makes it single use.
+                  ConditionExpression: "#id = :id AND tokenHash = :hash AND tokenExpiresAt > :now",
+                  ExpressionAttributeNames: { "#id": "id" },
+                  ExpressionAttributeValues: {
+                    ":id": { S: recipient.id },
+                    ":hash": { S: tokenHash },
+                    ":now": millis(now),
+                  },
+                },
               },
-            },
-          },
-          settingsDecrement(recipient.userId),
-        ],
-      }).pipe(
-        Effect.asVoid,
-        Effect.mapError((error) =>
-          conditionFailedAt(error, 0)
-            ? new ConfirmationMismatch({ recipientId: recipient.id })
-            : databaseError("TransactWriteItems")(error),
-        ),
-        Effect.provide(client),
-      ),
+              settingsDecrement(recipient.userId),
+            ],
+          }).pipe(
+            Effect.asVoid,
+            Effect.mapError((error) =>
+              conditionFailedAt(error, 0)
+                ? new ConfirmationMismatch({ recipientId: recipient.id })
+                : databaseError("TransactWriteItems")(error),
+            ),
+            Effect.provide(client),
+          ),
 
     setDefault: (recipient) =>
       DynamoDB.transactWriteItems({
@@ -529,8 +605,58 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
         ),
       ),
 
-    markBounced: (userId, address, at) => mark(userId, address, "bouncedAt", at),
-    markComplained: (userId, address, at) => mark(userId, address, "complainedAt", at),
+    markBounced: (userId, address, at, reason) =>
+      mark(userId, address, "SET bouncedAt = :at, bounceReason = :reason", {
+        ":at": millis(at),
+        ":reason": { S: reason },
+      }),
+    markComplained: (userId, address, at) =>
+      mark(userId, address, "SET complainedAt = :at", { ":at": millis(at) }),
+
+    countBounce: Effect.fn("RecipientRepo.countBounce")(
+      function* (recipient, messageId, at, window) {
+        const attributes = yield* BounceItem.encode({ at });
+        const expires = yield* Schema.encodeEffect(Attribute.EpochSeconds)(
+          DateTime.addDuration(at, window),
+        ).pipe(Effect.mapError(databaseError("EncodeBounce")));
+        yield* DynamoDB.putItem({
+          TableName,
+          Item: {
+            ...bounceKey(recipient.userId, recipient.id, messageId),
+            ...attributes,
+            expiresAt: expires,
+          },
+        }).pipe(Effect.mapError(databaseError("PutItem")), Effect.provide(client));
+        // A confirmation mail or a confirmation starts the count afresh.
+        const since = Arr.reduce(
+          [...Option.toArray(recipient.verifiedAt), recipient.lastSentAt],
+          DateTime.subtractDuration(at, window),
+          DateTime.max,
+        );
+        const bounces = yield* DynamoDB.query
+          .items({
+            TableName,
+            KeyConditionExpression: "pk = :pk AND begins_with(sk, :prefix)",
+            ExpressionAttributeValues: {
+              ":pk": userPartition(recipient.userId),
+              ":prefix": { S: bouncePrefix(recipient.id) },
+            },
+            ConsistentRead: true,
+          })
+          .pipe(
+            Stream.mapError(databaseError("Query")),
+            Stream.mapEffect(BounceItem.decode),
+            Stream.runCollect,
+            Effect.provide(client),
+          );
+        return Arr.filter(
+          bounces,
+          (bounce) =>
+            DateTime.isGreaterThanOrEqualTo(bounce.at, since) &&
+            DateTime.isLessThanOrEqualTo(bounce.at, at),
+        ).length;
+      },
+    ),
 
     reserveMail: Effect.fn("RecipientRepo.reserveMail")(function* (userId, now, maxPerDay) {
       const day = Quota.window(now, "day");

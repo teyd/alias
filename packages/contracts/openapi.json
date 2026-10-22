@@ -3155,6 +3155,14 @@
                       "bouncedAt": {
                         "type": "string"
                       },
+                      "bounceReason": {
+                        "type": "string",
+                        "enum": [
+                          "address-unknown",
+                          "suppressed",
+                          "repeated-bounces"
+                        ]
+                      },
                       "complainedAt": {
                         "type": "string"
                       },
@@ -3288,6 +3296,14 @@
                     },
                     "bouncedAt": {
                       "type": "string"
+                    },
+                    "bounceReason": {
+                      "type": "string",
+                      "enum": [
+                        "address-unknown",
+                        "suppressed",
+                        "repeated-bounces"
+                      ]
                     },
                     "complainedAt": {
                       "type": "string"
@@ -3505,6 +3521,14 @@
                     },
                     "bouncedAt": {
                       "type": "string"
+                    },
+                    "bounceReason": {
+                      "type": "string",
+                      "enum": [
+                        "address-unknown",
+                        "suppressed",
+                        "repeated-bounces"
+                      ]
                     },
                     "complainedAt": {
                       "type": "string"
@@ -3900,6 +3924,14 @@
                     "bouncedAt": {
                       "type": "string"
                     },
+                    "bounceReason": {
+                      "type": "string",
+                      "enum": [
+                        "address-unknown",
+                        "suppressed",
+                        "repeated-bounces"
+                      ]
+                    },
                     "complainedAt": {
                       "type": "string"
                     },
@@ -4084,6 +4116,14 @@
                     },
                     "bouncedAt": {
                       "type": "string"
+                    },
+                    "bounceReason": {
+                      "type": "string",
+                      "enum": [
+                        "address-unknown",
+                        "suppressed",
+                        "repeated-bounces"
+                      ]
                     },
                     "complainedAt": {
                       "type": "string"

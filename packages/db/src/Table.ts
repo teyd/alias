@@ -26,6 +26,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                            |                           |             |
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                            |                           |             |
  * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                            |                           | `expiresAt` |
+ * | HardBounce        | `USER#<userId>`              | `BOUNCE#<recipientId>#<sesMessageId>` |             |                           | `expiresAt` |
+ * | Sent              | `USER#<userId>`              | `SENT#<sesMessageId>`  |                            |                           | `expiresAt` |
  * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
 
  * | DomainPointer     | `USER#<userId>`              | `DOMAIN#<domain>`      |                            |                           |             |
@@ -70,6 +72,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * RecipientSettings counts pending recipients (changed in the same transaction as the recipient,
  * so the cap is atomic) and names the default recipient. MailQuota counts confirmation mails per
  * user and UTC day.
+ *
+ * A HardBounce is one of our messages to a recipient that bounced for good without saying the
+ * mailbox is gone (PLAN.md §20.28), keyed by the recipient's id (a re-added address starts
+ * afresh) and the SES message id (a redelivered bounce counts once). The feedback Lambda writes
+ * one, then counts the recipient's recent ones with one Query on `begins_with(sk,
+ * "BOUNCE#<recipientId>#")`; they expire after the counting window.
  *
  * A ForwardQuota counts the mail the inbound Lambda forwarded for an alias in one UTC hour
  * (`2026-10-22T09`), next to the alias in its partition; the hourly cap is one conditional
@@ -125,6 +133,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing
  * again. It carries no content and expires after a week, well past Lambda's 6-hour retry window.
+ *
+ * A Sent item traces a bounce to the message it is about (PLAN.md §20.28): one PutItem after
+ * each SES send, in the sender's partition under the ID SES returned, naming the kind of mail and
+ * the recipient it went to (by id, never the address). The feedback Lambda reads it with one
+ * GetItem, keyed by the event's `alias-user` tag and `mail.messageId`. No content; it expires
+ * after a week, and erasing the account removes it with the partition.
  *
  * A Token is a personal API token (PLAN.md §20.20), stored under the SHA-256 of its secret, so a
  * bearer request costs one strongly consistent GetItem and a table dump yields no usable token.

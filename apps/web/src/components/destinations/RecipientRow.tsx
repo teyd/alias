@@ -10,6 +10,7 @@ import {
   EllipsisIcon,
   LockIcon,
   LockOpenIcon,
+  PlayIcon,
   SendIcon,
   StarIcon,
   Trash2Icon,
@@ -53,7 +54,7 @@ const Status = ({ recipient }: { readonly recipient: Recipient }) =>
   Option.isSome(recipient.bouncedAt) ? (
     <Badge variant="destructive">
       <CircleXIcon />
-      Bounced
+      Paused
     </Badge>
   ) : recipient.isVerified ? (
     <Badge variant="success">
@@ -67,14 +68,27 @@ const Status = ({ recipient }: { readonly recipient: Recipient }) =>
     </Badge>
   );
 
+/** Why forwarding was paused, in the words of PLAN.md §20.28's decision table. */
+const pauseReason = (reason: Recipient["bounceReason"]) =>
+  Option.match(reason, {
+    onNone: () => "its mail server refused our mail for good",
+    onSome: (known) =>
+      ({
+        "address-unknown": "its mail server says the mailbox doesn't exist",
+        suppressed: "it is on a list of addresses that bounce, so mail to it isn't sent",
+        "repeated-bounces": "several messages to it bounced for good within a week",
+      })[known],
+  });
+
 /** What the status means for this mailbox, and how to fix it. */
 const Note = ({ recipient }: { readonly recipient: Recipient }) =>
   Option.match(recipient.bouncedAt, {
     onSome: (at) => (
       <span className="text-destructive">
-        Bounced on <span className="data">{date(at)}</span>: nothing is forwarded here.{" "}
+        Forwarding paused on <span className="data">{date(at)}</span>:{" "}
+        {pauseReason(recipient.bounceReason)}.{" "}
         {recipient.isVerified
-          ? "Remove it and add it again to retry."
+          ? "If the mailbox works, resume: we send a new link, and forwarding resumes once you open it."
           : "Resend the link to retry."}
       </span>
     ),
@@ -153,7 +167,11 @@ export const RecipientRow = ({
             <Note recipient={recipient} />
           </span>
           {action.isSuccess && action.variables === "resend" && (
-            <span className="text-xs text-muted-foreground">A new link is on its way.</span>
+            <span className="text-xs text-muted-foreground">
+              {recipient.isVerified
+                ? "A new link is on its way. Forwarding resumes once you open it."
+                : "A new link is on its way."}
+            </span>
           )}
           <Encryption recipient={recipient} />
           <Problem error={action.error} />
@@ -173,6 +191,17 @@ export const RecipientRow = ({
             >
               <SendIcon />
               Resend link
+            </Button>
+          )}
+          {recipient.isVerified && Option.isSome(recipient.bouncedAt) && (
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={action.isPending}
+              onClick={() => action.mutate("resend")}
+            >
+              <PlayIcon />
+              Resume
             </Button>
           )}
           {recipient.isVerified && !recipient.isDefault && (

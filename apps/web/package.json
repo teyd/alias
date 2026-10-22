@@ -4,6 +4,10 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./security-headers": "./securityHeaders.ts"
+  },
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",

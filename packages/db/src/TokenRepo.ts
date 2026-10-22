@@ -51,6 +51,8 @@ export class TokenRepo extends Context.Service<
       userId: string,
       tokenId: string,
     ) => Effect.Effect<void, NoSuchToken | DatabaseError>;
+    /** Deletes the token with this hash, if there is one (RFC 7009 revocation by its holder). */
+    readonly revokeByHash: (hash: string) => Effect.Effect<void, DatabaseError>;
     /**
      * Records a use at `now`, unless one was recorded less than `every` before: at most one write
      * per token and interval, whatever the request rate.
@@ -96,6 +98,27 @@ const TokenItem = Item.codec(
   "Token",
 );
 
+/**
+ * The conditional put that creates a token, also used inside a device login's redeeming
+ * transaction (`DeviceRepo.redeem`).
+ */
+export const tokenPut = Effect.fn("TokenRepo.tokenPut")(function* (
+  TableName: string,
+  token: NewToken,
+) {
+  const attributes = yield* TokenItem.encode({ ...token, lastUsedAt: Option.none() });
+  return {
+    TableName,
+    Item: {
+      ...tokenKey(token.hash),
+      gsi1pk: userTokens(token.userId),
+      gsi1sk: { S: `TOKEN#${token.id}` },
+      ...attributes,
+    },
+    ConditionExpression: "attribute_not_exists(pk)",
+  };
+});
+
 const CountItem = Item.codec(Schema.Struct({ count: Attribute.N }), "AuthFailures");
 
 const isLive = (now: DateTime.Utc) => (token: Token) =>
@@ -126,17 +149,10 @@ const make = Effect.fn("TokenRepo.make")(function* () {
 
   return TokenRepo.of({
     create: Effect.fn("TokenRepo.create")(function* (token) {
-      const attributes = yield* TokenItem.encode({ ...token, lastUsedAt: Option.none() });
-      yield* DynamoDB.putItem({
-        TableName,
-        Item: {
-          ...tokenKey(token.hash),
-          gsi1pk: userTokens(token.userId),
-          gsi1sk: { S: `TOKEN#${token.id}` },
-          ...attributes,
-        },
-        ConditionExpression: "attribute_not_exists(pk)",
-      }).pipe(Effect.mapError(databaseError("PutItem")), Effect.provide(client));
+      yield* DynamoDB.putItem(yield* tokenPut(TableName, token)).pipe(
+        Effect.mapError(databaseError("PutItem")),
+        Effect.provide(client),
+      );
     }),
 
     findByHash: Effect.fn("TokenRepo.findByHash")(function* (hash) {
@@ -160,6 +176,13 @@ const make = Effect.fn("TokenRepo.make")(function* () {
         Effect.provide(client),
       );
     }),
+
+    revokeByHash: (hash) =>
+      DynamoDB.deleteItem({ TableName, Key: tokenKey(hash) }).pipe(
+        Effect.asVoid,
+        Effect.mapError(databaseError("DeleteItem")),
+        Effect.provide(client),
+      ),
 
     touch: Effect.fn("TokenRepo.touch")(function* (token, now, every) {
       const recent = DateTime.subtractDuration(now, every);

@@ -4,6 +4,7 @@ import {
   AliasRepo,
   ChallengeRepo,
   ContactRepo,
+  DeviceRepo,
   DomainRepo,
   type Dynamo,
   PasskeyRepo,
@@ -25,6 +26,7 @@ import type { Doh } from "@alias/dns";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
 import { ContactsLive } from "./contacts.ts";
+import { DeviceLive, OAuthLive } from "./device.ts";
 import { DomainsLive } from "./domains.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { RecipientsLive } from "./recipients.ts";
@@ -49,6 +51,7 @@ const Repositories = Layer.mergeAll(
   AccountRepo.layer,
   AliasRepo.layer,
   ContactRepo.layer,
+  DeviceRepo.layer,
   UserRepo.layer,
   PasskeyRepo.layer,
   SessionRepo.layer,
@@ -89,6 +92,8 @@ const ApiLive = Layer.merge(HttpApiBuilder.layer(Api), OpenApiLive).pipe(
     SettingsLive,
     TokensLive,
     WebhooksLive,
+    OAuthLive,
+    DeviceLive,
     DomainsLive,
   ]),
   Layer.provide(authenticationLayer),

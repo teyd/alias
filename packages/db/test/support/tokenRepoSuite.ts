@@ -59,6 +59,19 @@ export const tokenRepoSuite = (
         ),
       );
 
+      it.effect("revokes a token by its hash, and shrugs at an unknown one", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* TokenRepo.TokenRepo;
+            yield* repo.create(token());
+            yield* repo.revokeByHash("a".repeat(64));
+            yield* repo.revokeByHash("a".repeat(64));
+            expect(yield* repo.findByHash("a".repeat(64))).toEqual(Option.none());
+            expect(yield* repo.list("usr_1")).toEqual([]);
+          }),
+        ),
+      );
+
       it.effect("ignores an expired token that TTL has not deleted yet", () =>
         withRepo(
           Effect.gen(function* () {

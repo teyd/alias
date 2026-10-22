@@ -7,3 +7,4 @@ export * as SharedDomains from "./SharedDomains.ts";
 export * as Username from "./Username.ts";
 export * as Webhook from "./Webhook.ts";
 export * as WebhookUrl from "./WebhookUrl.ts";
+export * as UserCode from "./UserCode.ts";

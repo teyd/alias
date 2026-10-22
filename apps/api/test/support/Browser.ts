@@ -3,6 +3,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as HashMap from "effect/HashMap";
 import * as Option from "effect/Option";
+import * as P from "effect/Predicate";
 import type * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import type * as Types from "effect/Types";
@@ -18,6 +19,7 @@ interface Response {
   /** The parsed JSON body; `null` when the response had none (204). */
   readonly body: Schema.Json;
   readonly setCookies: ReadonlyArray<string>;
+  readonly headers: Readonly<Record<string, string>>;
 }
 
 export type Client = ReturnType<typeof make>;
@@ -52,6 +54,7 @@ export const make = (handle: Handle, options: Options = {}) => {
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body: Option.Option<Schema.Json>,
+    form?: Readonly<Record<string, string>>,
   ) {
     const accepts = {
       accept: "application/json",
@@ -59,10 +62,12 @@ export const make = (handle: Handle, options: Options = {}) => {
       origin,
       ...options.headers,
     };
-    const headers = Option.match(body, {
-      onNone: () => accepts,
-      onSome: () => ({ ...accepts, "content-type": "application/json" }),
-    });
+    const headers = P.isNotUndefined(form)
+      ? { ...accepts, "content-type": "application/x-www-form-urlencoded" }
+      : Option.match(body, {
+          onNone: () => accepts,
+          onSome: () => ({ ...accepts, "content-type": "application/json" }),
+        });
     const event: Types.Mutable<FunctionUrl.FunctionUrlEvent> = {
       version: "2.0",
       rawPath: path,
@@ -79,6 +84,7 @@ export const make = (handle: Handle, options: Options = {}) => {
     const cookies = Arr.map(Arr.fromIterable(jar), ([name, value]) => `${name}=${value}`);
     if (Arr.isArrayNonEmpty(cookies)) event.cookies = cookies;
     if (Option.isSome(body)) event.body = JSON.stringify(body.value);
+    if (P.isNotUndefined(form)) event.body = new URLSearchParams(form).toString();
 
     const result = yield* FunctionUrl.decode(event).pipe(Effect.flatMap(handle));
     const setCookies = result.cookies ?? [];
@@ -88,6 +94,7 @@ export const make = (handle: Handle, options: Options = {}) => {
       status: result.statusCode,
       body: Str.isEmpty(text) ? null : JSON.parse(text),
       setCookies,
+      headers: result.headers ?? {},
     };
     return response;
   });
@@ -95,6 +102,9 @@ export const make = (handle: Handle, options: Options = {}) => {
   return {
     get: (path: string) => request("GET", path, Option.none()),
     post: (path: string, body: Schema.Json = {}) => request("POST", path, Option.some(body)),
+    /** An OAuth-style `application/x-www-form-urlencoded` POST. */
+    postForm: (path: string, fields: Readonly<Record<string, string>>) =>
+      request("POST", path, Option.none(), fields),
     patch: (path: string, body: Schema.Json) => request("PATCH", path, Option.some(body)),
     delete: (path: string) => request("DELETE", path, Option.none()),
     cookie: (name: string) => HashMap.get(jar, name),

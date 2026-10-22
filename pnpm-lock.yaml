@@ -568,6 +568,12 @@ importers:
       '@alias/db':
         specifier: workspace:*
         version: link:../packages/db
+      '@alias/dns':
+        specifier: workspace:*
+        version: link:../packages/dns
+      '@alias/doh-emulator':
+        specifier: workspace:*
+        version: link:../tools/doh-emulator
       '@alias/image-proxy':
         specifier: workspace:*
         version: link:../apps/image-proxy

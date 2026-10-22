@@ -9,7 +9,6 @@ const DomainRecord = Schema.Struct({
   ...DomainSetup.DnsRecord.fields,
   state: Schema.Union([DomainSetup.CheckState, Schema.Literal("unchecked")]),
 });
-export type DomainRecord = typeof DomainRecord.Type;
 
 /**
  * A custom domain (PLAN.md §20.18). `pending` until every required record is published and SES

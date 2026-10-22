@@ -3,6 +3,7 @@ import { TestAuthenticator } from "@alias/api/testing";
 import {
   AwsClient,
   FunctionUrl,
+  Identities,
   Inbound,
   type MessageQueue,
   Parameters,
@@ -15,6 +16,8 @@ import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, Username, Webhook } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
+import { Doh } from "@alias/dns";
+import { DohServer } from "@alias/doh-emulator";
 import { Proxy } from "@alias/image-proxy";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
@@ -41,7 +44,8 @@ import { createTransport } from "nodemailer";
  * The whole emulated stack, every listener on port 0:
  * - SMTP → SES emulator (receipt rules, verdicts) → S3 spool on fakecloud → SES Lambda event →
  *   the real inbound pipeline → SES sending on fakecloud;
- * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud;
+ * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud, SES
+ *   identities on fakecloud, DNS checks through the DoH emulator;
  * - a proxied image in forwarded mail → function URL emulator → the image proxy Lambda → the
  *   sender's image host.
  * One fakecloud process serves S3, DynamoDB, SES, SNS and SSM, as one AWS account would, and both
@@ -89,9 +93,12 @@ const api = Layer.unwrap(
   Effect.gen(function* () {
     const context = yield* Effect.context<Dynamo.Database>();
     const fakecloud = yield* FakeCloud.FakeCloud;
+    const dns = yield* DohServer.DohServer;
     const { handle, dispose } = makeFunctionUrlHandler(
       Layer.mergeAll(
         Layer.succeedContext(context),
+        Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
+        Doh.layer(dns.url),
         RelyingParty.layer({ id: "alias.test", origin }),
         Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
           Layer.provide(AwsClient.emulator(fakecloud.url)),
@@ -225,7 +232,10 @@ const stack = Layer.mergeAll(
   feedbackTopic,
   ses,
   aws,
-).pipe(Layer.provide(NodeCrypto.layer), Layer.provideMerge(FakeCloud.layer()));
+).pipe(
+  Layer.provide(NodeCrypto.layer),
+  Layer.provideMerge(Layer.merge(FakeCloud.layer(), DohServer.layer())),
+);
 
 /**
  * A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. With `bearer`, a

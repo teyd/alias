@@ -18,14 +18,14 @@ import * as AwsClient from "./Client.ts";
  */
 
 /** `DkimAttributes.Status`. */
-export const DkimStatus = Schema.Literals([
+const DkimStatus = Schema.Literals([
   "PENDING",
   "SUCCESS",
   "FAILED",
   "TEMPORARY_FAILURE",
   "NOT_STARTED",
 ]);
-export type DkimStatus = typeof DkimStatus.Type;
+type DkimStatus = typeof DkimStatus.Type;
 
 /** The fields of `CreateEmailIdentity` and `GetEmailIdentity` responses the service relies on. */
 export const IdentityResponse = Schema.Struct({

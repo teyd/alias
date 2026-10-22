@@ -39,11 +39,11 @@ export interface Setup {
   readonly dkimZone: string;
 }
 
-export const Purpose = Schema.Literals(["ownership", "receiving", "dkim", "mail-from", "dmarc"]);
-export type Purpose = typeof Purpose.Type;
+const Purpose = Schema.Literals(["ownership", "receiving", "dkim", "mail-from", "dmarc"]);
+type Purpose = typeof Purpose.Type;
 
-export const RecordType = Schema.Literals(["TXT", "MX", "CNAME"]);
-export type RecordType = typeof RecordType.Type;
+const RecordType = Schema.Literals(["TXT", "MX", "CNAME"]);
+type RecordType = typeof RecordType.Type;
 
 /** One record to publish. `value` is what to enter; for MX, `priority` goes in its own field. */
 export const DnsRecord = Schema.Struct({

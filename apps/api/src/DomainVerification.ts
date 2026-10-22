@@ -149,7 +149,7 @@ const identityOf = Effect.fn("DomainVerification.identityOf")(function* (
  * Checks one domain now and stores the result. None when the domain was released (a pending
  * domain past {@link PENDING_LIFETIME}) or removed meanwhile.
  */
-export const verify = Effect.fn("DomainVerification.verify")(
+const verify = Effect.fn("DomainVerification.verify")(
   function* (domain: DomainRepo.Domain) {
     const repo = yield* DomainRepo.DomainRepo;
     const identities = yield* Identities.Identities;

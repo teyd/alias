@@ -17,10 +17,10 @@ import * as Str from "effect/String";
  */
 
 /** Cloudflare's resolver, the production default. */
-export const cloudflare = "https://cloudflare-dns.com/dns-query";
+const cloudflare = "https://cloudflare-dns.com/dns-query";
 
 /** The record types the domain checks ask for, with their IANA numbers. */
-export const types = { CNAME: 5, SOA: 6, MX: 15, TXT: 16 } as const;
+const types = { CNAME: 5, SOA: 6, MX: 15, TXT: 16 } as const;
 export type QueryType = "CNAME" | "MX" | "TXT";
 
 const ResourceRecord = Schema.Struct({

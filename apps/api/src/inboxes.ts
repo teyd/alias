@@ -127,7 +127,7 @@ const list = Effect.fn("inboxes.list")(function* () {
 });
 
 /** A temporary inbox: a random address on a temp-mail domain, taking mail for a while. */
-const create = Effect.fn("inboxes.create")(function* (payload: {
+export const create = Effect.fn("inboxes.create")(function* (payload: {
   readonly domain?: string;
   readonly lifetimeHours?: number;
 }) {
@@ -198,7 +198,7 @@ const create = Effect.fn("inboxes.create")(function* (payload: {
  * Lists the inbox's messages after `after`; with `wait`, looks again with growing pauses until
  * one arrives or the wait is over. An empty answer means nothing arrived in time.
  */
-const messages = Effect.fn("inboxes.messages")(function* (
+export const messages = Effect.fn("inboxes.messages")(function* (
   params: InboxParams,
   query: { readonly after?: string; readonly wait?: number },
 ) {

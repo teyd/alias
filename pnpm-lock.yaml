@@ -400,6 +400,9 @@ importers:
       '@alias/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@alias/inbox':
+        specifier: workspace:*
+        version: link:../../packages/inbox
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.5)

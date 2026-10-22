@@ -17,7 +17,7 @@ import * as Str from "effect/String";
 import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
 import { Credentials } from "./Credentials.ts";
-import { InvalidAddress, NoSuchContact, NotConfirmed, forUser } from "./Errors.ts";
+import { InvalidAddress, NoCode, NoMail, NoSuchContact, NotConfirmed, forUser } from "./Errors.ts";
 import * as Output from "./Output.ts";
 import * as Session from "./Session.ts";
 
@@ -28,6 +28,8 @@ export const CLI_SCOPES = [
   "contacts:read",
   "contacts:write",
   "recipients:read",
+  "inboxes:read",
+  "inboxes:write",
 ] as const satisfies Arr.NonEmptyReadonlyArray<Scope>;
 
 /** An alias address as the API addresses it: `{ domain, local }`, lowercased. */
@@ -338,8 +340,88 @@ const recipients = Command.make("recipients").pipe(
   Command.withSubcommands([listRecipients]),
 );
 
+// --- temp ---------------------------------------------------------------------------------------
+
+/** The API's longest long poll (`MAX_WAIT_SECONDS`); the CLI waits longer by asking again. */
+const POLL_SECONDS = 25;
+
+const temp = Command.make(
+  "temp",
+  {
+    isWaiting: Flag.Boolean("wait").pipe(
+      Flag.withDescription("Wait for the first message and print it"),
+      Flag.withDefault(false),
+    ),
+    isOtp: Flag.Boolean("otp").pipe(
+      Flag.withDescription("With --wait: print only the code (or the verification link)"),
+      Flag.withDefault(false),
+    ),
+    timeout: Flag.Int("timeout").pipe(
+      Flag.withDescription("With --wait: give up after this many seconds (default 300)"),
+      Flag.withDefault(300),
+    ),
+    lifetime: Flag.Int("lifetime").pipe(
+      Flag.withDescription("Hours the inbox takes mail, 1 to 168 (default 24)"),
+      Flag.optional,
+    ),
+    json,
+  },
+  Effect.fn("alias.temp")(function* ({ isWaiting, isOtp, timeout, lifetime, json: isJson }) {
+    const client = yield* Session.client();
+    const created = yield* client.inboxes.create({
+      payload: Option.match(lifetime, {
+        onNone: () => ({}),
+        onSome: (lifetimeHours) => ({ lifetimeHours }),
+      }),
+    });
+    const address = created.address;
+    // The address first, alone on its line, so a script can read it while the CLI waits.
+    if (!isOtp || !isWaiting) yield* Console.log(address);
+    if (!isWaiting) return;
+    if (isOtp) yield* Console.error(`Waiting for mail to ${address}…`);
+    const at = address.lastIndexOf("@");
+    const params = { local: address.slice(0, at), domain: address.slice(at + 1) };
+    const deadline = DateTime.addDuration(yield* DateTime.now, Duration.seconds(timeout));
+    const look = Effect.fn("alias.temp.look")(function* () {
+      const left = Duration.toSeconds(DateTime.distance(yield* DateTime.now, deadline));
+      const found = yield* client.inboxes.messages({
+        params,
+        query: { wait: Math.max(0, Math.min(POLL_SECONDS, Math.floor(left))) },
+      });
+      return { found, isOver: left <= POLL_SECONDS };
+    });
+    const { found } = yield* look().pipe(
+      Effect.repeat({
+        until: (result) => Arr.isReadonlyArrayNonEmpty(result.found) || result.isOver,
+      }),
+    );
+    const first = Arr.last(found);
+    if (Option.isNone(first)) return yield* new NoMail({ address });
+    const message = first.value;
+    if (isOtp) {
+      const answer = Option.orElse(message.code, () => message.link);
+      if (Option.isNone(answer)) return yield* new NoCode();
+      return yield* isJson
+        ? Output.record(true, { code: message.code, link: message.link, messageId: message.id })
+        : Console.log(answer.value);
+    }
+    yield* Output.record(isJson, {
+      address,
+      from: message.from,
+      subject: message.subject,
+      code: message.code,
+      link: message.link,
+      messageId: message.id,
+    });
+  }, forUser),
+).pipe(
+  Command.withDescription(
+    "Create a temporary inbox; --wait for its first message, --otp to print just the code",
+  ),
+);
+
 /** `alias`: the whole command line. */
 export const alias = Command.make("alias").pipe(
   Command.withDescription("Email aliases from the terminal"),
-  Command.withSubcommands([login, logout, whoami, aliases, contacts, recipients]),
+  Command.withSubcommands([login, logout, whoami, aliases, contacts, recipients, temp]),
 );

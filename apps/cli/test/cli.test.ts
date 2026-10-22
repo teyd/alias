@@ -1,5 +1,6 @@
 import { TestApi } from "@alias/api/testing";
-import { ContactRepo } from "@alias/db";
+import { AliasRepo, ContactRepo } from "@alias/db";
+import { Inbox } from "@alias/inbox";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
@@ -242,6 +243,55 @@ describe("alias CLI against the API on the function URL emulator", () => {
         expect((yield* run(["recipients", "list"])).text).toBe(
           "No forwarding addresses yet: add one in the web app.",
         );
+      }),
+    );
+
+    it.effect("creates a temporary inbox, and waits for the code with --wait --otp", () =>
+      Effect.gen(function* () {
+        const { api, ada, run } = yield* loggedIn();
+        const first = Str.trim((yield* run(["temp"])).text);
+        expect(first).toMatch(/^[2-9a-z]{10}@tmp\.test$/);
+
+        const waiting = yield* Effect.forkChild(
+          run(["temp", "--wait", "--otp", "--timeout", "60"]),
+        );
+        // The second inbox shows up in Ada's list once the CLI created it (real HTTP meanwhile).
+        const Inboxes = Schema.Array(Schema.Struct({ address: Schema.String }));
+        const listInboxes = ada.browser
+          .get("/v1/inboxes")
+          .pipe(Effect.map((response) => Schema.decodeUnknownSync(Inboxes)(response.body)));
+        const inboxes = yield* listInboxes.pipe(
+          Effect.tap(() => TestClock.withLive(Effect.sleep("20 millis"))),
+          Effect.repeat({ until: (found) => found.length === 2, times: 200 }),
+        );
+        const address = Option.getOrElse(
+          Arr.findFirst(inboxes, (inbox) => inbox.address !== first),
+          () => ({ address: "" }),
+        ).address;
+        // Mail arrives; the inbound Lambda's store stands in for SMTP.
+        yield* Effect.gen(function* () {
+          const [localPart = "", domain = ""] = address.split("@");
+          const stored = yield* (yield* AliasRepo.make()).findByAddress(domain, localPart);
+          yield* (yield* Inbox.Inbox).store(
+            yield* Effect.fromOption(stored),
+            new TextEncoder().encode(
+              "From: login@service.example\r\nSubject: Your code\r\n\r\nYour verification code is 482913.\r\n",
+            ),
+          );
+        }).pipe(Effect.provide(api.context));
+        // The API's long poll sleeps on the test clock between its looks.
+        yield* Effect.forEach(
+          Arr.range(1, 10),
+          () =>
+            TestClock.withLive(Effect.sleep("30 millis")).pipe(
+              Effect.andThen(TestClock.adjust("1 second")),
+            ),
+          { concurrency: 1, discard: true },
+        );
+        const result = yield* Fiber.join(waiting);
+        expect(Exit.isSuccess(result.exit)).toBe(true);
+        expect(result.text).toBe("482913");
+        expect(Arr.join(result.err, "\n")).toContain(`Waiting for mail to ${address}`);
       }),
     );
 

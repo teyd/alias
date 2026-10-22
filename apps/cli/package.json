@@ -20,6 +20,7 @@
   "devDependencies": {
     "@alias/api": "workspace:*",
     "@alias/db": "workspace:*",
+    "@alias/inbox": "workspace:*",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "vite-plus": "catalog:",

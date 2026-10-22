@@ -303,11 +303,26 @@ describe("emulated stack", () => {
           expect(gone._tag).toBe("MessageGone");
 
           // Reply: the owner answers from their real mailbox through the reverse alias.
+          // The client quotes the thread, including the owner's own earlier message.
+          const replyBody = [
+            "Where is my parcel?",
+            "",
+            "Ada Lovelace",
+            "",
+            `On Tue, Store (orders@store.example) <${reverse}> wrote:`,
+            "> Thanks for your order!",
+            ">",
+            `> On Mon, Ada Lovelace <${ada.mailbox}> wrote:`,
+            ">> I'd like to order the blue one.",
+            ">> -- ",
+            `>> Ada Lovelace, ${ada.mailbox.toUpperCase()}`,
+            "",
+          ].join("\r\n");
           const replyEvent = yield* smtp({
             from: `"Ada Lovelace" <${ada.mailbox}>`,
             to: reverse,
             subject: "Re: Order confirmed",
-            text: "Where is my parcel?",
+            text: replyBody,
             headers: {
               "User-Agent": "Thunderbird/128.0",
               "X-Mailer": "Thunderbird",
@@ -346,7 +361,31 @@ describe("emulated stack", () => {
             "x-ses-spam-verdict",
             "x-ses-virus-verdict",
           ]);
-          // The owner's real address appears nowhere: not in a header, not in the envelope.
+          // Body diff: only the owner's name and address in the quoted lines changed. Their own
+          // signature line, which they typed, stays.
+          // nodemailer sent it quoted-printable; the relay re-encodes it the same way.
+          expect(field(replyText, "content-transfer-encoding")).toEqual(
+            Option.some("quoted-printable"),
+          );
+          const body = replyText
+            .slice(replyText.indexOf("\r\n\r\n") + 4)
+            .replace(/=\r\n/g, "")
+            .replace(/=([0-9A-F]{2})/g, (_, hex: string) =>
+              String.fromCharCode(Number.parseInt(hex, 16)),
+            );
+          expect(body).toBe(
+            replyBody
+              .replace(
+                `> On Mon, Ada Lovelace <${ada.mailbox}>`,
+                "> On Mon, shop@ada.alias.test <shop@ada.alias.test>",
+              )
+              .replace(
+                `>> Ada Lovelace, ${ada.mailbox.toUpperCase()}`,
+                ">> shop@ada.alias.test, shop@ada.alias.test",
+              ),
+          );
+          // The owner's real address appears nowhere: not in a header, not in the body, not in
+          // the envelope.
           expect(replyText.toLowerCase()).not.toContain(ada.mailbox);
           expect(reply?.to).toEqual(["orders@store.example"]);
         }),

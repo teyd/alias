@@ -1,0 +1,2 @@
+# Mail fixtures are byte-exact (CRLF and 8-bit included); never normalize them.
+*.eml -text

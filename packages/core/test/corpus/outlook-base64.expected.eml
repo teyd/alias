@@ -1,0 +1,39 @@
+From: shop@ada.alias.test
+To: orders@store.example
+Message-ID: <reply-1@ada.alias.test>
+Subject: Re: Your order
+In-Reply-To: <order-2@store.example>
+References: <order-1@store.example> <order-2@store.example>
+Date: Wed, 22 Oct 2026 08:01:10 -0700
+MIME-Version: 1.0
+X-MS-Has-Attach:
+Content-Language: en-US
+Content-Type: multipart/alternative; boundary="_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_"
+
+--_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+WWVzLCBUaHVyc2RheSBpcyBmaW5lLg0KDQpfX19fX19fX19fX19fX19fX19fX19fX19fX19fX19f
+Xw0KRnJvbTogU3RvcmUgKG9yZGVyc0BzdG9yZS5leGFtcGxlKSA8c2hvcCtyLmNlYXF5eXpsbWZ1
+d3lxZGNmenN3cXlsbm9id2drYzVvNmNjZHkyeHFjQGFkYS5hbGlhcy50ZXN0Pg0KU2VudDogV2Vk
+bmVzZGF5LCBPY3RvYmVyIDIyLCAyMDI2IDc6NDUgQU0NClRvOiBzaG9wQGFkYS5hbGlhcy50ZXN0
+IDxzaG9wQGFkYS5hbGlhcy50ZXN0Pg0KU3ViamVjdDogUmU6IFlvdXIgb3JkZXINCg0KQ291bGQg
+eW91IGNvbmZpcm0gdGhlIGRlbGl2ZXJ5IGRhdGU/DQo=
+
+--_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHk+PGRpdiBzdHlsZT0iZm9udC1mYW1pbHk6Q2FsaWJyaSI+WWVzLCBUaHVyc2Rh
+eSBpcyBmaW5lLjwvZGl2Pg0KPGhyIHN0eWxlPSJkaXNwbGF5OmlubGluZS1ibG9jazt3aWR0aDo5
+OCUiIHRhYmluZGV4PSItMSI+PGRpdiBpZD0iZGl2UnBseUZ3ZE1zZyIgZGlyPSJsdHIiPjxmb250
+IGZhY2U9IkNhbGlicmkiIHN0eWxlPSJmb250LXNpemU6MTFwdCI+PGI+RnJvbTo8L2I+IFN0b3Jl
+IChvcmRlcnNAc3RvcmUuZXhhbXBsZSkgJmx0O3Nob3Arci5jZWFxeXl6bG1mdXd5cWRjZnpzd3F5
+bG5vYndna2M1bzZjY2R5MnhxY0BhZGEuYWxpYXMudGVzdCZndDs8YnI+PGI+U2VudDo8L2I+IFdl
+ZG5lc2RheSwgT2N0b2JlciAyMiwgMjAyNiA3OjQ1IEFNPGJyPjxiPlRvOjwvYj4gc2hvcEBhZGEu
+YWxpYXMudGVzdCAmbHQ7c2hvcEBhZGEuYWxpYXMudGVzdCZndDs8YnI+PGI+U3ViamVjdDo8L2I+
+IFJlOiBZb3VyIG9yZGVyPC9mb250PjxkaXY+Jm5ic3A7PC9kaXY+PC9kaXY+DQo8ZGl2PkNvdWxk
+IHlvdSBjb25maXJtIHRoZSBkZWxpdmVyeSBkYXRlPzwvZGl2PjwvYm9keT48L2h0bWw+DQo=
+
+--_000_DB9PR01MB1234ABCDEFGHIJKLMNOPQRS_--

@@ -217,11 +217,16 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   if (Result.isFailure(target)) return Plan.Drop({ reason: target.failure });
   const contact = target.success;
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
-  const from = Option.fromUndefinedOr(record.ses.mail.commonHeaders.from).pipe(
+  const sender = Option.fromUndefinedOr(record.ses.mail.commonHeaders.from).pipe(
     Option.flatMap(Arr.head),
     Option.flatMap(Mail.parseSender),
-    Option.map((sender) => sender.address),
   );
+  const from = Option.map(sender, (found) => found.address);
+  // What the owner's client may quote: any of their addresses, and the name they write with.
+  const owner: Mail.Owner = {
+    addresses: Arr.map(recipients, (recipient) => recipient.address),
+    name: Option.flatMap(sender, (found) => found.name),
+  };
   const messageId = yield* Effect.orDie((yield* Crypto.Crypto).randomUUIDv4());
   return Plan.Send({
     kind: "reply",
@@ -233,7 +238,7 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
           Option.map((reason): Refusal => Plan.Drop({ reason })),
         ),
       ),
-    rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId }),
+    rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId, owner }),
     envelope: { from: Address.format(address), to: [contact] },
   });
 });

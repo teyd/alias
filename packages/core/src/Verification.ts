@@ -1,6 +1,7 @@
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as R from "effect/Record";
 import * as Str from "effect/String";
 import * as Html from "./internal/html.ts";
 
@@ -363,7 +364,9 @@ const LINK_REFUSED_WORDS = new RegExp(
 const MAX_CODE_DIGITS = 8;
 
 /** URLs and addresses hold digits that are never codes; they are blanked before scanning. */
-const URL_OR_ADDRESS = /\b(?:https?:\/\/|www\.)\S+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gi;
+// The lookbehind starts an address only where its run of address characters starts, so a long
+// run without an `@` is scanned once (PLAN.md §20.25).
+const URL_OR_ADDRESS = /\b(?:https?:\/\/|www\.)\S+|(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gi;
 
 interface Candidate {
   readonly code: string;
@@ -407,24 +410,42 @@ const normalizeCode = (raw: string) => raw.replace(/[\s\u00a0-]/g, "");
 
 const isYear = (code: string) => /^(?:19|20)\d\d$/.test(code);
 
-/** The line the match sits on, split around it. */
+/**
+ * How far around a match its context is read. Real lines are far shorter; bounding it keeps a
+ * mail of one huge line with many numbers linear (PLAN.md §20.25).
+ */
+const CONTEXT = 200;
+
+/** Where the line holding `at` starts, looking back at most `CONTEXT`; else that far back. */
+const lineStartBefore = (segment: string, at: number) => {
+  const from = Math.max(0, at - CONTEXT - 1);
+  const found = segment.slice(from, at).lastIndexOf("\n");
+  return found === -1 ? from : from + found + 1;
+};
+
+/** Where the line holding `at` ends, looking ahead at most `CONTEXT`; else that far ahead. */
+const lineEndAfter = (segment: string, at: number) => {
+  const to = Math.min(segment.length, at + CONTEXT + 1);
+  const found = segment.slice(at, to).indexOf("\n");
+  return found === -1 ? to : at + found;
+};
+
+/** The line the match sits on, split around it, and its neighbours, each within `CONTEXT`. */
 const surroundings = (segment: string, start: number, end: number) => {
-  const lineStart = segment.lastIndexOf("\n", start - 1) + 1;
-  const lineEndAt = segment.indexOf("\n", end);
-  const lineEnd = lineEndAt === -1 ? segment.length : lineEndAt;
-  const previousLineStart = segment.lastIndexOf("\n", Math.max(0, lineStart - 2)) + 1;
-  const nextLineEndAt = lineEndAt === -1 ? -1 : segment.indexOf("\n", lineEndAt + 1);
+  const lineStart = lineStartBefore(segment, start);
+  const lineEnd = lineEndAfter(segment, end);
+  const hasAbove = segment[lineStart - 1] === "\n";
+  const hasBelow = segment[lineEnd] === "\n";
+  const isWholeLine = (lineStart === 0 || hasAbove) && (lineEnd === segment.length || hasBelow);
   return {
     before: segment.slice(Math.max(lineStart, start - 80), start),
     after: segment.slice(end, Math.min(lineEnd, end + 60)),
     /** The line above, for codes on a line of their own under a sentence that announces them. */
-    above: lineStart === 0 ? "" : segment.slice(previousLineStart, lineStart - 1),
+    above: hasAbove ? segment.slice(lineStartBefore(segment, lineStart - 1), lineStart - 1) : "",
     /** The line below, for a code on the first line explained by the next. */
-    below:
-      lineEndAt === -1
-        ? ""
-        : segment.slice(lineEndAt + 1, nextLineEndAt === -1 ? segment.length : nextLineEndAt),
-    isAlone: segment.slice(lineStart, lineEnd).trim() === segment.slice(start, end).trim(),
+    below: hasBelow ? segment.slice(lineEnd + 1, lineEndAfter(segment, lineEnd + 1)) : "",
+    isAlone:
+      isWholeLine && segment.slice(lineStart, lineEnd).trim() === segment.slice(start, end).trim(),
   };
 };
 
@@ -524,14 +545,10 @@ const winner = <A extends Ranked>(
   candidates: ReadonlyArray<A>,
   valueOf: (candidate: A) => string,
 ): Option.Option<{ readonly best: A; readonly isTied: boolean }> => {
+  // Grouped once, not filtered once per value: mail may hold thousands of candidates.
   const perValue = Arr.getSomes(
-    Arr.map(Arr.dedupe(Arr.map(candidates, valueOf)), (value) =>
-      Arr.head(
-        Arr.sort(
-          Arr.filter(candidates, (candidate) => valueOf(candidate) === value),
-          byScoreThenPosition,
-        ),
-      ),
+    Arr.map(R.values(Arr.groupBy(candidates, valueOf)), (group) =>
+      Arr.head(Arr.sort(group, byScoreThenPosition)),
     ),
   );
   const [first, second] = Arr.sort(perValue, byScoreThenPosition);
@@ -564,23 +581,34 @@ const scoreLink = (href: string, text: string): number => {
   return (saysVerify ? 3 : 0) + (urlSaysVerify ? 2 : 0);
 };
 
-/** Bare URLs in a text body, with their line as what they say. */
+/** How many lines above a URL are looked at for its label. */
+const LABEL_LINES = 20;
+
+/**
+ * Bare URLs in a text body, with their line as what they say. The label is read within
+ * `CONTEXT` of the URL and `LABEL_LINES` above it, so many URLs stay linear (PLAN.md §20.25).
+ */
 const textLinks = (text: string): ReadonlyArray<Html.Anchor> => {
   const lines = text.split(/\r?\n/);
   return Arr.flatMap(lines, (line, index) =>
-    Arr.map(
-      Arr.fromIterable(line.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)),
-      (match): Html.Anchor => ({
-        href: match[0].replace(/[.,;:!?]+$/, ""),
+    Arr.map(Arr.fromIterable(line.matchAll(/https?:\/\/[^\s<>"')\]]+/gi)), (match): Html.Anchor => {
+      const rest = `${line.slice(Math.max(0, match.index - CONTEXT), match.index)} ${line.slice(
+        match.index + match[0].length,
+        match.index + match[0].length + CONTEXT,
+      )}`;
+      return {
+        href: match[0].replace(/(?<![.,;:!?])[.,;:!?]+$/, ""),
         // A URL on a line of its own is labelled by the text just above it.
-        text: /[\p{L}]{2}/u.test(line.replace(match[0], " "))
-          ? line.replace(match[0], " ")
+        text: /[\p{L}]{2}/u.test(rest)
+          ? rest
           : Arr.takeRight(
-              Arr.filter(Arr.take(lines, index), (above) => Str.isNonEmpty(above.trim())),
+              Arr.filter(lines.slice(Math.max(0, index - LABEL_LINES), index), (above) =>
+                Str.isNonEmpty(above.trim()),
+              ),
               2,
             ).join(" "),
-      }),
-    ),
+      };
+    }),
   );
 };
 

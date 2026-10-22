@@ -133,7 +133,8 @@ const leaf = (message: Headers.Message, type: Mime.ContentType): Leaf => {
 };
 
 /** Every leaf of the entity, depth first, in the order they appear. */
-const leaves = (message: Headers.Message): Effect.Effect<ReadonlyArray<Leaf>> => {
+/** Parts past the walk's limits aren't read (`Mime.Walk`, PLAN.md §20.25). */
+const leaves = (message: Headers.Message, walk: Mime.Walk): Effect.Effect<ReadonlyArray<Leaf>> => {
   const type = Option.match(Mime.first(message, "content-type"), {
     onNone: () => Mime.DEFAULT_TYPE,
     onSome: Mime.parseContentType,
@@ -142,9 +143,16 @@ const leaves = (message: Headers.Message): Effect.Effect<ReadonlyArray<Leaf>> =>
   if (type.type !== "multipart" || Option.isNone(boundary)) {
     return Effect.succeed([leaf(message, type)]);
   }
+  if (walk.depth >= Mime.MAX_DEPTH) return Effect.succeed([]);
+  const inner = { ...walk, depth: walk.depth + 1 };
   return Effect.forEach(
     Arr.filter(Mime.splitMultipart(message.rest, boundary.value), (piece) => piece.isPart),
-    (piece) => Effect.flatMap(Mime.parseEntity(piece.bytes), leaves),
+    (piece) =>
+      Effect.flatMap(Mime.visitPart(walk), (isAllowed) =>
+        isAllowed
+          ? Effect.flatMap(Mime.parseEntity(piece.bytes), (part) => leaves(part, inner))
+          : Effect.succeed([]),
+      ),
     { concurrency: 1 },
   ).pipe(Effect.map(Arr.flatten));
 };
@@ -163,7 +171,7 @@ const decodeLeaf = (found: Leaf) => decodeText(fromBinary(found.content), charse
  */
 export const read = Effect.fn("Message.read")(function* (raw: Uint8Array) {
   const message = yield* Headers.parse(raw);
-  const all = yield* leaves(message);
+  const all = yield* leaves(message, yield* Mime.startWalk);
   const text = Arr.findFirst(all, (found) => isBody(found, "plain"));
   const html = Arr.findFirst(all, (found) => isBody(found, "html"));
   const isChosen = (found: Leaf) =>

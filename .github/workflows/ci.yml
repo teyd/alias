@@ -39,6 +39,7 @@ jobs:
           - "@alias/lambda-emulator"
           - "@alias/doh-emulator"
           - "@alias/sdk"
+          - "@alias/cli"
           - "@alias/e2e"
           - "@alias/browser"
     steps:
@@ -76,3 +77,20 @@ jobs:
       - run: pnpm --filter @alias/web build
       # The publishable SDK bundle: JS plus inlined declarations, only `effect` left external.
       - run: pnpm --filter @alias/sdk build
+
+  # The `alias` CLI as single-file binaries (bun build --compile). Both targets are built on Linux
+  # (Bun cross-compiles); the linux-x64 one is smoke-run here, the darwin-arm64 one only on a Mac.
+  # Artifacts only: releasing (npm, Homebrew tap) needs the maintainers' accounts.
+  cli-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Installs Node, pnpm, Java, fakecloud and Bun from mise.toml and verifies them against mise.lock.
+      - uses: jdx/mise-action@v5
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm cli:compile linux-x64 darwin-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alias-cli
+          path: apps/cli/dist/alias-*
+          if-no-files-found: error

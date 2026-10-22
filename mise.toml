@@ -5,6 +5,7 @@ node = "24" # matches the Lambda runtime (nodejs24.x). The engines field in pack
 pnpm = "12.14.0" # must equal devEngines.packageManager in package.json
 java = "temurin-17" # for Amazon DynamoDB Local, the reference DynamoDB emulator
 "github:faiscadev/fakecloud" = "0.51.0" # S3 and DynamoDB emulator, a single binary that needs no Docker
+bun = "1.4.3" # only for `bun build --compile`: the single-file `alias` CLI binaries (apps/cli)
 
 [settings]
 lockfile = true

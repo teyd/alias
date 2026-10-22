@@ -26,6 +26,9 @@
     },
     "tools/doh-emulator": {
       "entry": ["bin/*.ts"]
+    },
+    "apps/cli": {
+      "entry": ["bin/*.ts"]
     }
   },
   "includeEntryExports": true

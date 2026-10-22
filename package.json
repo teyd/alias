@@ -9,6 +9,7 @@
     "dev": "mise exec -- node scripts/dev.ts",
     "check": "vp check && tsc -p infra && knip --no-progress && node scripts/openapi.ts --check",
     "openapi": "node scripts/openapi.ts",
+    "cli:compile": "mise exec -- node scripts/compile-cli.ts",
     "test": "mise exec -- vp run --filter '!alias' test",
     "test:unit": "mise exec -- vp run --filter '!alias' test:unit",
     "test:affected": "mise exec -- node scripts/affected.ts test",

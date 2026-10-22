@@ -101,6 +101,22 @@ const inboxBucketName = `alias-inbox-${stage}`;
  */
 const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 
+/**
+ * The webhook keys (PLAN.md §20.30): they seal the webhook signing secrets at rest. Same format
+ * and storage as the other keyrings; the API (seals on create and rotate) and the delivery Lambda
+ * (opens) read it. Put it once before the first deploy:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/webhook-keys \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * Rotation is the usual two puts (add the new key after the current one, then move it first). A
+ * retired key opens every secret sealed with it until each webhook's secret is rotated or the
+ * webhook deleted, so keep it until then; removing it earlier stops those webhooks' deliveries
+ * (they retry into the dead-letter queue).
+ */
+const webhookKeysParameter = `/alias/${stage}/webhook-keys`;
+
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
   "alias",
@@ -118,6 +134,7 @@ export default Alchemy.Stack(
     const reverseTokenKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${reverseTokenKeysParameter}`;
     const imageProxyKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${imageProxyKeysParameter}`;
     const inboxKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${inboxKeysParameter}`;
+    const webhookKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${webhookKeysParameter}`;
     const inboxObjects = `arn:aws:s3:::${inboxBucketName}/*`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
@@ -241,6 +258,11 @@ export default Alchemy.Stack(
       Action: ["ssm:GetParameter"],
       Resource: inboxKeysParameterArn,
     };
+    const webhookKeys = {
+      Effect: "Allow" as const,
+      Action: ["ssm:GetParameter"],
+      Resource: webhookKeysParameterArn,
+    };
 
     // Logs carry no addresses or content, but still expire (PLAN.md §20.15): without a retention
     // Lambda's log groups never do.
@@ -299,6 +321,7 @@ export default Alchemy.Stack(
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
         ALIAS_INBOX_BUCKET: inboxBucketName,
         ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
       },
     });
     // Stored mail: read, delete one, and list an alias's objects to purge them with the alias or
@@ -310,7 +333,8 @@ export default Alchemy.Stack(
         inboxKeys,
       ],
     });
-    yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
+    // Publishing events, and sealing endpoint secrets with the webhook keys.
+    yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks, webhookKeys] });
     yield* api.bind("DataAccess", {
       policyStatements: [
         {
@@ -737,10 +761,16 @@ export default Alchemy.Stack(
       logging,
       timeout: Duration.seconds(30),
       functionUrl: false,
-      env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
+      env: {
+        ALIAS_TABLE_NAME: table.tableName,
+        ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+      },
     });
+    // The webhook keys open endpoint secrets (read once, at cold start).
     yield* delivery.bind("Deliver", {
       policyStatements: [
+        webhookKeys,
         {
           Effect: "Allow",
           Action: ["dynamodb:GetItem", "dynamodb:UpdateItem"],

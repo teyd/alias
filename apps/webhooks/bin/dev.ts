@@ -5,12 +5,13 @@
  * publish to the same queue.
  *
  * Dev receivers may listen on `http://localhost` (`ALIAS_WEBHOOK_ALLOW_LOOPBACK`), which
- * production never allows.
+ * production never allows. Endpoint secrets open with the dev webhook keys the API seals them
+ * with, from the same fakecloud's SSM.
  */
 import { AwsClient, MessageQueue, SqsEvent } from "@alias/aws";
 import { Dynamo } from "@alias/db";
 import { SqsEventSource } from "@alias/lambda-emulator";
-import { Delivery, Egress, UrlPolicy, WebhookQueue } from "@alias/webhooks";
+import { Delivery, Egress, Secrets, UrlPolicy, WebhookQueue } from "@alias/webhooks";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -30,6 +31,7 @@ const serve = Effect.fn("webhooks.dev")(function* () {
       Delivery.production,
       NodeCrypto.layer,
       Egress.layer,
+      Secrets.dev(fakecloudUrl),
     ).pipe(Layer.provideMerge(UrlPolicy.layer({ isLoopbackAllowed: true }))),
   );
   const context = yield* Layer.build(services);

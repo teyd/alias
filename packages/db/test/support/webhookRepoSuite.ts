@@ -9,6 +9,9 @@ import * as Result from "effect/Result";
 import { WebhookRepo } from "../../src/index.ts";
 import { freshTable } from "./database.ts";
 
+/** Stand-in for a sealed secret: the repository stores the bytes it is given. */
+const sealed = (label: string) => new TextEncoder().encode(`sealed:${label}`);
+
 const at = (millis: number) => DateTime.makeUnsafe(millis);
 
 const webhook = (overrides: Partial<WebhookRepo.NewWebhook> = {}): WebhookRepo.NewWebhook => ({
@@ -16,7 +19,7 @@ const webhook = (overrides: Partial<WebhookRepo.NewWebhook> = {}): WebhookRepo.N
   userId: "usr_1",
   url: "https://hooks.example.com/alias",
   eventTypes: ["mail.forwarded", "alias.created"],
-  secret: "whsec_first",
+  sealedSecret: sealed("first"),
   createdAt: at(1_000),
   ...overrides,
 });
@@ -36,7 +39,7 @@ export const webhookRepoSuite = (
 
       const stored = {
         ...webhook(),
-        previousSecret: Option.none(),
+        previousSealedSecret: Option.none(),
         previousSecretUntil: Option.none(),
         isEnabled: true,
       };
@@ -89,17 +92,17 @@ export const webhookRepoSuite = (
           Effect.gen(function* () {
             const repo = yield* WebhookRepo.WebhookRepo;
             yield* repo.create(webhook());
-            const rotated = yield* repo.rotateSecret("usr_1", "wh_01", "whsec_second", at(9_000));
+            const rotated = yield* repo.rotateSecret("usr_1", "wh_01", sealed("second"), at(9_000));
             expect(rotated).toEqual({
               ...stored,
-              secret: "whsec_second",
-              previousSecret: Option.some("whsec_first"),
+              sealedSecret: sealed("second"),
+              previousSealedSecret: Option.some(sealed("first")),
               previousSecretUntil: Option.some(at(9_000)),
             });
-            const again = yield* repo.rotateSecret("usr_1", "wh_01", "whsec_third", at(19_000));
-            expect(again.previousSecret).toEqual(Option.some("whsec_second"));
+            const again = yield* repo.rotateSecret("usr_1", "wh_01", sealed("third"), at(19_000));
+            expect(again.previousSealedSecret).toEqual(Option.some(sealed("second")));
             const missing = yield* Effect.result(
-              repo.rotateSecret("usr_1", "wh_09", "whsec_x", at(1)),
+              repo.rotateSecret("usr_1", "wh_09", sealed("x"), at(1)),
             );
             expect(Result.isFailure(missing) && missing.failure._tag).toBe("NoSuchWebhook");
           }),

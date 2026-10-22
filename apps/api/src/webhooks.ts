@@ -9,11 +9,12 @@ import {
 } from "@alias/contracts";
 import { Webhook, WebhookUrl } from "@alias/core";
 import { WebhookRepo } from "@alias/db";
-import { Delivery, UrlPolicy } from "@alias/webhooks";
+import { Delivery, Secrets, UrlPolicy } from "@alias/webhooks";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -47,31 +48,44 @@ const create = Effect.fn("webhooks.create")(function* (payload: {
   if ((yield* Effect.orDie(webhooks.list(user.userId))).length >= MAX_WEBHOOKS) {
     return yield* new TooManyWebhooks({ limit: MAX_WEBHOOKS });
   }
+  const owner = {
+    userId: user.userId,
+    webhookId: `wh_${(yield* Effect.orDie(crypto.randomULID)).toLowerCase()}`,
+  };
+  // Shown once, here; stored only sealed (SR-13).
+  const secret = yield* Webhook.newSecret().pipe(Effect.orDie);
   const webhook = {
-    id: `wh_${(yield* Effect.orDie(crypto.randomULID)).toLowerCase()}`,
+    id: owner.webhookId,
     userId: user.userId,
     url: url.success.href,
     eventTypes: Arr.dedupe(payload.eventTypes),
-    secret: yield* Webhook.newSecret().pipe(Effect.orDie),
+    sealedSecret: yield* Effect.orDie(Secrets.seal(owner, Redacted.make(secret))),
     createdAt: yield* DateTime.now,
   };
   yield* Effect.orDie(webhooks.create(webhook));
-  return { ...view({ ...webhook, isEnabled: true }), secret: webhook.secret };
+  return { ...view({ ...webhook, isEnabled: true }), secret };
 });
 
 const rotateSecret = Effect.fn("webhooks.rotateSecret")(function* (webhookId: string) {
   const user = yield* CurrentUser;
   const webhooks = yield* WebhookRepo.WebhookRepo;
   const secret = yield* Webhook.newSecret().pipe(Effect.orDie);
+  const sealed = yield* Effect.orDie(
+    Secrets.seal({ userId: user.userId, webhookId }, Redacted.make(secret)),
+  );
   const until = DateTime.addDuration(yield* DateTime.now, Delivery.ROTATION_GRACE);
   const rotated = yield* webhooks
-    .rotateSecret(user.userId, webhookId, secret, until)
+    .rotateSecret(user.userId, webhookId, sealed, until)
     .pipe(Effect.catchTags({ NoSuchWebhook: notFound(webhookId), DatabaseError: Effect.die }));
   return { ...view(rotated), secret };
 });
 
 /** What the webhook handlers use. The group captures them once, at startup. */
-type WebhookServices = Crypto.Crypto | WebhookRepo.WebhookRepo | UrlPolicy.UrlPolicy;
+type WebhookServices =
+  | Crypto.Crypto
+  | WebhookRepo.WebhookRepo
+  | UrlPolicy.UrlPolicy
+  | Secrets.WebhookKeys;
 
 export const WebhooksLive = HttpApiBuilder.group(Api, "webhooks", (handlers) =>
   Effect.gen(function* () {

@@ -149,7 +149,8 @@ describe("feedback Lambda (fakecloud SES events → SNS → Lambda event)", () =
             userId: "usr_1",
             url: "https://hooks.example.com/",
             eventTypes: ["recipient.bounced"],
-            secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+            // Producers only enqueue job ids; the sealed secret is never opened here.
+            sealedSecret: new TextEncoder().encode("sealed"),
             createdAt: DateTime.makeUnsafe(0),
           }),
         ).pipe(Effect.provide(WebhookRepo.layer));

@@ -16,9 +16,10 @@ import * as Effect from "effect/Effect";
 import { HttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { Delivery, Egress, Publisher, UrlPolicy } from "../src/index.ts";
-import { Receiver, TestQueue, freshQueue } from "./support/index.ts";
+import { Delivery, Egress, Publisher, Secrets, UrlPolicy } from "../src/index.ts";
+import { Receiver, TestQueue, freshQueue, testWebhookKeys } from "./support/index.ts";
 
 const loopback = { isLoopbackAllowed: true };
 
@@ -31,7 +32,13 @@ const settings = () =>
 
 /** One test's world: a table, a webhook queue, the publisher and the delivery Lambda's services. */
 const world = (maxReceiveCount = 8, url = loopback) =>
-  Layer.mergeAll(Publisher.layer, WebhookRepo.layer, settings(), Egress.layer).pipe(
+  Layer.mergeAll(
+    Publisher.layer,
+    WebhookRepo.layer,
+    settings(),
+    Egress.layer,
+    testWebhookKeys(),
+  ).pipe(
     Layer.provideMerge(UrlPolicy.layer(url)),
     Layer.provideMerge(Layer.mergeAll(freshTable(), freshQueue(maxReceiveCount), NodeCrypto.layer)),
   );
@@ -49,7 +56,7 @@ const register = Effect.fn("register")(function* (
     userId: "usr_1",
     url,
     eventTypes,
-    secret,
+    sealedSecret: yield* Secrets.seal({ userId: "usr_1", webhookId: id }, Redacted.make(secret)),
     createdAt: yield* DateTime.now,
   });
   return secret;
@@ -65,6 +72,7 @@ const lambda = Effect.fn("lambda")(function* () {
     | HttpClient.HttpClient
     | Crypto.Crypto
     | MessageQueue.MessageQueue
+    | Secrets.WebhookKeys
   >();
   return yield* SqsEventSource.make({
     queueUrl,
@@ -213,7 +221,11 @@ describe("webhook delivery (Publisher → SQS on fakecloud → event source → 
         const fresh = yield* Webhook.newSecret();
         const repo = yield* WebhookRepo.WebhookRepo;
         const until = DateTime.addDuration(yield* DateTime.now, Delivery.ROTATION_GRACE);
-        yield* repo.rotateSecret("usr_1", "wh_1", fresh, until);
+        const sealed = yield* Secrets.seal(
+          { userId: "usr_1", webhookId: "wh_1" },
+          Redacted.make(fresh),
+        );
+        yield* repo.rotateSecret("usr_1", "wh_1", sealed, until);
         yield* (yield* Publisher.Publisher).publish("usr_1", created(), "al_1");
         yield* (yield* lambda()).poll;
         const [request] = receiver.received;
@@ -230,6 +242,23 @@ describe("webhook delivery (Publisher → SQS on fakecloud → event source → 
         expect(request?.headers["webhook-signature"]?.split(" ")).toHaveLength(2);
         expect(yield* check(old)).toBe(true);
         expect(yield* check(fresh)).toBe(true);
+      }).pipe(Effect.provide(world())),
+    );
+
+    // SR-13 (PLAN.md §20.30): what the delivery Lambda can't open, it doesn't sign with.
+    it.effect("retries, without sending, when a secret doesn't open", () =>
+      Effect.gen(function* () {
+        const receiver = yield* Receiver.make();
+        yield* register(receiver.url);
+        const repo = yield* WebhookRepo.WebhookRepo;
+        const elsewhere = yield* Effect.flatMap(repo.find("usr_1", "wh_1"), Effect.fromOption);
+        // A sealed secret copied onto another webhook's item: bound to wh_1, it won't open there.
+        yield* register(receiver.url, ["alias.created"], "wh_2");
+        yield* repo.rotateSecret("usr_1", "wh_2", elsewhere.sealedSecret, yield* DateTime.now);
+        yield* repo.delete("usr_1", "wh_1");
+        yield* (yield* Publisher.Publisher).publish("usr_1", created(), "al_1");
+        expect(yield* (yield* lambda()).poll).toEqual({ received: 1, deleted: 0 });
+        expect(receiver.received).toEqual([]);
       }).pipe(Effect.provide(world())),
     );
 

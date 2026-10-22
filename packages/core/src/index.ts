@@ -8,6 +8,7 @@ export * as OAuth from "./OAuth.ts";
 export * as Pgp from "./Pgp.ts";
 export * as PgpKey from "./PgpKey.ts";
 export * as ReverseToken from "./ReverseToken.ts";
+export * as Seal from "./Seal.ts";
 export * as SharedDomains from "./SharedDomains.ts";
 export * as TempDomains from "./TempDomains.ts";
 export * as Username from "./Username.ts";

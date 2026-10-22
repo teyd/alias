@@ -6,7 +6,7 @@ import { freshInbox } from "@alias/inbox/testing";
 import { NodeCrypto } from "@effect/platform-node";
 import { UrlPolicy } from "@alias/webhooks";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
-import { freshQueue } from "@alias/webhooks/testing";
+import { freshQueue, testWebhookKeys } from "@alias/webhooks/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
 import * as Clock from "effect/Clock";
@@ -61,6 +61,7 @@ export const make = Effect.acquireRelease(
         RelyingParty.layer({ id: sharedDomain, origin: Browser.origin }),
         // Receivers in tests listen on loopback over http.
         UrlPolicy.layer({ isLoopbackAllowed: true }),
+        testWebhookKeys(),
         // A second shared domain lets alias tests pick between domains.
         MailSettings.layer(Option.some(`no-reply@${sharedDomain}`)).pipe(
           Layer.provideMerge(SharedDomains.layer(`${sharedDomain},alias2.test`)),

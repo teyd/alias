@@ -3,6 +3,7 @@ import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
 import * as Address from "./Address.ts";
+import { decode as decodeWords } from "./internal/encodedWords.ts";
 import * as Headers from "./internal/headers.ts";
 import { mailboxField, sanitize } from "./internal/phrase.ts";
 
@@ -17,6 +18,45 @@ export interface Sender {
   readonly name: Option.Option<string>;
   readonly address: string;
 }
+
+/** `display <local@domain>`, with the address in angle brackets at the end. */
+const NAME_ADDR = /^(.*?)\s*<([^<>\s]+@[^<>\s]+)>$/s;
+/** A bare `local@domain`, optionally followed by an old-style `(comment)` name. */
+const ADDR_SPEC = /^([^<>\s"(),]+@[^<>\s"(),]+)(?:\s*\((.*)\))?$/s;
+
+const unquote = (phrase: string) =>
+  phrase.startsWith('"') && phrase.endsWith('"') && phrase.length >= 2
+    ? phrase.slice(1, -1).replace(/\\(.)/g, "$1")
+    : phrase;
+
+const displayName = (phrase: Option.Option<string>): Option.Option<string> =>
+  phrase.pipe(
+    Option.map((text) => decodeWords(unquote(text.trim())).trim()),
+    Option.filter(Str.isNonEmpty),
+  );
+
+/**
+ * Reads the first mailbox of a `From` field value, as SES lists it in `commonHeaders.from`:
+ * `"Café Müller" <news@cafe.example>`, `=?UTF-8?Q?...?= <...>`, or a bare address. The name is
+ * decoded for display; none when the value holds no usable address.
+ */
+export const parseSender = (value: string): Option.Option<Sender> => {
+  const text = value.trim();
+  const nameAddr = NAME_ADDR.exec(text);
+  if (nameAddr !== null) {
+    return Option.some({
+      name: displayName(Option.fromUndefinedOr(nameAddr[1])),
+      address: nameAddr[2] ?? "",
+    });
+  }
+  const addrSpec = ADDR_SPEC.exec(text);
+  return addrSpec === null
+    ? Option.none()
+    : Option.some({
+        name: displayName(Option.fromUndefinedOr(addrSpec[2])),
+        address: addrSpec[1] ?? "",
+      });
+};
 
 /**
  * Fields neither path may pass on.
@@ -54,11 +94,18 @@ const isAlwaysRemoved = (name: string) =>
   HashSet.has(ALWAYS_REMOVED, name) || name.startsWith("x-ses-");
 
 /**
- * Replies also lose what identifies the user's own machine and mail client (PLAN.md §3.4), and
- * `To`, which held the reverse alias. `Received` is kept on forwarded mail: it is the sender's
+ * Replies also lose what identifies the user's own machine and mail client (PLAN.md §3.4), `To`,
+ * which held the reverse alias, and `Message-ID`, whose domain names the user's mail provider. `Received` is kept on forwarded mail: it is the sender's
  * trace, not the user's, and hop counting depends on it.
  */
-const REPLY_REMOVED = HashSet.make("received", "x-originating-ip", "user-agent", "x-mailer", "to");
+const REPLY_REMOVED = HashSet.make(
+  "received",
+  "x-originating-ip",
+  "user-agent",
+  "x-mailer",
+  "to",
+  "message-id",
+);
 
 const isReplyRemoved = (name: string) => isAlwaysRemoved(name) || HashSet.has(REPLY_REMOVED, name);
 
@@ -96,16 +143,24 @@ export const forward = Effect.fn("Mail.forward")(function* (
 
 /**
  * Prepares the alias owner's reply for the contact: `From` becomes the alias, `To` the contact
- * the reverse alias stood for, and fields that identify the user's mailbox, client or network
- * are removed. Quoted text is not touched yet.
+ * the reverse alias stood for, `Message-ID` a new one on the alias's domain, and fields that
+ * identify the user's mailbox, client or network are removed. `In-Reply-To` and `References`
+ * name the contact's own messages, so threading keeps working. Quoted text is not touched yet.
+ *
+ * `messageId` must be unique (a random UUID, say); it becomes `<messageId@alias domain>`.
  */
 export const reply = Effect.fn("Mail.reply")(function* (
   raw: Uint8Array,
-  options: { readonly alias: Address.MailAddress; readonly to: string },
+  options: {
+    readonly alias: Address.MailAddress;
+    readonly to: string;
+    readonly messageId: string;
+  },
 ) {
   const message = yield* Headers.parse(raw);
   return Headers.rewrite(message, isReplyRemoved, [
     `From: ${Address.format(options.alias)}`,
     `To: ${sanitize(options.to)}`,
+    `Message-ID: <${options.messageId.replace(/[^\w.-]/g, "")}@${options.alias.domain}>`,
   ]);
 });

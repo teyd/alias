@@ -1,16 +1,13 @@
 import { AwsClient, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
+import { SharedDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import {
-  MailSettings,
-  RelyingParty,
-  SharedDomains,
-  makeFunctionUrlHandler,
-} from "../../src/index.ts";
+import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "../../src/index.ts";
 import * as Browser from "./Browser.ts";
 import type * as TestAuthenticator from "./TestAuthenticator.ts";
 
@@ -44,8 +41,9 @@ export const make = Effect.acquireRelease(
         Layer.succeed(Clock.Clock, clock),
         RelyingParty.layer({ id: sharedDomain, origin: Browser.origin }),
         // A second shared domain lets alias tests pick between domains.
-        SharedDomains.layer(`${sharedDomain},alias2.test`),
-        MailSettings.layer({ sender: `no-reply@${sharedDomain}`, aliasDomains: [sharedDomain] }),
+        MailSettings.layer(Option.some(`no-reply@${sharedDomain}`)).pipe(
+          Layer.provideMerge(SharedDomains.layer(`${sharedDomain},alias2.test`)),
+        ),
       ),
     );
     return { ...handler, context, browser: () => Browser.make(handler.handle) };

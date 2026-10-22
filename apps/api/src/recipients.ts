@@ -13,7 +13,7 @@ import {
   RecipientNotVerified,
   TooManyPendingRecipients,
 } from "@alias/contracts";
-import { Address } from "@alias/core";
+import { Address, SharedDomains } from "@alias/core";
 import { RecipientRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -127,7 +127,7 @@ const list = Effect.fn("recipients.list")(function* () {
 
 const add = Effect.fn("recipients.add")(function* (requested: string) {
   const user = yield* CurrentUser;
-  const settings = yield* MailSettings;
+  const sharedDomains = yield* SharedDomains.SharedDomains;
   const repo = yield* RecipientRepo.RecipientRepo;
   const crypto = yield* Crypto.Crypto;
   const invalid = (reason: InvalidRecipientAddress["reason"]) =>
@@ -135,7 +135,7 @@ const add = Effect.fn("recipients.add")(function* (requested: string) {
 
   const parsed = yield* Address.parse(requested).pipe(Effect.mapError(() => invalid("invalid")));
   // Forwarding to one of our own domains would loop back into the pipeline.
-  if (!Address.Destination.$is("Custom")(Address.classify(parsed, settings.aliasDomains))) {
+  if (!Address.Destination.$is("Custom")(Address.classify(parsed, sharedDomains))) {
     return yield* invalid("alias-domain");
   }
   const now = yield* DateTime.now;
@@ -235,6 +235,7 @@ type RecipientServices =
   | Crypto.Crypto
   | RelyingParty
   | MailSettings
+  | SharedDomains.SharedDomains
   | Transport.Transport
   | RecipientRepo.RecipientRepo;
 

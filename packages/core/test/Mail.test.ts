@@ -281,18 +281,23 @@ describe("Mail.forward", () => {
 
 describe("Mail.reply", () => {
   const contact = "news@cafe.example";
+  const messageId = "5b0c7a2e-1f7d-4c33-9d1e-0e9b8c1f2a44";
 
   it.effect("sends as the alias, to the contact, without identifying fields", () =>
     Effect.gen(function* () {
-      const out = yield* Mail.reply(ownerReply("\r\n", reverse), { alias, to: contact });
+      const out = yield* Mail.reply(ownerReply("\r\n", reverse), {
+        alias,
+        to: contact,
+        messageId,
+      });
       expect(names(out)).toEqual([
         "from",
         "to",
+        "message-id",
         "cc",
         "subject",
         "in-reply-to",
         "references",
-        "message-id",
         "date",
         "mime-version",
         "content-type",
@@ -300,16 +305,15 @@ describe("Mail.reply", () => {
       ]);
       expect(values(out, "From")).toEqual(["k7m2qx9p@alias.test"]);
       expect(values(out, "To")).toEqual([contact]);
-      expect(binary(out)).not.toMatch(
-        /198\.51\.100\.23|Thunderbird|Apple Mail|jane\.doe|gmail\.example;|d=gmail/,
-      );
+      expect(values(out, "Message-ID")).toEqual([`<${messageId}@alias.test>`]);
+      expect(binary(out)).not.toMatch(/198\.51\.100\.23|Thunderbird|Apple Mail|jane\.doe|gmail/);
     }),
   );
 
   it.effect("keeps the body and the threading fields byte for byte", () =>
     Effect.gen(function* () {
       const raw = ownerReply("\n", reverse);
-      const out = yield* Mail.reply(raw, { alias, to: contact });
+      const out = yield* Mail.reply(raw, { alias, to: contact, messageId });
       expect(split(out).rest).toEqual(split(raw).rest);
       expect(binary(out)).toContain("In-Reply-To: <20261021091400.4f2a@cafe.example>\nReferences:");
       expect(binary(out)).not.toContain("\r");
@@ -342,9 +346,44 @@ layer(NodeCrypto.layer)((it) => {
       const claims = yield* ReverseToken.verify(keys, aliasAddress, parts.token);
       const to = yield* Effect.fromOption(claims.sender);
 
-      const sent = yield* Mail.reply(ownerReply("\r\n", replyTo), { alias: aliasAddress, to });
+      const sent = yield* Mail.reply(ownerReply("\r\n", replyTo), {
+        alias: aliasAddress,
+        to,
+        messageId: "reply-1",
+      });
       expect(values(sent, "From")).toEqual(["k7m2qx9p@alias.test"]);
       expect(values(sent, "To")).toEqual(["news@cafe.example"]);
     }),
+  );
+});
+
+describe("Mail.parseSender", () => {
+  it.each([
+    ['"Café Müller" <news@cafe.example>', Option.some("Café Müller"), "news@cafe.example"],
+    ["Jane Doe <Jane@Example.com>", Option.some("Jane Doe"), "Jane@Example.com"],
+    ['"Doe, \\"JD\\" Jane" <jd@example.com>', Option.some('Doe, "JD" Jane'), "jd@example.com"],
+    [
+      "=?UTF-8?Q?Caf=C3=A9_M=C3=BCller?= <news@cafe.example>",
+      Option.some("Café Müller"),
+      "news@cafe.example",
+    ],
+    [
+      "=?UTF-8?B?8J+NsA==?= =?ISO-8859-1?Q?=C4pfel?= <a@b.example>",
+      Option.some("🍰Äpfel"),
+      "a@b.example",
+    ],
+    ["=?x-unknown?Q?abc?= <a@b.example>", Option.some("=?x-unknown?Q?abc?="), "a@b.example"],
+    ["<bounce@b.example>", Option.none(), "bounce@b.example"],
+    ["plain@b.example", Option.none(), "plain@b.example"],
+    ["plain@b.example (Old Style)", Option.some("Old Style"), "plain@b.example"],
+  ])("reads %j", (value, name, address) => {
+    expect(Mail.parseSender(value)).toEqual(Option.some({ name, address }));
+  });
+
+  it.each(["", "undisclosed-recipients:;", "Jane Doe", "<not an address>"])(
+    "finds no sender in %j",
+    (value) => {
+      expect(Mail.parseSender(value)).toEqual(Option.none());
+    },
   );
 });

@@ -21,6 +21,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Passkey           | `PASSKEY#<credentialId>`     | `PASSKEY`              |                 |                          |             |
  * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              |                 |                          | `expiresAt` |
  * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                 |                          | `expiresAt` |
+ * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                 |                          | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -36,6 +37,10 @@ import { DynamoTable } from "./Dynamo.ts";
  * RecipientSettings counts pending recipients (changed in the same transaction as the recipient,
  * so the cap is atomic) and names the default recipient. MailQuota counts confirmation mails per
  * user and UTC day.
+ *
+ * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
+ * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing
+ * again. It carries no content and expires after a week, well past Lambda's 6-hour retry window.
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

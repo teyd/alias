@@ -1,6 +1,7 @@
 export * as AliasRepo from "./AliasRepo.ts";
 export * as ChallengeRepo from "./ChallengeRepo.ts";
 export * from "./DatabaseError.ts";
+export * as DeliveryRepo from "./DeliveryRepo.ts";
 export * as Dynamo from "./Dynamo.ts";
 export * as PasskeyRepo from "./PasskeyRepo.ts";
 export * as RecipientRepo from "./RecipientRepo.ts";

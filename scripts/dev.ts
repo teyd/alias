@@ -9,8 +9,10 @@ const devEnv = readDevEnv(root);
 const env = { ...process.env, ...devEnv, FORCE_COLOR: "1" };
 
 // Everything is emulated, with no cloud account and no Docker. fakecloud (from mise.toml, since
-// `pnpm dev` runs under `mise exec`) serves S3 and DynamoDB, with state in .dev/fakecloud. The API
-// is the real Lambda handler behind the function URL emulator, and it seeds a demo alias.
+// `pnpm dev` runs under `mise exec`) serves S3, DynamoDB and SES sending, with state in
+// .dev/fakecloud. The API is the real Lambda handler behind the function URL emulator, and it seeds
+// a demo alias with a verified forwarding address. Inbound runs the SES emulator's SMTP listener
+// and hands each Lambda event to the real inbound pipeline, which forwards through fakecloud SES.
 const services: Array<{ name: string; cwd: string; command: string; args: Array<string> }> = [
   {
     name: "fakecloud",
@@ -31,12 +33,7 @@ const services: Array<{ name: string; cwd: string; command: string; args: Array<
   },
   { name: "api", cwd: `${root}/apps/api`, command: "node", args: ["bin/dev.ts"] },
   { name: "web", cwd: `${root}/apps/web`, command: "pnpm", args: ["exec", "vp", "dev"] },
-  {
-    name: "ses",
-    cwd: `${root}/tools/ses-emulator`,
-    command: "node",
-    args: ["bin/serve.ts"],
-  },
+  { name: "inbound", cwd: `${root}/apps/inbound`, command: "node", args: ["bin/dev.ts"] },
 ];
 
 const children: Array<ChildProcess> = [];

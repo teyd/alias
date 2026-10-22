@@ -15,3 +15,19 @@ describe("SesEvent (contract: AWS documentation payload)", () => {
     }),
   );
 });
+
+describe("SesEvent.decode", () => {
+  it.effect("parses the documented event", () =>
+    Effect.gen(function* () {
+      const decoded = yield* SesEvent.decode(event);
+      expect(decoded.Records).toHaveLength(1);
+    }),
+  );
+
+  it.effect("fails typed on anything else", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(SesEvent.decode({ Records: [{ eventSource: "aws:sns" }] }));
+      expect(error._tag).toBe("InvalidSesEvent");
+    }),
+  );
+});

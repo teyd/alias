@@ -1,11 +1,12 @@
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import type * as Arr from "effect/Array";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import type { AwsClient } from "./Client.ts";
+import * as AwsClient from "./Client.ts";
 
 /** The ID SES assigns to an accepted message. */
 export const MessageId = Schema.NonEmptyString.pipe(Schema.brand("MessageId"));
@@ -70,7 +71,7 @@ export class Transport extends Context.Service<
 >()("@alias/aws/Transport") {}
 
 const makeSes = Effect.fn("Transport.makeSes")(function* () {
-  const client = yield* Effect.context<AwsClient>();
+  const client = yield* Effect.context<AwsClient.AwsClient>();
   return Transport.of({
     send: (raw, envelope) =>
       SESV2.sendEmail({
@@ -82,7 +83,20 @@ const makeSes = Effect.fn("Transport.makeSes")(function* () {
 });
 
 /** SESv2 `SendEmail` with `Content.Raw`, on whatever `AwsClient` points at. */
-export const ses: Layer.Layer<Transport, never, AwsClient> = Layer.effect(Transport, makeSes());
+export const ses: Layer.Layer<Transport, never, AwsClient.AwsClient> = Layer.effect(
+  Transport,
+  makeSes(),
+);
+
+/**
+ * SES sending from the Lambda environment. `AWS_ENDPOINT_URL_SESV2` (the AWS-standard endpoint
+ * override) is set only in emulated runs.
+ */
+export const config = Config.option(Config.String("AWS_ENDPOINT_URL_SESV2")).pipe(
+  Config.map((endpoint) =>
+    ses.pipe(Layer.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
+  ),
+);
 
 class IdentityError extends Schema.TaggedError<IdentityError>()("IdentityError", {
   identity: Schema.String,

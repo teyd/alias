@@ -14,13 +14,13 @@ import { HttpRouter, HttpServer } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
 import type { Transport } from "@alias/aws";
+import type { SharedDomains } from "@alias/core";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Sessions.ts";
-import type { SharedDomains } from "./SharedDomains.ts";
 
 const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
   handlers.handle("health", () => Effect.succeed({ status: "ok" as const })),
@@ -39,7 +39,7 @@ const Repositories = Layer.mergeAll(
 export type Services =
   | Dynamo.Database
   | RelyingParty
-  | SharedDomains
+  | SharedDomains.SharedDomains
   | Transport.Transport
   | MailSettings;
 

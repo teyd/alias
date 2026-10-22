@@ -8,26 +8,27 @@ TypeScript 7 · Effect v4 · Vite+ (`vp`) · React 19 · TanStack Router/Query/F
 
 ## Layout
 
-| Path                    | What lives there                                                                                                                                                          | Test tier                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `packages/core`         | Pure domain logic (addresses, rewriting, OTP…). No I/O.                                                                                                                   | unit                                          |
-| `packages/contracts`    | Effect `HttpApi` + Schemas shared by API, web, CLI, MCP                                                                                                                   | via api                                       |
-| `packages/aws`          | The AWS boundary: `AwsClient` (real or emulated), Lambda/SES event schemas, function URL adapter, `Inbound` spool, `Transport` (SESv2 sending); `fixtures/` from AWS docs | contract                                      |
-| `packages/db`           | DynamoDB single table (`Table.spec`) + repositories                                                                                                                       | **fakecloud and DynamoDB Local** (same suite) |
-| `apps/api`              | API Lambda: HttpApi handlers, `src/handler.ts` entrypoint, `bin/dev.ts` for `pnpm dev`                                                                                    | handler on fakecloud                          |
-| `apps/web`              | React app; talks to the API only through `@alias/contracts`                                                                                                               | build + check                                 |
-| `tools/ses-emulator`    | SES receiving: SMTP, receipt rules, verdicts, S3 action (to fakecloud), Lambda events                                                                                     | unit + contract                               |
-| `tools/aws-emulators`   | fakecloud (S3 + DynamoDB + SES sending, one process) and Amazon DynamoDB Local (Java), as Effect layers                                                                   | unit                                          |
-| `tools/lambda-emulator` | Function URL server: HTTP ⇄ payload-2.0 events, as AWS documents                                                                                                          | unit + contract                               |
-| `e2e`                   | Whole emulated stack (SMTP → SES → S3, HTTP → function URL → DynamoDB) on one fakecloud                                                                                   | stack                                         |
-| `infra/alchemy.run.ts`  | Production AWS resources (not deployed yet)                                                                                                                               | typecheck                                     |
-| `scripts/*.ts`          | Repo tooling, run with plain `node` (no build step)                                                                                                                       | none                                          |
+| Path                    | What lives there                                                                                                                                                                        | Test tier                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `packages/core`         | Pure domain logic (addresses, rewriting, reverse tokens, `SharedDomains`…). No I/O.                                                                                                     | unit                                          |
+| `packages/contracts`    | Effect `HttpApi` + Schemas shared by API, web, CLI, MCP                                                                                                                                 | via api                                       |
+| `packages/aws`          | The AWS boundary: `AwsClient` (real or emulated), Lambda/SES event schemas, function URL adapter, `Inbound` spool (read/delete), `Transport` (SESv2 sending); `fixtures/` from AWS docs | contract                                      |
+| `packages/db`           | DynamoDB single table (`Table.spec`) + repositories                                                                                                                                     | **fakecloud and DynamoDB Local** (same suite) |
+| `apps/api`              | API Lambda: HttpApi handlers, `src/handler.ts` entrypoint, `bin/dev.ts` for `pnpm dev`                                                                                                  | handler on fakecloud                          |
+| `apps/inbound`          | Inbound Lambda (SES receipt action): resolve → policy → rewrite → send, `src/handler.ts` entrypoint, `bin/dev.ts` runs the ses-emulator into it                                         | unit + handler on fakecloud                   |
+| `apps/web`              | React app; talks to the API only through `@alias/contracts`                                                                                                                             | build + check                                 |
+| `tools/ses-emulator`    | SES receiving: SMTP, receipt rules, verdicts, S3 action (to fakecloud), Lambda events                                                                                                   | unit + contract                               |
+| `tools/aws-emulators`   | fakecloud (S3 + DynamoDB + SES sending, one process) and Amazon DynamoDB Local (Java), as Effect layers                                                                                 | unit                                          |
+| `tools/lambda-emulator` | Function URL server: HTTP ⇄ payload-2.0 events, as AWS documents                                                                                                                        | unit + contract                               |
+| `e2e`                   | Whole emulated stack (SMTP → SES → S3 → inbound Lambda → SES sending, HTTP → function URL → DynamoDB) on one fakecloud                                                                  | stack                                         |
+| `infra/alchemy.run.ts`  | Production AWS resources (not deployed yet)                                                                                                                                             | typecheck                                     |
+| `scripts/*.ts`          | Repo tooling, run with plain `node` (no build step)                                                                                                                                     | none                                          |
 
 ## Commands
 
 ```sh
 pnpm agent:setup        # once per worktree: mise tools, deps, DynamoDB Local, port block, .dev/env
-pnpm dev                # fakecloud + api (function URL emulator) + web + ses-emulator on this worktree's ports
+pnpm dev                # fakecloud + api (function URL emulator) + web + inbound (ses-emulator → inbound Lambda) on this worktree's ports
 pnpm check              # format + lint + typecheck + knip (dead code), whole repo (~3 s)
 pnpm test               # every suite, cached per package
 pnpm test:affected      # only packages you changed + their dependents (use this before handing back)

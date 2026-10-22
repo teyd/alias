@@ -1,0 +1,94 @@
+Return-Path: <bounces+6zpbos6vyjdf@mail.accounts.gloogle.example>
+Received: from mx-23.mail.accounts.gloogle.example (mx-23.mail.accounts.gloogle.example [198.51.100.55])
+	by inbound-smtp.mx.tmp.example with SMTP id 5e20ce81b3159105b248e8b260231d54
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:12:08 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.accounts.gloogle.example (Postfix) with ESMTP id ECQWJXRII04
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:12:08 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.accounts.gloogle.example;
+	dkim=pass header.d=accounts.gloogle.example;
+	dmarc=pass header.from=accounts.gloogle.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=accounts.gloogle.example;
+	s=s6; t=1792100059; h=from:to:subject:date:message-id:mime-version;
+	bh=H01hUtHLWkRPNumKOWysm0eUDRgiisB8kpsXPlXFodK=;
+	b=XMSOKsomyQg8URm1z8iU8S9sTTZJZyxJaSeITVJWigFYwcSxzAJ5Hk8RSOudjLTM
+	 CCG47aQotTA80FukGwlFAvVKh3jn1f70KDdR02cUAdqXMCeEhg5EMA6DCZTgCWHi
+	 KdTL4nIgtvwB6kmNqP16SZMUaamRsE27NNGiVijNdvlI==
+From: "Gloogle" <noreply@accounts.gloogle.example>
+To: k7m2qx9pzr@tmp.example
+Subject: G-482913 is your Gloogle verification code
+Date: Thu, 22 Oct 2026 09:12:08 -0700
+Message-ID: <ce1ba58537bcc4f2.74C7F98EaH@accounts.gloogle.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="000000000000d6db1f71d4e4cb23"
+
+--000000000000d6db1f71d4e4cb23
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Gloogle
+
+Verify your email
+
+Gloogle received a request to use k7m2qx9pzr@tmp.example as a recovery emai=
+l for Gloogle Account r.example.user@gloogle.example.
+
+Use this code to finish setting up this recovery email:
+
+G-482913
+
+This code will expire in 24 hours.
+
+If you don=E2=80=99t recognize r.example.user@gloogle.example, you can safe=
+ly ignore this email.
+
+You received this email to let you know about important changes to your Glo=
+ogle Account and services.
+=C2=A9 2026 Gloogle LLC, 1600 Example Parkway, Mountain View, CA 94043, USA
+
+--000000000000d6db1f71d4e4cb23
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"en"><head><meta content=3D"text/html; charset=
+=3DUTF-8" http-equiv=3D"Content-Type"><meta content=3D"width=3Ddevice-width=
+, initial-scale=3D1.0, minimum-scale=3D1.0, maximum-scale=3D1.0" name=3D"vi=
+ewport"><style>body, td, div, p, a, input {font-family: 'Product Sans', Rob=
+oto, Arial, sans-serif;}</style></head><body style=3D"margin:0;padding:0" b=
+gcolor=3D"#FFFFFF"><table width=3D"100%" height=3D"100%" style=3D"min-width=
+:348px" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" lang=3D"en"><tr he=
+ight=3D"32" style=3D"height:32px"><td></td></tr><tr align=3D"center"><td><d=
+iv><div></div></div><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0"=
+ style=3D"padding-bottom:20px;max-width:516px;min-width:220px"><tr><td widt=
+h=3D"8" style=3D"width:8px"></td><td><div style=3D"border-style:solid;borde=
+r-width:thin;border-color:#dadce0;border-radius:8px;padding:40px 20px" alig=
+n=3D"center" class=3D"mdv2rw"><img src=3D"https://www.gstatic.gloogle.examp=
+le/images/branding/googlelogo/2x/googlelogo_color_74x24dp.png" width=3D"74"=
+ height=3D"24" aria-hidden=3D"true" style=3D"margin-bottom:16px" alt=3D"Glo=
+ogle"><div style=3D"font-family:'Product Sans',Roboto,RobotoDraft,Helvetica=
+,Arial,sans-serif;border-bottom:thin solid #dadce0;color:rgba(0,0,0,0.87);l=
+ine-height:32px;padding-bottom:24px;text-align:center;word-break:break-word=
+"><div style=3D"font-size:24px">Verify your email</div></div><div style=3D"=
+font-family:Roboto-Regular,Helvetica,Arial,sans-serif;font-size:14px;color:=
+rgba(0,0,0,0.87);line-height:20px;padding-top:20px;text-align:left">Gloogle=
+ received a request to use <a style=3D"font-weight:bold">k7m2qx9pzr@tmp.exa=
+mple</a> as a recovery email for Gloogle Account <a style=3D"font-weight:bo=
+ld">r.example.user@gloogle.example</a>.<br><br>Use this code to finish sett=
+ing up this recovery email:<br><div style=3D"text-align:center;font-size:36=
+px;margin-top:20px;line-height:44px">G-482913</div><br>This code will expir=
+e in 24 hours.<br><br>If you don&#39;t recognize <a style=3D"font-weight:bo=
+ld">r.example.user@gloogle.example</a>, you can safely ignore this email.</=
+div></div><div style=3D"text-align:left"><div style=3D"font-family:Roboto-R=
+egular,Helvetica,Arial,sans-serif;color:rgba(0,0,0,0.54);font-size:11px;lin=
+e-height:18px;padding-top:12px;text-align:center"><div>You received this em=
+ail to let you know about important changes to your Gloogle Account and ser=
+vices.</div><div style=3D"direction:ltr">&copy; 2026 Gloogle LLC, <a class=
+=3D"afal" style=3D"font-family:Roboto-Regular,Helvetica,Arial,sans-serif;co=
+lor:rgba(0,0,0,0.54);font-size:11px;line-height:18px;padding-top:12px;text-=
+align:center">1600 Example Parkway, Mountain View, CA 94043, USA</a></div><=
+/div></div></td><td width=3D"8" style=3D"width:8px"></td></tr></table></td>=
+</tr><tr height=3D"32" style=3D"height:32px"><td></td></tr></table></body><=
+/html>
+
+--000000000000d6db1f71d4e4cb23--

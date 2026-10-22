@@ -1,0 +1,62 @@
+Return-Path: <bounces+b3idm7dlbwxo@mail.harborstack.example>
+Received: from mx-20.mail.harborstack.example (mx-20.mail.harborstack.example [198.51.100.75])
+	by inbound-smtp.mx.tmp.example with SMTP id 42ace7a6c40f481d17d49a5798cc5d24
+	for <infra.p6o2@tmp.example>; Thu, 22 Oct 2026 04:25:02 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.harborstack.example (Postfix) with ESMTP id DFQDCPPJRQI
+	for <infra.p6o2@tmp.example>; Thu, 22 Oct 2026 04:25:02 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.harborstack.example;
+	dkim=pass header.d=harborstack.example;
+	dmarc=pass header.from=harborstack.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=harborstack.example;
+	s=s9; t=1792100073; h=from:to:subject:date:message-id:mime-version;
+	bh=HoQP7NYMtGE2BBqStxXHsGgWzamZsrKJEegHUTZ4o4K=;
+	b=4O3KDPDJpzvWfj5BUzBELpZGrohCu1pRuVHNhOlSvc8Csc0HNnHMW3y6PlD7bma5
+	 rSH0xz1aFYdL88NTLzRlhN4Qavmh4nRfSOvAqR7WYMo7JUEkt3FehC1hail6pwiA
+	 lacUYRzKwDgg3UnkWtpACc67tAFO8kGGuLiJ3C9TISQE==
+From: "Harborstack" <security@harborstack.example>
+To: infra.p6o2@tmp.example
+Subject: Two-factor authentication enabled
+Date: Thu, 22 Oct 2026 04:25:02 +0000
+Message-ID: <295bbbfde27a61d6.hMOg0goNTQ@harborstack.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt_130977afc3ff9d3e9fee"
+
+--alt_130977afc3ff9d3e9fee
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Two-factor authentication is now enabled
+
+From now on, you'll be asked for a 6-digit authentication code from your
+authenticator app whenever you sign in to Harborstack.
+
+We generated 10 recovery codes for you. Store them somewhere safe; each cod=
+e
+can be used once if you lose access to your app. We will never email them.
+
+Manage security settings: https://harborstack.example/settings/security
+
+--alt_130977afc3ff9d3e9fee
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"font-family:Arial,sans-serif;background:#f5f8fb;margin=
+:0;">
+<table width=3D"560" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#fff;margin:24px auto;border:1px solid #dbe3eb;">
+<tr><td style=3D"padding:24px;font-size:18px;font-weight:bold;color:#24292f=
+;">Two-factor authentication is now enabled</td></tr>
+<tr><td style=3D"padding:0 24px 24px 24px;font-size:15px;color:#24292f;line=
+-height:22px;">
+<p>From now on, you&#39;ll be asked for a 6-digit authentication code from =
+your authenticator app whenever you sign in to Harborstack.</p>
+<p>We generated 10 recovery codes for you. Store them somewhere safe; each =
+code can be used once if you lose access to your app. We will never email t=
+hem.</p>
+<p><a href=3D"https://harborstack.example/settings/security" style=3D"color=
+:#0969da;">Manage security settings</a></p>
+</td></tr></table></body></html>
+
+--alt_130977afc3ff9d3e9fee--

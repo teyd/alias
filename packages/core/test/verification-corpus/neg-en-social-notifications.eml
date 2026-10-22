@@ -1,0 +1,140 @@
+Return-Path: <bounces+9ymdceey1lsa@mail.chirpbook.example>
+Received: from mx-18.mail.chirpbook.example (mx-18.mail.chirpbook.example [198.51.100.56])
+	by inbound-smtp.mx.tmp.example with SMTP id 87b8d69c2eb50e6d8bb2e15239f90436
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 18:45:00 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.chirpbook.example (Postfix) with ESMTP id C6YXNURGZRT
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 18:45:00 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.chirpbook.example;
+	dkim=pass header.d=chirpbook.example;
+	dmarc=pass header.from=chirpbook.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=chirpbook.example;
+	s=s9; t=1792100072; h=from:to:subject:date:message-id:mime-version;
+	bh=N0IueF1miqyP88HGhcOrzqR3fZ3ZYOcGCTiygtien5T=;
+	b=YqipV4ug3f3aBh0FUlEdEnkGW7nTDdnEFuxoZVQqzRiYJLcY34CRFYJMNxe6qpPL
+	 aiG7o534V8mrm87Hj558QiQFWqAniy2sXhUj841VTEEcZGIuoFoDHAB29PeRbNII
+	 snbmVE8juEuCCSpUjWKK3qE8ZSxYln7o7kjORSxJ57ld==
+From: "Chirpbook" <notification@chirpbook.example>
+To: k7m2qx9pzr@tmp.example
+Subject: You have 3 new messages and 12 new likes
+Date: Thu, 22 Oct 2026 18:45:00 +0000
+Message-ID: <92a07330716ad8a4.NNe1EckvcW@chirpbook.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="cb_e1481e26513d3843553bfb51"
+
+--cb_e1481e26513d3843553bfb51
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hi Sam,
+
+You have 3 new messages.
+12 people liked your post "Sunset at the lake =F0=9F=8C=85".
+You have 5 friend suggestions.
+
+See what's new: https://www.chirpbook.example/?ref=3Dnotif_digest
+
+Unsubscribe: https://www.chirpbook.example/settings/email?u=3D7712093&t=3Dg=
+rGPW7vMDObfCFXh59BZR403
+Chirpbook, Inc., 1 Hacker Lane, Menlo Park, CA 94025
+
+--cb_e1481e26513d3843553bfb51
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Notifications</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">3 new messages, 12 likes on your post&=
+#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#84=
+7;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://static.chirpbook.example/email/logo@2x.png" width=3D"12=
+0" height=3D"32" alt=3D"Chirpbook" style=3D"display:block;width:120px;heigh=
+t:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;">Hi Sam,</p>
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"10" cellspacing=
+=3D"0" style=3D"font-size:15px;">
+<tr><td style=3D"border-bottom:1px solid #eee;">&#9993;&#65039; You have <b=
+>3</b> new messages.</td></tr>
+<tr><td style=3D"border-bottom:1px solid #eee;">&#10084;&#65039; <b>12</b> =
+people liked your post &ldquo;Sunset at the lake &#127749;&rdquo;.</td></tr=
+>
+<tr><td>&#128101; You have <b>5</b> friend suggestions.</td></tr>
+</table>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#1a73e8" style=3D"border-radius:6px;">
+<a href=3D"https://www.chirpbook.example/?ref=3Dnotif_digest" target=3D"_bl=
+ank" style=3D"display:inline-block;padding:14px 32px;font-family:Helvetica,=
+Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decorat=
+ion:none;border-radius:6px;border:1px solid #1a73e8;">See what&rsquo;s new<=
+/a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Chirpbook, Inc., 1 Hacker Lane, Menlo Park, CA 94025<br><a href=3D"https://=
+www.chirpbook.example/settings/email?u=3D7712093&amp;t=3DgrGPW7vMDObfCFXh59=
+BZR403" style=3D"color:#8c8c8c;text-decoration:underline;">Unsubscribe</a> =
+&nbsp;&middot;&nbsp; <a href=3D"https://www.chirpbook.example/privacy" styl=
+e=3D"color:#8c8c8c;text-decoration:underline;">Privacy</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://t.chirpbook.example/o/CeYtzHAO_fHqbGr4Q0U_G5UH0GD8aH2m0=
+XW6oE0Q3Rv3q8KOhfyIpBwwR0YK2VqMb4DqcPelaSGGKMK8ndswmxALdjGevkqobzv1dmVyHO9z=
+EElOAes5lkfH" width=3D"1" height=3D"1" border=3D"0" alt=3D"" style=3D"heigh=
+t:1px !important;width:1px !important;border-width:0 !important;margin-top:=
+0 !important;margin-bottom:0 !important;padding:0 !important;">
+</body>
+</html>
+
+--cb_e1481e26513d3843553bfb51--

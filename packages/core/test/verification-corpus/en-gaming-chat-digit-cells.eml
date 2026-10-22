@@ -1,0 +1,113 @@
+Return-Path: <bounces+uvrenrirfume@mail.raidhall.example>
+Received: from mx-30.mail.raidhall.example (mx-30.mail.raidhall.example [198.51.100.16])
+	by inbound-smtp.mx.tmp.example with SMTP id 268cabd33ea1d9ecd131714b531b41b8
+	for <gg-n0ob-77@tmp.example>; Thu, 22 Oct 2026 22:47:13 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.raidhall.example (Postfix) with ESMTP id GBRVCTDPN4D
+	for <gg-n0ob-77@tmp.example>; Thu, 22 Oct 2026 22:47:13 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.raidhall.example;
+	dkim=pass header.d=raidhall.example;
+	dmarc=pass header.from=raidhall.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=raidhall.example;
+	s=s1; t=1792100133; h=from:to:subject:date:message-id:mime-version;
+	bh=PU2WJLMuWtVhVAdvDb5aFA9vfbwkFq3acgnlJxxo0cF=;
+	b=dul5YPqQn0h5Z70Nk4Su8cZ9orQ2g4QtOXPGrMEkjBx9nibAJry9OBJ9n9ctfZVt
+	 dL3gq7vjhXGcClML8XtOT77H9FEb6hpFAuaQpSeJIgXApMGd4nZfwmocJvAzCoy1
+	 eDWDh3x4w4CFGXUyoHFvvyrTNnbN8rpdVtj6r79IRVCh==
+From: "Raidhall" <noreply@raidhall.example>
+To: gg-n0ob-77@tmp.example
+Subject: Your Raidhall verification code
+Date: Thu, 22 Oct 2026 22:47:13 +0000
+Message-ID: <ed648cec0bf8d67c.q9JTeYvAWY@raidhall.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="000000000000e515801fc0773378"
+
+--000000000000e515801fc0773378
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Your Raidhall verification code
+
+Hey frostbyte_77,
+
+Enter this code in the Raidhall app to verify it's you: 381904
+
+The code will expire in 15 minutes.
+
+Not you? Change your password: https://raidhall.example/settings/account
+
+Sent by Raidhall =E2=80=A2 444 De Haro Street, Suite 200, San Francisco, CA=
+ 94107
+
+--000000000000e515801fc0773378
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!doctype html>
+<html><head><meta charset=3D"utf-8"><meta name=3D"viewport" content=3D"widt=
+h=3Ddevice-width"><title>Raidhall</title></head>
+<body style=3D"margin:0;background:#2b2d31;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Enter this code in the Raidhall app to=
+ verify it&#39;s you.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;=
+&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<div style=3D"max-width:560px;margin:0 auto;background:#313338;padding:40px=
+ 32px;font-family:'gg sans','Helvetica Neue',Arial,sans-serif;color:#dbdee1=
+;">
+<img src=3D"https://cdn.raidhall.example/email/wordmark-white.png" width=3D=
+"140" alt=3D"Raidhall" style=3D"display:block;margin-bottom:28px;">
+<h2 style=3D"color:#f2f3f5;font-size:22px;margin:0 0 12px 0;">Hey frostbyte=
+_77,</h2>
+<p style=3D"font-size:16px;line-height:24px;margin:0 0 8px 0;">Enter this c=
+ode in the Raidhall app to verify it&rsquo;s you:</p>
+<table role=3D"presentation" align=3D"center" border=3D"0" cellpadding=3D"0=
+" cellspacing=3D"6" style=3D"margin:20px auto;">
+<tr>
+<td align=3D"center" valign=3D"middle" width=3D"44" height=3D"56" style=3D"=
+width:44px;height:56px;background-color:#1e1f22;border-radius:6px;font-fami=
+ly:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;color:#f=
+fffff;">3</td>
+<td align=3D"center" valign=3D"middle" width=3D"44" height=3D"56" style=3D"=
+width:44px;height:56px;background-color:#1e1f22;border-radius:6px;font-fami=
+ly:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;color:#f=
+fffff;">8</td>
+<td align=3D"center" valign=3D"middle" width=3D"44" height=3D"56" style=3D"=
+width:44px;height:56px;background-color:#1e1f22;border-radius:6px;font-fami=
+ly:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;color:#f=
+fffff;">1</td>
+<td align=3D"center" valign=3D"middle" width=3D"44" height=3D"56" style=3D"=
+width:44px;height:56px;background-color:#1e1f22;border-radius:6px;font-fami=
+ly:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;color:#f=
+fffff;">9</td>
+<td align=3D"center" valign=3D"middle" width=3D"44" height=3D"56" style=3D"=
+width:44px;height:56px;background-color:#1e1f22;border-radius:6px;font-fami=
+ly:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;color:#f=
+fffff;">0</td>
+<td align=3D"center" valign=3D"middle" width=3D"44" height=3D"56" style=3D"=
+width:44px;height:56px;background-color:#1e1f22;border-radius:6px;font-fami=
+ly:'Courier New',Courier,monospace;font-size:30px;font-weight:bold;color:#f=
+fffff;">4</td>
+</tr>
+</table>
+<p style=3D"font-size:14px;color:#b5bac1;">The code will expire in 15 minut=
+es.</p>
+<p style=3D"font-size:14px;color:#b5bac1;">Not you? <a href=3D"https://raid=
+hall.example/settings/account" style=3D"color:#00a8fc;">Change your passwor=
+d</a>.</p>
+<hr style=3D"border:none;border-top:1px solid #3f4147;margin:32px 0;">
+<p style=3D"font-size:12px;color:#949ba4;text-align:center;">Sent by Raidha=
+ll &bull; check our <a href=3D"https://raidhall.example/blog" style=3D"colo=
+r:#949ba4;">blog</a> &bull; <a href=3D"https://twitter.example/raidhall" st=
+yle=3D"color:#949ba4;">@raidhall</a><br>444 De Haro Street, Suite 200, San =
+Francisco, CA 94107</p>
+</div>
+<img src=3D"https://click.raidhall.example/wf/open?upn=3DNqvlZq-it92tEnmrS_=
+DUcw4wbLMKcGM-TgPRZ7lCU6orkKyPaAm5x51ovrTrmb_1eUXUr-DamDEed5CKVDyLjpneaHgZB=
+AfNMduZJro9kPdAYL0ICx8OoWY_G8wvsRIbWCKXHci9p3edknBjd-Y9CB6L3WOdOVm3OcyDlGkP=
+B1C5qVap0QoL" alt=3D"" width=3D"1" height=3D"1" border=3D"0" style=3D"heigh=
+t:1px !important;width:1px !important;">
+</body></html>
+
+--000000000000e515801fc0773378--

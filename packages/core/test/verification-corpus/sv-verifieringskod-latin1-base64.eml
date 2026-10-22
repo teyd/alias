@@ -1,0 +1,31 @@
+Return-Path: <bounces+lihkqzjao10g@mail.nordbo-energi.example>
+Received: from mx-37.mail.nordbo-energi.example (mx-37.mail.nordbo-energi.example [198.51.100.106])
+	by inbound-smtp.mx.tmp.example with SMTP id 0deb3c3578120036c99caebccd744d0a
+	for <hem.s5d1@tmp.example>; Thu, 22 Oct 2026 07:58:03 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.nordbo-energi.example (Postfix) with ESMTP id OI5LGSOQCZD
+	for <hem.s5d1@tmp.example>; Thu, 22 Oct 2026 07:58:03 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.nordbo-energi.example;
+	dkim=pass header.d=nordbo-energi.example;
+	dmarc=pass header.from=nordbo-energi.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=nordbo-energi.example;
+	s=s4; t=1792100191; h=from:to:subject:date:message-id:mime-version;
+	bh=aJN5PGKdlk1I61IjZAEKIhEC6Ocl8nBjj77PHVzwLmU=;
+	b=IUSgj3J2tu4NG4db74UqBdLAQWpHv622FqUEkUH2qGGVYjrzR6rboIvX9nndVDUN
+	 KCKiK1mO5ZvfkhXeMpm7OP5rCy8BdwByJmXBArFSVcyrTVJCvSAstEZRWAkbmtoR
+	 8byr85vjC2asAAiBeGTflyz7XaTpeF3pZtuq85oebrEj==
+From: "Nordbo Energi" <info@nordbo-energi.example>
+To: hem.s5d1@tmp.example
+Subject: =?ISO-8859-1?Q?Din_verifieringskod_fr=E5n_Nordbo_Energi?=
+Date: Thu, 22 Oct 2026 07:58:03 +0200
+Message-ID: <6d42910bd481eb01.2yTtwVkmbs@nordbo-energi.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: base64
+
+SGVqIEVyaWshDQoNCkRpbiB2ZXJpZmllcmluZ3Nrb2Qg5HIgMzkwNzEyLg0KDQpBbmdlIGtvZGVu
+IHDlIE1pbmEgc2lkb3IgZvZyIGF0dCBsb2dnYSBpbi4gS29kZW4gZ+RsbGVyIGkgMTAgbWludXRl
+ci4NCg0KSGFyIGR1IGludGUgYmVn5HJ0IGtvZGVuPyBLb250YWt0YSBrdW5kc2VydmljZSBw5SAr
+NDYgOCAwMDAgMDAwIDAwLg0KDQpW5G5saWdhIGjkbHNuaW5nYXINCk5vcmRibyBFbmVyZ2kgQUIs
+IEV4ZW1wZWxnYXRhbiA0LCAxMTEgMjIgU3RvY2tob2xtLCBvcmcubnIgNTU2MDAwLTAwMDANCg==

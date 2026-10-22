@@ -1,0 +1,47 @@
+Return-Path: <bounces+znfw5t0cbddi@mail.gitforge.example>
+Received: from mx-40.mail.gitforge.example (mx-40.mail.gitforge.example [198.51.100.25])
+	by inbound-smtp.mx.tmp.example with SMTP id a9f0811826283ff5e39baf3e6997497a
+	for <dev-x81kq3@tmp.example>; Thu, 22 Oct 2026 07:12:44 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.gitforge.example (Postfix) with ESMTP id HHIKBQC7FCQ
+	for <dev-x81kq3@tmp.example>; Thu, 22 Oct 2026 07:12:44 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.gitforge.example;
+	dkim=pass header.d=gitforge.example;
+	dmarc=pass header.from=gitforge.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gitforge.example;
+	s=s2; t=1792100002; h=from:to:subject:date:message-id:mime-version;
+	bh=FBxAsWx9uc4IsuSlGH3BDE2XVw5ZFWm83bs2DnYG6J0=;
+	b=uKtNdizcPcGC95BAoUEGal5Pemm3fCErVBAX1FAG1nwG9lOCfS9TAZdG8uU7KGnq
+	 T55ia5XevksUWaIfegr5N9eqwNq5hhjONBArPofdMgDtE2nHq9OOCGk6W1TT3MWS
+	 Kvc8YcqSyusBMA6i4MW2ecBLAATkX9kMuJrp0dvGsGi2==
+From: "Gitforge" <noreply@gitforge.example>
+To: dev-x81kq3@tmp.example
+Subject: [Gitforge] Please verify your device
+Date: Thu, 22 Oct 2026 07:12:44 +0000
+Message-ID: <9b160d42cd913e59.9q39fSLysS@gitforge.example>
+MIME-Version: 1.0
+X-Gitforge-Reason: device_verification
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+
+Hey qa-runner-17!
+
+A sign in attempt requires further verification because we did not recognize
+your device. To complete the sign in, enter the verification code on the
+unrecognized device.
+
+Device: Firefox on Ubuntu
+IP address: 203.0.113.58
+Time: October 22nd, 2026 07:12 (UTC)
+
+Verification code: 730194
+
+If you did not attempt to sign in to your account, your password may be
+compromised. Visit https://gitforge.example/settings/security to create a new,
+strong password for your Gitforge account.
+
+The code expires in 1 hour.
+
+Thanks,
+The Gitforge Team

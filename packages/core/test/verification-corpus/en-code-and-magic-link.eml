@@ -1,0 +1,91 @@
+Return-Path: <bounces+motghetjrlrb@mail.streamforge.example>
+Received: from mx-24.mail.streamforge.example (mx-24.mail.streamforge.example [198.51.100.19])
+	by inbound-smtp.mx.tmp.example with SMTP id fa5b7b65e76b41b06fd399d5e8816e6e
+	for <binge.y7h3@tmp.example>; Thu, 22 Oct 2026 21:30:02 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.streamforge.example (Postfix) with ESMTP id OHBMYFXRLFA
+	for <binge.y7h3@tmp.example>; Thu, 22 Oct 2026 21:30:02 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.streamforge.example;
+	dkim=pass header.d=streamforge.example;
+	dmarc=pass header.from=streamforge.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=streamforge.example;
+	s=s2; t=1792100214; h=from:to:subject:date:message-id:mime-version;
+	bh=QVjekqNhTfB926ofFDwOQ6p2VteQjbC7yxbr1JhujxO=;
+	b=a4SQ8bjkzG0E5CdhCXqxg4hdiKwM0jDQbFXMcZBT4BlHwvdQQKxvE9gRJ1toaJZR
+	 3ksF9Zjohtq7EnBF2Tmk1ZRQtEbcv7vHrxeMXht0upu6XOTMymIav38Np9gOUYwV
+	 iQCHkHyLERHF59D1YwsGmYEJDBmtHAJq1fSyKyXSnp5W==
+From: "Streamforge" <account@streamforge.example>
+To: binge.y7h3@tmp.example
+Subject: Your Streamforge sign-in code: 194628
+Date: Thu, 22 Oct 2026 21:30:02 +0000
+Message-ID: <05d8a5c71c345ce7.Yp7czLMA4y@streamforge.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="sf-1fe6da18344e981e3f8db4309dbb"
+
+--sf-1fe6da18344e981e3f8db4309dbb
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Sign in to Streamforge
+
+Enter this code on your TV or device:
+
+194628
+
+Or sign in on this device with one click:
+https://auth.streamforge.example/v1/email/verify?flow=3D6ee735910796a5a6245=
+7f45ba51936de&token=3DvzQQBntpuZDywWYJUf7Ebe5C1p1CVmHk2d0QAYtpmIFW0z3e3si42=
+hzZjwY2paop
+
+The code and link expire in 15 minutes.
+
+New this week: season 2 of "Deep Orbit" in 4K.
+
+--sf-1fe6da18344e981e3f8db4309dbb
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!doctype html><html><head><meta charset=3D"utf-8"></head>
+<body style=3D"margin:0;background:#0f0f14;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentat=
+ion"><tr><td align=3D"center" style=3D"padding:32px 12px;">
+<table width=3D"560" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentati=
+on" style=3D"background:#181820;border-radius:10px;font-family:Arial,Helvet=
+ica,sans-serif;color:#e6e6eb;">
+<tr><td style=3D"padding:32px 40px 0 40px;font-size:26px;font-weight:bold;c=
+olor:#e50914;">STREAMFORGE</td></tr>
+<tr><td style=3D"padding:24px 40px 0 40px;font-size:20px;font-weight:bold;"=
+>Sign in to Streamforge</td></tr>
+<tr><td style=3D"padding:16px 40px 0 40px;font-size:15px;">Enter this code =
+on your TV or device:</td></tr>
+<tr><td style=3D"padding:16px 40px;"><div style=3D"font-size:40px;font-weig=
+ht:bold;letter-spacing:10px;color:#ffffff;background:#26262f;padding:16px 0=
+;text-align:center;border-radius:6px;">194628</div></td></tr>
+<tr><td style=3D"padding:8px 40px 0 40px;font-size:15px;">Or sign in on thi=
+s device with one click:</td></tr>
+<tr><td style=3D"padding:16px 40px;"><a href=3D"https://auth.streamforge.ex=
+ample/v1/email/verify?flow=3D6ee735910796a5a62457f45ba51936de&amp;token=3Dv=
+zQQBntpuZDywWYJUf7Ebe5C1p1CVmHk2d0QAYtpmIFW0z3e3si42hzZjwY2paop" style=3D"d=
+isplay:inline-block;background:#e50914;color:#ffffff;padding:12px 30px;bord=
+er-radius:4px;text-decoration:none;font-weight:bold;">Sign in</a></td></tr>
+<tr><td style=3D"padding:0 40px 32px 40px;font-size:13px;color:#8c8c99;">Th=
+e code and link expire in 15&nbsp;minutes.</td></tr>
+<tr><td style=3D"padding:20px 40px;border-top:1px solid #2c2c36;font-size:1=
+3px;color:#8c8c99;">New this week: season 2 of &ldquo;Deep Orbit&rdquo; in =
+4K. <a href=3D"https://www.streamforge.example/title/80213377?src=3Dmail" s=
+tyle=3D"color:#8c8c99;">Watch now</a></td></tr>
+</table>
+<p style=3D"font-family:Arial;font-size:11px;color:#55555f;"><a href=3D"htt=
+ps://help.streamforge.example" style=3D"color:#55555f;">Help Centre</a> &mi=
+ddot; <a href=3D"https://www.streamforge.example/privacy" style=3D"color:#5=
+5555f;">Privacy</a></p>
+</td></tr></table>
+<img src=3D"https://beaconimages.streamforge.example/v1/f4438871364b67bfadc=
+a8052800759ab2ae1ce7b/open.png" width=3D"1" height=3D"1" border=3D"0" alt=
+=3D"" style=3D"height:1px !important;width:1px !important;border-width:0 !i=
+mportant;margin-top:0 !important;margin-bottom:0 !important;padding:0 !impo=
+rtant;">
+</body></html>
+
+--sf-1fe6da18344e981e3f8db4309dbb--

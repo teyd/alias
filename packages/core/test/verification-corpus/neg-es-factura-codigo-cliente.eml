@@ -1,0 +1,52 @@
+Return-Path: <bounces+lyccvwrs0bsp@mail.telefonia-sol.example>
+Received: from mx-15.mail.telefonia-sol.example (mx-15.mail.telefonia-sol.example [198.51.100.119])
+	by inbound-smtp.mx.tmp.example with SMTP id 4ee90b8e744342f1558bd55cc1294281
+	for <pago.r8t1@tmp.example>; Thu, 22 Oct 2026 06:30:00 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.telefonia-sol.example (Postfix) with ESMTP id GAPQVDDDGIF
+	for <pago.r8t1@tmp.example>; Thu, 22 Oct 2026 06:30:00 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.telefonia-sol.example;
+	dkim=pass header.d=telefonia-sol.example;
+	dmarc=pass header.from=telefonia-sol.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=telefonia-sol.example;
+	s=s1; t=1792100183; h=from:to:subject:date:message-id:mime-version;
+	bh=wZYACOr92BK4briZKaBBOcZgIgtPU3ZJoUxU5wDBWHB=;
+	b=TfKcfhqsSa7XATDG3Dvo8TSPJEpIB8o7CHuwng5TECrIK5WvrqTHLYYvkNJVdWDS
+	 lQj8vParKir6hV33tfRN6k8EfERalz9PJsH9PA5RURBnuoGTQjaiuD8QFDBXkjOW
+	 0GbmIhwfRHYjjrF36ia6haIVzakUYrDJLGL6D9R0B8hb==
+From: =?UTF-8?B?VGVsZWZvbsOtYSBTb2w=?= <facturas@telefonia-sol.example>
+To: pago.r8t1@tmp.example
+Subject: =?UTF-8?B?VHUgZmFjdHVyYSBkZSBvY3R1YnJlIHlhIGVzdMOhIGRpc3BvbmlibGU=?=
+Date: Thu, 22 Oct 2026 06:30:00 +0200
+Message-ID: <0701f0d9f19844b3.dk8As3qTls@telefonia-sol.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta charset=3D"utf-8"></head><body style=3D"font-family:Arial=
+,sans-serif;background:#fff8e1;margin:0;">
+<table width=3D"600" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#ff9800;padding:18px 24px;color:#fff;font-size:=
+22px;font-weight:bold;">Telefon=C3=ADa Sol</td></tr>
+<tr><td style=3D"padding:24px;font-size:14px;color:#333;line-height:21px;">
+<p>Hola Luc=C3=ADa:</p>
+<p>Tu factura de octubre de 2026 ya est=C3=A1 disponible.</p>
+<table cellpadding=3D"6" cellspacing=3D"0" style=3D"font-size:14px;">
+<tr><td style=3D"color:#888;">C=C3=B3digo de cliente</td><td><b>1048372</b>=
+</td></tr>
+<tr><td style=3D"color:#888;">N=C2=BA de factura</td><td>FAC-2026-0099182</=
+td></tr>
+<tr><td style=3D"color:#888;">Importe</td><td><b>39,95&nbsp;=E2=82=AC</b></=
+td></tr>
+<tr><td style=3D"color:#888;">Fecha de cargo</td><td>05/11/2026</td></tr>
+</table>
+<p><a href=3D"https://www.telefonia-sol.example/area-cliente/facturas" styl=
+e=3D"color:#e65100;">Ver factura en Mi =C3=81rea</a></p>
+</td></tr>
+<tr><td style=3D"padding:14px 24px;font-size:11px;color:#999;">Telefon=C3=
+=ADa Sol S.A. =C2=B7 Calle Ejemplo 1 =C2=B7 28001 Madrid =C2=B7 <a href=3D"=
+https://www.telefonia-sol.example/privacidad" style=3D"color:#999;">Privaci=
+dad</a></td></tr>
+</table></body></html>

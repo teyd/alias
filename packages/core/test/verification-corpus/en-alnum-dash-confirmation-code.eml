@@ -1,0 +1,91 @@
+Return-Path: <bounces+2mtfvl3h6kmp@mail.slackish.example>
+Received: from mx-21.mail.slackish.example (mx-21.mail.slackish.example [198.51.100.152])
+	by inbound-smtp.mx.tmp.example with SMTP id 56c333e39f584ffbbc327754a5f1ec45
+	for <team.b0t9@tmp.example>; Thu, 22 Oct 2026 12:00:41 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.slackish.example (Postfix) with ESMTP id 32ZMYYZJOGG
+	for <team.b0t9@tmp.example>; Thu, 22 Oct 2026 12:00:41 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.slackish.example;
+	dkim=pass header.d=slackish.example;
+	dmarc=pass header.from=slackish.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=slackish.example;
+	s=s6; t=1792100118; h=from:to:subject:date:message-id:mime-version;
+	bh=vcF1yrJAWaUwSEkWbGk0mFxn8LRIHyGE6KU8e7GWlJh=;
+	b=i7iVNiPJJDD6N3nUpDKEtrauJivhdgDWX6FHNSMTO0W0e0XvZ1ZeO4927kwBXW2s
+	 lvfDtbe91gJsE37qsy5RLFZuZHvU1YYnNZbZYNe1tlkoEYyx6sbNKz4xVUidncZV
+	 JF50rn0wfjCGHHJRUX1UfE52xGKGBGK34ivC5FnsBjEU==
+From: "Slackish" <no-reply@slackish.example>
+To: team.b0t9@tmp.example
+Subject: Slackish confirmation code: Q8W-3ZK
+Date: Thu, 22 Oct 2026 12:00:41 +0000
+Message-ID: <d052683fcca75bf3.BfBelFDaYu@slackish.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="slackish_e4665d2854c5a29519"
+
+--slackish_e4665d2854c5a29519
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Confirm your email address
+
+Your confirmation code is below =E2=80=94 enter it in your open browser win=
+dow and we'll help you get signed in.
+
+Q8W-3ZK
+
+If you didn=E2=80=99t request this email, there=E2=80=99s nothing to worry =
+about =E2=80=94 you can safely ignore it.
+
+Made by Slackish Technologies, LLC =C2=B7 500 Howard Street =C2=B7 San Fran=
+cisco, CA 94105
+Our Blog: https://slackish.example/blog  |  Policies: https://slackish.exam=
+ple/legal
+
+--slackish_e4665d2854c5a29519
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html><head><meta charset=3D"UTF-8"><title>Slackish confirma=
+tion code: Q8W-3ZK</title></head>
+<body style=3D"margin:0;padding:0;background:#ffffff;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Your confirmation code is Q8W-3ZK&#847=
+;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&z=
+wnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentat=
+ion"><tr><td align=3D"center">
+<table width=3D"600" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentati=
+on" style=3D"max-width:600px;">
+<tr><td style=3D"padding:40px 0 24px 0;"><img src=3D"https://a.slackish-edg=
+e.example/80588/marketing/img/email/logo.png" width=3D"120" height=3D"36" a=
+lt=3D"Slackish"></td></tr>
+<tr><td style=3D"font-family:Helvetica,Arial,sans-serif;">
+<h1 style=3D"color:#1d1c1d;font-size:36px;line-height:42px;font-weight:700;=
+margin:0 0 30px 0;">Confirm your email address</h1>
+<p style=3D"font-size:20px;line-height:28px;color:#1d1c1d;margin:0 0 30px 0=
+;">Your confirmation code is below &mdash; enter it in your open browser wi=
+ndow and we&#39;ll help you get signed in.</p>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentat=
+ion" style=3D"background:#f5f4f5;border-radius:4px;"><tr><td align=3D"cente=
+r" style=3D"padding:43px 23px;">
+<div style=3D"font-size:30px;line-height:24px;font-family:Helvetica,Arial,s=
+ans-serif;color:#1d1c1d;">Q8W-3ZK</div></td></tr></table>
+<p style=3D"font-size:14px;line-height:24px;color:#000000;margin:30px 0;">I=
+f you didn&rsquo;t request this email, there&rsquo;s nothing to worry about=
+ &mdash; you can safely ignore it.</p>
+</td></tr>
+<tr><td style=3D"font-family:Helvetica,Arial,sans-serif;font-size:12px;colo=
+r:#b7b7b7;padding:24px 0 50px 0;">
+<a href=3D"https://slackish.example/blog" style=3D"color:#b7b7b7;">Our Blog=
+</a> &nbsp;&nbsp; <a href=3D"https://slackish.example/legal" style=3D"color=
+:#b7b7b7;">Policies</a> &nbsp;&nbsp; <a href=3D"https://slackish.example/he=
+lp" style=3D"color:#b7b7b7;">Help Center</a> &nbsp;&nbsp; <a href=3D"https:=
+//slackish.example/community" style=3D"color:#b7b7b7;">Slackish Community</=
+a><br><br>
+&copy;2026 Slackish Technologies, LLC, a Salesforce-like company.<br>500 Ho=
+ward Street, San Francisco, CA 94105, USA<br>All rights reserved.</td></tr>
+</table></td></tr></table></body></html>
+
+--slackish_e4665d2854c5a29519--

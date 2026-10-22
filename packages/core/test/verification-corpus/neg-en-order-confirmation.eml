@@ -1,0 +1,165 @@
+Return-Path: <bounces+f3owojriveqb@mail.northwind-shop.example>
+Received: from mx-5.mail.northwind-shop.example (mx-5.mail.northwind-shop.example [198.51.100.36])
+	by inbound-smtp.mx.tmp.example with SMTP id 786dfaab6e803bcd5c3c060aa0612941
+	for <bargain.h4x@tmp.example>; Thu, 22 Oct 2026 14:22:10 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.northwind-shop.example (Postfix) with ESMTP id PUWAYUMSAEL
+	for <bargain.h4x@tmp.example>; Thu, 22 Oct 2026 14:22:10 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.northwind-shop.example;
+	dkim=pass header.d=northwind-shop.example;
+	dmarc=pass header.from=northwind-shop.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=northwind-shop.example;
+	s=s7; t=1792100042; h=from:to:subject:date:message-id:mime-version;
+	bh=qipFJjVmKgjLFA9xceemCdpL1r8b5XNa8P83V6sGitT=;
+	b=Sfr80BVz13C9JlVlAsN5OllBihpPkplyyrj3gmRz4CuB2o8oF2DA241IwNkAF59q
+	 Roii9DQmSdxjfHyfGO3yjHQ9WR3W8b2nqvFvDAcSY4n7FpVCV101ONMTRPzW6GHb
+	 lfyg98Kf32IdqXrhZAAzlVh5RMeyCtJu4VlT9Q6fFV00==
+From: "Northwind Shop" <orders@northwind-shop.example>
+To: bargain.h4x@tmp.example
+Subject: Your Northwind order #4829137 is confirmed
+Date: Thu, 22 Oct 2026 14:22:10 +0200
+Message-ID: <feee664cc8dd8f65.YPKk5H7WDG@northwind-shop.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="nw-a45a9d9f278e30178e854917"
+
+--nw-a45a9d9f278e30178e854917
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Thanks for your order, Alex!
+
+Order #4829137 =E2=80=94 placed Oct 22, 2026
+
+  2 x Merino Beanie (Charcoal)        =E2=82=AC24.99 each   =E2=82=AC49.98
+  1 x Thermal Socks 3-pack            =E2=82=AC12.50        =E2=82=AC12.50
+  Shipping                                          =E2=82=AC0.00
+  Total                                             =E2=82=AC62.48
+
+Estimated delivery: Tue, Oct 27, 2026
+
+Shipping to:
+Alex Example
+Invalidenstra=C3=9Fe 117
+10115 Berlin
+
+View order: https://www.northwind-shop.example/account/orders/4829137
+
+Questions? Call 030 000000 or reply to this email.
+
+--nw-a45a9d9f278e30178e854917
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Order confirmed</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Order #4829137 =E2=80=94 estimated del=
+ivery Tue, Oct 27&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#84=
+7;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://img.northwind-shop.example/brand/nw-logo.png" width=3D"=
+120" height=3D"32" alt=3D"Northwind Shop" style=3D"display:block;width:120p=
+x;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<h1 style=3D"font-size:22px;margin:0 0 8px 0;color:#111;">Thanks for your o=
+rder, Alex!</h1>
+<p style=3D"margin:0 0 20px 0;color:#555;">Order <b>#4829137</b> &mdash; pl=
+aced Oct 22, 2026</p>
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=
+=3D"0" style=3D"font-size:14px;border-top:1px solid #eee;">
+<tr><td style=3D"padding:12px 0;border-bottom:1px solid #eee;"><img src=3D"=
+https://img.northwind-shop.example/p/88123/thumb.jpg" width=3D"56" height=
+=3D"56" alt=3D"" style=3D"vertical-align:middle;margin-right:12px;">2 &time=
+s; Merino Beanie (Charcoal)</td><td align=3D"right" style=3D"border-bottom:=
+1px solid #eee;">&euro;49.98</td></tr>
+<tr><td style=3D"padding:12px 0;border-bottom:1px solid #eee;"><img src=3D"=
+https://img.northwind-shop.example/p/88177/thumb.jpg" width=3D"56" height=
+=3D"56" alt=3D"" style=3D"vertical-align:middle;margin-right:12px;">1 &time=
+s; Thermal Socks 3-pack</td><td align=3D"right" style=3D"border-bottom:1px =
+solid #eee;">&euro;12.50</td></tr>
+<tr><td style=3D"padding:8px 0;color:#777;">Shipping</td><td align=3D"right=
+" style=3D"color:#777;">&euro;0.00</td></tr>
+<tr><td style=3D"padding:8px 0;font-weight:bold;">Total</td><td align=3D"ri=
+ght" style=3D"font-weight:bold;">&euro;62.48</td></tr>
+</table>
+<p style=3D"margin:20px 0 4px 0;"><b>Estimated delivery:</b> Tue, Oct 27, 2=
+026</p>
+<p style=3D"margin:0 0 4px 0;"><b>Shipping to:</b><br>Alex Example<br>Inval=
+idenstra&szlig;e 117<br>10115 Berlin</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#111111" style=3D"border-radius:6px;">
+<a href=3D"https://www.northwind-shop.example/account/orders/4829137" targe=
+t=3D"_blank" style=3D"display:inline-block;padding:14px 32px;font-family:He=
+lvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text=
+-decoration:none;border-radius:6px;border:1px solid #111111;">View order</a=
+>
+</td>
+</tr>
+</table>
+<p style=3D"margin:0;font-size:13px;color:#777;">Questions? Call 030 000000=
+ or reply to this email.</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Northwind Shop, 410 Terry Ave N, Seattle, WA 98109<br><a href=3D"https://ww=
+w.northwind-shop.example/returns" style=3D"color:#8c8c8c;text-decoration:un=
+derline;">Returns</a> &nbsp;&middot;&nbsp; <a href=3D"https://www.northwind=
+-shop.example/privacy" style=3D"color:#8c8c8c;text-decoration:underline;">P=
+rivacy</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://www.northwind-shop.example/gp/r.html?M=3Durn:rtn:msg:e8=
+0dd5a6cbad8982ea3af2b9535163ab&amp;T=3DO" width=3D"1" height=3D"1" border=
+=3D"0" alt=3D"" style=3D"height:1px !important;width:1px !important;border-=
+width:0 !important;margin-top:0 !important;margin-bottom:0 !important;paddi=
+ng:0 !important;">
+</body>
+</html>
+
+--nw-a45a9d9f278e30178e854917--

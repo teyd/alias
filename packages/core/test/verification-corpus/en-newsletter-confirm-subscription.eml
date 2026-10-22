@@ -1,0 +1,87 @@
+Return-Path: <bounces+umhehviao77w@mail.list-manage.example>
+Received: from mx-2.mail.list-manage.example (mx-2.mail.list-manage.example [198.51.100.52])
+	by inbound-smtp.mx.tmp.example with SMTP id 138a38539c2ba2fb966a3d5809ce8748
+	for <hops.c3v6@tmp.example>; Thu, 22 Oct 2026 16:11:46 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.list-manage.example (Postfix) with ESMTP id SQELAFZCKJG
+	for <hops.c3v6@tmp.example>; Thu, 22 Oct 2026 16:11:46 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.list-manage.example;
+	dkim=pass header.d=list-manage.example;
+	dmarc=pass header.from=list-manage.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=list-manage.example;
+	s=s3; t=1792100055; h=from:to:subject:date:message-id:mime-version;
+	bh=6RxQO6cRhByiqMKvWaZZyr3TFsaeQ45AVTFCAhjfFdL=;
+	b=qzlx8kjkCVpWRzAZUFFSOLZ43exbxEny2sL0b3PTu7d09ElN5GQIlxsMM4xVv1hR
+	 9oKxHzP4fsOBuXRxZhXCWnAc2cEhnFA6ZjagLM0R2Vfoyy49R2QwOnfdDuZZUeDm
+	 NIbDkiD1cEk5JvHMCq0Qr9zYXlf6A7gsXmmxxqXFOktL==
+From: "Local Brews Weekly" <us21-confirm@list-manage.example>
+To: hops.c3v6@tmp.example
+Subject: Local Brews Weekly: Please Confirm Subscription
+Date: Thu, 22 Oct 2026 16:11:46 +0000
+Message-ID: <ab8e8ad27849f605.PO6yvOvtBE@list-manage.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="_----------=_MCPart_a9272d69ef"
+
+--_----------=_MCPart_a9272d69ef
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Local Brews Weekly
+
+Please Confirm Subscription
+
+Yes, subscribe me to this list. ( https://localbrews.us21.list-manage.examp=
+le/subscribe/confirm?u=3D5c5c9f5a7921bf0347dfff447&id=3D6ba51722bf&e=3D5ac3=
+a41206&c=3D81c669568f )
+
+If you received this email by mistake, simply delete it. You won't be subsc=
+ribed if you don't click the confirmation link above.
+
+For questions about this list, please contact:
+editor@localbrews.example
+
+--_----------=_MCPart_a9272d69ef
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!doctype html><html><head><meta charset=3D"UTF-8"><title>Local Brews Weekl=
+y: Please Confirm Subscription</title></head>
+<body style=3D"background:#eeeeee;margin:0;padding:0;">
+<center>
+<table align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" wi=
+dth=3D"100%" style=3D"background:#eeeeee;"><tr><td align=3D"center" valign=
+=3D"top" style=3D"padding:40px 20px;">
+<table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600p=
+x;background:#ffffff;">
+<tr><td align=3D"center" valign=3D"top" style=3D"padding:40px;font-family:H=
+elvetica,Arial,sans-serif;">
+<h1 style=3D"color:#202020;font-size:24px;margin:0 0 20px 0;">Local Brews W=
+eekly</h1>
+<h2 style=3D"color:#404040;font-size:20px;margin:0 0 30px 0;">Please Confir=
+m Subscription</h2>
+<table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" style=3D"background=
+-color:#5d5d5d;border-radius:3px;"><tr><td align=3D"center" valign=3D"middl=
+e" style=3D"padding:15px;font-family:Arial;font-size:16px;">
+<a href=3D"https://localbrews.us21.list-manage.example/subscribe/confirm?u=
+=3D5c5c9f5a7921bf0347dfff447&amp;id=3D6ba51722bf&amp;e=3D5ac3a41206&amp;c=
+=3D81c669568f" style=3D"color:#ffffff;text-decoration:none;font-weight:bold=
+;" target=3D"_blank">Yes, subscribe me to this list.</a></td></tr></table>
+<p style=3D"color:#606060;font-size:14px;line-height:150%;margin:30px 0 0 0=
+;">If you received this email by mistake, simply delete it. You won&#39;t b=
+e subscribed if you don&#39;t click the confirmation link above.</p>
+</td></tr>
+<tr><td style=3D"padding:20px 40px;border-top:1px solid #dddddd;font-family=
+:Helvetica,Arial,sans-serif;font-size:12px;color:#808080;text-align:center;=
+">For questions about this list, please contact:<br><a href=3D"mailto:edito=
+r@localbrews.example" style=3D"color:#808080;">editor@localbrews.example</a=
+><br><br>
+<a href=3D"https://list-manage.example/?utm_source=3Dfreemium_newsletter&am=
+p;utm_medium=3Demail&amp;utm_campaign=3Dreferral_marketing&amp;aid=3Dd44192=
+8019f685c4ca7d" title=3D"Email Marketing Powered by ListManage"><img src=3D=
+"https://cdn-images.list-manage.example/monkey_rewards/intuit-mc-rewards-te=
+xt-dark.png" border=3D"0" alt=3D"Email Marketing Powered by ListManage" wid=
+th=3D"139" height=3D"54"></a></td></tr>
+</table></td></tr></table></center></body></html>
+
+--_----------=_MCPart_a9272d69ef--

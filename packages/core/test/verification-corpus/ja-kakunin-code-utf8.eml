@@ -1,0 +1,74 @@
+Return-Path: <bounces+2e9ry9ie0g7s@mail.sakura-ticket.example>
+Received: from mx-4.mail.sakura-ticket.example (mx-4.mail.sakura-ticket.example [198.51.100.35])
+	by inbound-smtp.mx.tmp.example with SMTP id d993c299a9acf6f12fbe850a99802775
+	for <kenji.t7u3@tmp.example>; Thu, 22 Oct 2026 18:20:11 +0900
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.sakura-ticket.example (Postfix) with ESMTP id DMZFMJKDEMW
+	for <kenji.t7u3@tmp.example>; Thu, 22 Oct 2026 18:20:11 +0900
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.sakura-ticket.example;
+	dkim=pass header.d=sakura-ticket.example;
+	dmarc=pass header.from=sakura-ticket.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=sakura-ticket.example;
+	s=s7; t=1792100228; h=from:to:subject:date:message-id:mime-version;
+	bh=yDwspf3e9Bvwo0rXJ5p5A6FaFD6BHK7ZaEXHTIPAkyN=;
+	b=SFlQEBzAOi8XY9vBsozwh2M8PhHcF7giKx7tHcY8maCqnGbIyQbbY4U4CAH2R1gK
+	 YApMVU8HJNyxbAmyl6i94uJhD3sWfR10YZgq1y1FMyohBH9l24AAOGe6YXHlHEJy
+	 a8ZLXE1lY3Xq1lTb19UJpSgR5WIkA6oyZeFADORpzQSx==
+From: =?UTF-8?B?44GV44GP44KJ44OB44Kx44OD44OI?= <no-reply@sakura-ticket.example>
+To: kenji.t7u3@tmp.example
+Subject: =?UTF-8?B?44CQ44GV44GP44KJ44OB44Kx44OD44OI44CR56K66KqN44Kz44O844OJ44Gu?=
+ =?UTF-8?B?44GK55+l44KJ44Gb?=
+Date: Thu, 22 Oct 2026 18:20:11 +0900
+Message-ID: <ece5cdc6d3d5bc91.DC3XgJgMRe@sakura-ticket.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="__sakura_93649d285acac7a4eb61"
+
+--__sakura_93649d285acac7a4eb61
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+5bGx55SwIOWkqumDjiDmp5gNCg0K44GV44GP44KJ44OB44Kx44OD44OI44KS44GU5Yip55So44GE
+44Gf44Gg44GN44GC44KK44GM44Go44GG44GU44GW44GE44G+44GZ44CCDQrku6XkuIvjga7norro
+qo3jgrPjg7zjg4njgpLnlLvpnaLjgavlhaXlipvjgZfjgabjgY/jgaDjgZXjgYTjgIINCg0K56K6
+6KqN44Kz44O844OJ77yaNTI4MTQ2DQoNCuKAu+eiuuiqjeOCs+ODvOODieOBruacieWKueacn+mZ
+kOOBrzMw5YiG44Gn44GZ44CCDQrigLvmnKzjg6Hjg7zjg6vjgavlv4PlvZPjgZ/jgorjga7jgarj
+gYTloLTlkIjjga/jgIHnoLTmo4TjgZfjgabjgY/jgaDjgZXjgYTjgIINCg0K6YCB5L+h5pel5pmC
+77yaMjAyNuW5tDEw5pyIMjLml6UgMTg6MjANCg0K4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSADQrjgZXjgY/jgonjg4HjgrHjg4Pjg4jmoKrlvI/k
+vJrnpL4NCuOAkjE1MC0wMDAyIOadseS6rOmDvea4i+iwt+WMuuS+i+eUujEtMi0zDQrjgYrllY/j
+gYTlkIjjgo/jgZvvvJowMy0wMDAwLTAwMDDvvIjlubPml6UxMDowMOOAnDE4OjAw77yJDQrilIDi
+lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCg==
+--__sakura_93649d285acac7a4eb61
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGhlYWQ+PG1ldGEgaHR0cC1lcXVpdj0iQ29udGVudC1UeXBlIiBjb250ZW50PSJ0ZXh0
+L2h0bWw7IGNoYXJzZXQ9VVRGLTgiPjwvaGVhZD4NCjxib2R5IHN0eWxlPSJtYXJnaW46MDtiYWNr
+Z3JvdW5kOiNmZGYyZjU7Zm9udC1mYW1pbHk6J0hpcmFnaW5vIEtha3UgR290aGljIFByb04nLE1l
+aXJ5byxzYW5zLXNlcmlmOyI+DQo8dGFibGUgd2lkdGg9IjYwMCIgYWxpZ249ImNlbnRlciIgY2Vs
+bHBhZGRpbmc9IjAiIGNlbGxzcGFjaW5nPSIwIiBzdHlsZT0iYmFja2dyb3VuZDojZmZmZmZmO21h
+cmdpbjoyMHB4IGF1dG87Ij4NCjx0cj48dGQgc3R5bGU9ImJhY2tncm91bmQ6I2U5MWU2MztwYWRk
+aW5nOjE2cHggMjRweDtjb2xvcjojZmZmO2ZvbnQtc2l6ZToxOHB4O2ZvbnQtd2VpZ2h0OmJvbGQ7
+Ij7jgZXjgY/jgonjg4HjgrHjg4Pjg4g8L3RkPjwvdHI+DQo8dHI+PHRkIHN0eWxlPSJwYWRkaW5n
+OjI0cHg7Zm9udC1zaXplOjE0cHg7bGluZS1oZWlnaHQ6MS44O2NvbG9yOiMzMzM7Ij4NCuWxseeU
+sCDlpKrpg44g5qeYPGJyPjxicj4NCuOBleOBj+OCieODgeOCseODg+ODiOOCkuOBlOWIqeeUqOOB
+hOOBn+OBoOOBjeOBguOCiuOBjOOBqOOBhuOBlOOBluOBhOOBvuOBmeOAgjxicj4NCuS7peS4i+OB
+rueiuuiqjeOCs+ODvOODieOCkueUu+mdouOBq+WFpeWKm+OBl+OBpuOBj+OBoOOBleOBhOOAgjxi
+cj48YnI+DQo8dGFibGUgY2VsbHBhZGRpbmc9IjAiIGNlbGxzcGFjaW5nPSIwIiBzdHlsZT0ibWFy
+Z2luOjAgYXV0bzsiPjx0cj48dGQgc3R5bGU9ImJvcmRlcjoxcHggc29saWQgI2U5MWU2MztwYWRk
+aW5nOjE2cHggNDBweDt0ZXh0LWFsaWduOmNlbnRlcjsiPg0KPHNwYW4gc3R5bGU9ImZvbnQtc2l6
+ZToxMnB4O2NvbG9yOiM4ODg7Ij7norroqo3jgrPjg7zjg4k8L3NwYW4+PGJyPjxzcGFuIHN0eWxl
+PSJmb250LXNpemU6MzJweDtmb250LXdlaWdodDpib2xkO2xldHRlci1zcGFjaW5nOjZweDtjb2xv
+cjojZTkxZTYzOyI+NTI4MTQ2PC9zcGFuPjwvdGQ+PC90cj48L3RhYmxlPjxicj4NCuKAu+eiuuiq
+jeOCs+ODvOODieOBruacieWKueacn+mZkOOBrzMw5YiG44Gn44GZ44CCPGJyPg0K4oC75pys44Oh
+44O844Or44Gr5b+D5b2T44Gf44KK44Gu44Gq44GE5aC05ZCI44Gv44CB56C05qOE44GX44Gm44GP
+44Gg44GV44GE44CCPGJyPjxicj4NCumAgeS/oeaXpeaZgu+8mjIwMjblubQxMOaciDIy5pelIDE4
+OjIwDQo8L3RkPjwvdHI+DQo8dHI+PHRkIHN0eWxlPSJwYWRkaW5nOjE2cHggMjRweDtiYWNrZ3Jv
+dW5kOiNmN2Y3Zjc7Zm9udC1zaXplOjExcHg7Y29sb3I6Izc3NzsiPuOBleOBj+OCieODgeOCseOD
+g+ODiOagquW8j+S8muekvjxicj7jgJIxNTAtMDAwMiDmnbHkuqzpg73muIvosLfljLrkvovnlLox
+LTItMzxicj7jgYrllY/jgYTlkIjjgo/jgZvvvJowMy0wMDAwLTAwMDDvvIjlubPml6UxMDowMOOA
+nDE4OjAw77yJPGJyPjxhIGhyZWY9Imh0dHBzOi8vc2FrdXJhLXRpY2tldC5leGFtcGxlL3ByaXZh
+Y3kiIHN0eWxlPSJjb2xvcjojNzc3OyI+44OX44Op44Kk44OQ44K344O844Od44Oq44K344O8PC9h
+PjwvdGQ+PC90cj4NCjwvdGFibGU+PC9ib2R5PjwvaHRtbD4NCg==
+--__sakura_93649d285acac7a4eb61--

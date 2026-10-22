@@ -1,0 +1,117 @@
+Return-Path: <bounces+ex8nejlgxkre@mail.designdock.example>
+Received: from mx-7.mail.designdock.example (mx-7.mail.designdock.example [198.51.100.52])
+	by inbound-smtp.mx.tmp.example with SMTP id 1c21b8abc358174ce0a150d920cea256
+	for <pixel.f2g7@tmp.example>; Thu, 22 Oct 2026 13:14:20 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.designdock.example (Postfix) with ESMTP id UVCXZ7C0Z2H
+	for <pixel.f2g7@tmp.example>; Thu, 22 Oct 2026 13:14:20 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.designdock.example;
+	dkim=pass header.d=designdock.example;
+	dmarc=pass header.from=designdock.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=designdock.example;
+	s=s5; t=1792100090; h=from:to:subject:date:message-id:mime-version;
+	bh=CgAn65318U15dtgVu87HHB93tpF1IELM6dK5lvTWPCM=;
+	b=QOZd26TslXEMpVfrU9M0OviVQuEHZ6kdakkDB9rKRin2cM8s7lwg9iSiTfNzBwXP
+	 EQcWuZH1FZiiWw9umq58pN8bCulnvE2xoYTvB5T4S74AjUgxPIpSQFzGk6VdZTTZ
+	 HNwU704UBJMKWGWrqnFrd9oHpskjPJnd2ylCQuorC1S0==
+From: "DesignDock" <hello@designdock.example>
+To: pixel.f2g7@tmp.example
+Subject: =?UTF-8?B?RW1haWwgdmVyaWZpZWQg4oCUIHlvdSdyZSBhbGwgc2V0?=
+Date: Thu, 22 Oct 2026 13:14:20 +0000
+Message-ID: <9ebfbe90e9f07a36.OUZBnLSYr3@designdock.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="aeea5e3a7d019b1139051aacf7216f515ebe11a0"
+
+--aeea5e3a7d019b1139051aacf7216f515ebe11a0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Your email address has been verified
+
+Thanks, Robin! Verification is complete and your 14-day trial is now active=
+.
+There's nothing else you need to do.
+
+DesignDock, 77 Example Street, London EC1A 1AA
+Help: https://designdock.example/help  Privacy: https://designdock.example/=
+privacy
+
+--aeea5e3a7d019b1139051aacf7216f515ebe11a0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Email verified</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Verification complete&#847;&zwnj;&nbsp=
+;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</=
+span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://designdock.example/mail/logo.png" width=3D"120" height=
+=3D"32" alt=3D"DesignDock" style=3D"display:block;width:120px;height:32px;"=
+ />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"text-align:center;font-size:40px;margin:0;">&#9989;</p>
+<h1 style=3D"text-align:center;font-size:22px;margin:8px 0 16px 0;color:#1f=
+1f1f;">Your email address has been verified</h1>
+<p style=3D"text-align:center;margin:0;">Thanks, Robin! Verification is com=
+plete and your 14-day trial is now active. There&rsquo;s nothing else you n=
+eed to do.</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+DesignDock, 77 Example Street, London EC1A 1AA<br><a href=3D"https://design=
+dock.example/help" style=3D"color:#8c8c8c;text-decoration:underline;">Help<=
+/a> &nbsp;&middot;&nbsp; <a href=3D"https://designdock.example/privacy" sty=
+le=3D"color:#8c8c8c;text-decoration:underline;">Privacy</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
+
+--aeea5e3a7d019b1139051aacf7216f515ebe11a0--

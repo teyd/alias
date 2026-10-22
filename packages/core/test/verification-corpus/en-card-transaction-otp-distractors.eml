@@ -1,0 +1,78 @@
+Return-Path: <bounces+icwnrh3gcnru@mail.first-example-bank.example>
+Received: from mx-1.mail.first-example-bank.example (mx-1.mail.first-example-bank.example [198.51.100.179])
+	by inbound-smtp.mx.tmp.example with SMTP id 32108e586b9429825e22441c27b21c5d
+	for <cardholder.v3b8@tmp.example>; Thu, 22 Oct 2026 21:03:44 -0400
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.first-example-bank.example (Postfix) with ESMTP id 5HWJNHK3SC0
+	for <cardholder.v3b8@tmp.example>; Thu, 22 Oct 2026 21:03:44 -0400
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.first-example-bank.example;
+	dkim=pass header.d=first-example-bank.example;
+	dmarc=pass header.from=first-example-bank.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=first-example-bank.example;
+	s=s2; t=1792100082; h=from:to:subject:date:message-id:mime-version;
+	bh=nbwhPFL5vbqtaIwi2tyW2Qsbap3dtwOCzsYpuyFHWrZ=;
+	b=JO6RZONLkqLj2jYYuomH90diBrbkvaBOtt53Q5iiH9mCIBwq825wrz149WpqveaQ
+	 0waNJGWPvd5XYhro7tqZb9ThKT65cynRABF4XpqHiAhW3JM4Wg38YUwQyFrzriVr
+	 RbyIWLjKDDqjPQCH8A1vNQ8ePRFsiuyALbf3FzPmhBBh==
+From: "First Example Bank" <alerts@first-example-bank.example>
+To: cardholder.v3b8@tmp.example
+Subject: One-time passcode for your online purchase
+Date: Thu, 22 Oct 2026 21:03:44 -0400
+Message-ID: <bd9fafcc5aa0f25d.kMi7WkKFT0@first-example-bank.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="feb9002770f14c155d5cde9dbbaba4f3c"
+
+--feb9002770f14c155d5cde9dbbaba4f3c
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+First Example Bank - Secure Online Purchase
+
+Merchant:     ELECTRO-WORLD ONLINE
+Merchant ID:  000184729
+Amount:       $1,250.00
+Card:         Visa ending in 4242
+Date:         10/22/2026 21:03 ET
+
+To complete this purchase, enter the one-time passcode below on the merchan=
+t's
+verification page. It is valid for 5 minutes.
+
+One-time passcode: 926304
+
+If you did not make this purchase, call us immediately at 1-555-0110.
+Member FDIC. Equal Housing Lender.
+
+--feb9002770f14c155d5cde9dbbaba4f3c
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"font-family:Arial,sans-serif;font-size:14px;color:#1a1=
+a1a;">
+<table width=3D"600" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"border:1px solid #cccccc;">
+<tr><td colspan=3D"2" style=3D"background:#00205b;color:#ffffff;padding:14p=
+x 18px;font-size:18px;"><b>First Example Bank</b> &ndash; Secure Online Pur=
+chase</td></tr>
+<tr><td style=3D"padding:8px 18px;width:160px;color:#555555;">Merchant</td>=
+<td style=3D"padding:8px 18px;">ELECTRO-WORLD ONLINE</td></tr>
+<tr><td style=3D"padding:8px 18px;color:#555555;">Merchant ID</td><td style=
+=3D"padding:8px 18px;">000184729</td></tr>
+<tr><td style=3D"padding:8px 18px;color:#555555;">Amount</td><td style=3D"p=
+adding:8px 18px;">$1,250.00</td></tr>
+<tr><td style=3D"padding:8px 18px;color:#555555;">Card</td><td style=3D"pad=
+ding:8px 18px;">Visa ending in 4242</td></tr>
+<tr><td style=3D"padding:8px 18px;color:#555555;">Date</td><td style=3D"pad=
+ding:8px 18px;">10/22/2026 21:03 ET</td></tr>
+<tr><td colspan=3D"2" style=3D"padding:16px 18px;">To complete this purchas=
+e, enter the one-time passcode below on the merchant&#39;s verification pag=
+e. It is valid for 5&nbsp;minutes.</td></tr>
+<tr><td colspan=3D"2" style=3D"padding:0 18px 16px 18px;">One-time passcode=
+: <b style=3D"font-size:22px;">926304</b></td></tr>
+<tr><td colspan=3D"2" style=3D"padding:12px 18px;background:#f2f2f2;font-si=
+ze:11px;color:#666666;">If you did not make this purchase, call us immediat=
+ely at 1-555-0110. Member FDIC. Equal Housing Lender.</td></tr>
+</table></body></html>
+
+--feb9002770f14c155d5cde9dbbaba4f3c--

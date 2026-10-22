@@ -1,0 +1,87 @@
+Return-Path: <bounces+6b0zaqbsgle4@mail.accountprotection.microhard.example>
+Received: from mx-25.mail.accountprotection.microhard.example (mx-25.mail.accountprotection.microhard.example [198.51.100.145])
+	by inbound-smtp.mx.tmp.example with SMTP id b73b1278270836d4d6d833591fe3c396
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 03:21:55 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.accountprotection.microhard.example (Postfix) with ESMTP id MN6OSGCX6FF
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 03:21:55 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.accountprotection.microhard.example;
+	dkim=pass header.d=accountprotection.microhard.example;
+	dmarc=pass header.from=accountprotection.microhard.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=accountprotection.microhard.example;
+	s=s8; t=1792100100; h=from:to:subject:date:message-id:mime-version;
+	bh=WbvKD99HjDN89bv8j3zoRUxnFrBFOWIpXmZIk7oEqJl=;
+	b=5VtoSVFFpe3j3HjE5LsL0Q53wtZy8j2n2KUr2N3ib8OeM6OVRRpRCgQbNesitHpV
+	 Pcyq8FpklYqIQn99uWucFFWG8X3InSAzVduyh2qa7CoW4Q7eBnDDNp4D9dEokFha
+	 BBCoSZVCF2Bn2VPaBZPcbGPn0GgDgOZSp68ZngJhYMgr==
+From: "Microhard account team" <account-security-noreply@accountprotection.microhard.example>
+To: k7m2qx9pzr@tmp.example
+Subject: Microhard account security code
+Date: Thu, 22 Oct 2026 03:21:55 -0700
+Message-ID: <9fa2bd3f8a0869a2.pxCMlidQn6@accountprotection.microhard.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="--_av-Lq0mmTObsdaXbz6rDwVL7U"
+
+----_av-Lq0mmTObsdaXbz6rDwVL7U
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Microhard account
+
+Security code
+
+Please use the following security code for the Microhard account k7**9@tmp.=
+example.
+
+Security code: 519 207
+
+If you don't recognize the Microhard account k7**9@tmp.example, you can cli=
+ck https://account.live.microhard.example/dp?token=3DOLoNCyMAcfnH9pOcI3Jktz=
+kUwAADBSqkVqQ4MRCq to remove your email address from that account.
+
+Thanks,
+The Microhard account team
+
+----_av-Lq0mmTObsdaXbz6rDwVL7U
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html dir=3D"ltr"><head><meta http-equiv=3D"Content-Type" content=3D"text/h=
+tml; charset=3Dutf-8"></head>
+<body>
+<table dir=3D"ltr">
+<tr><td id=3D"i1" style=3D"padding:0; font-family:'Segoe UI Semibold', 'Seg=
+oe UI Bold', 'Segoe UI', 'Helvetica Neue Medium', Arial, sans-serif; font-s=
+ize:17px; color:#707070;">Microhard account</td></tr>
+<tr><td id=3D"i2" style=3D"padding:0; font-family:'Segoe UI Light', 'Segoe =
+UI', 'Helvetica Neue Medium', Arial, sans-serif; font-size:41px; color:#267=
+2ec;">Security code</td></tr>
+<tr><td id=3D"i3" style=3D"padding:0; padding-top:25px; font-family:'Segoe =
+UI', Tahoma, Verdana, Arial, sans-serif; font-size:14px; color:#2a2a2a;">Pl=
+ease use the following security code for the Microhard account <a dir=3D"lt=
+r" id=3D"iAccount" class=3D"link" style=3D"color:#2672ec; text-decoration:n=
+one" href=3D"mailto:k7**9@tmp.example">k7**9@tmp.example</a>.</td></tr>
+<tr><td id=3D"i4" style=3D"padding:0; padding-top:25px; font-family:'Segoe =
+UI', Tahoma, Verdana, Arial, sans-serif; font-size:14px; color:#2a2a2a;">Se=
+curity code: <span style=3D"font-family:'Segoe UI Bold', 'Segoe UI Semibold=
+', 'Segoe UI', 'Helvetica Neue Medium', Arial, sans-serif; font-size:14px; =
+font-weight:bold; color:#2a2a2a;">519 207</span></td></tr>
+<tr><td id=3D"i5" style=3D"padding:0; padding-top:25px; font-family:'Segoe =
+UI', Tahoma, Verdana, Arial, sans-serif; font-size:14px; color:#2a2a2a;">If=
+ you don't recognize the Microhard account <a dir=3D"ltr" class=3D"link" st=
+yle=3D"color:#2672ec; text-decoration:none" href=3D"mailto:k7**9@tmp.exampl=
+e">k7**9@tmp.example</a>, you can <a id=3D"iLink2" class=3D"link" style=3D"=
+color:#2672ec; text-decoration:none" href=3D"https://account.live.microhard=
+.example/dp?token=3DOLoNCyMAcfnH9pOcI3JktzkUwAADBSqkVqQ4MRCq">click here</a=
+> to remove your email address from that account.</td></tr>
+<tr><td id=3D"i6" style=3D"padding:0; padding-top:25px; font-family:'Segoe =
+UI', Tahoma, Verdana, Arial, sans-serif; font-size:14px; color:#2a2a2a;">Th=
+anks,</td></tr>
+<tr><td id=3D"i7" style=3D"padding:0; font-family:'Segoe UI', Tahoma, Verda=
+na, Arial, sans-serif; font-size:14px; color:#2a2a2a;">The Microhard accoun=
+t team</td></tr>
+</table>
+</body></html>
+
+----_av-Lq0mmTObsdaXbz6rDwVL7U--

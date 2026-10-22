@@ -1,0 +1,109 @@
+Return-Path: <bounces+hrep4dyqhfut@mail.boutique-lumiere.example>
+Received: from mx-33.mail.boutique-lumiere.example (mx-33.mail.boutique-lumiere.example [198.51.100.42])
+	by inbound-smtp.mx.tmp.example with SMTP id cafe74f67ba09197d59b09543eecd1ec
+	for <achat.p4m7@tmp.example>; Thu, 22 Oct 2026 15:05:11 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.boutique-lumiere.example (Postfix) with ESMTP id ACPL1GRRCCO
+	for <achat.p4m7@tmp.example>; Thu, 22 Oct 2026 15:05:11 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.boutique-lumiere.example;
+	dkim=pass header.d=boutique-lumiere.example;
+	dmarc=pass header.from=boutique-lumiere.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=boutique-lumiere.example;
+	s=s9; t=1792100252; h=from:to:subject:date:message-id:mime-version;
+	bh=uPXwj9fbYva0Jt1nOwmvupHrIlUZNgg2sRqmG5XxAdg=;
+	b=MfuzHg3FheqxPLIVHmobFwZhfJZaX2Zi9uo3DUn4tRIMz1rzsUEyUHcdtI0qM3uw
+	 M6JuuXLDkqYGkURgQovVIKEVxAKbETtM4OQ6lmu0CAjonBtA3LU5Huv5B0CHWDVP
+	 NWpm28ZtJbd59Mlr57zmwTQ1lKaFUIeTVW0pp399zcuX==
+From: =?UTF-8?B?Qm91dGlxdWUgTHVtacOocmU=?= <commandes@boutique-lumiere.example>
+To: achat.p4m7@tmp.example
+Subject: =?UTF-8?Q?Confirmation_de_votre_commande_n=C2=B0_7730192?=
+Date: Thu, 22 Oct 2026 15:05:11 +0200
+Message-ID: <37c2b067b8e14a14.oI9H0Q5lAN@boutique-lumiere.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=-uKcEhRhwxhBEB6oTatBxN2F6"
+
+--=-uKcEhRhwxhBEB6oTatBxN2F6
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Bonjour Camille,
+
+Merci pour votre commande !
+
+Commande n=C2=B0 7730192 du 22/10/2026
+Code client : 004827
+
+1 x Lampe de chevet =C2=AB Nuage =C2=BB     34,90 =E2=82=AC
+1 x Ampoule LED E27               6,50 =E2=82=AC
+Livraison                          4,99 =E2=82=AC
+Total TTC                         46,39 =E2=82=AC
+
+Adresse de livraison :
+Camille Exemple
+18 rue de l'Exemple
+Code postal : 75011  Ville : Paris
+
+Livraison estim=C3=A9e : 27/10/2026
+
+--=-uKcEhRhwxhBEB6oTatBxN2F6
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html lang=3D"fr">
+<head>
+<meta charset=3D"utf-8">
+<title>Confirmation de commande</title>
+</head>
+<body style=3D"margin:0;padding:0;background:#eceff1;font-family:Arial,Helv=
+etica,sans-serif;">
+
+<center>
+<table width=3D"640" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#c2185b;padding:18px 24px;color:#ffffff;font-si=
+ze:20px;font-weight:bold;letter-spacing:0.5px;">Boutique Lumi&egrave;re</td=
+></tr>
+<tr><td style=3D"padding:28px 24px 12px 24px;font-size:14px;line-height:21p=
+x;color:#263238;">
+<p>Bonjour Camille,</p><p>Merci pour votre commande&nbsp;!</p>
+<p><b>Commande n&deg;&nbsp;7730192</b> du 22/10/2026<br>Code client&nbsp;: =
+004827</p>
+<table width=3D"100%" cellpadding=3D"6" cellspacing=3D"0" style=3D"font-siz=
+e:13px;border:1px solid #eee;">
+<tr><td>1 &times; Lampe de chevet &laquo;&nbsp;Nuage&nbsp;&raquo;</td><td a=
+lign=3D"right">34,90&nbsp;&euro;</td></tr>
+<tr><td>1 &times; Ampoule LED E27</td><td align=3D"right">6,50&nbsp;&euro;<=
+/td></tr>
+<tr><td>Livraison</td><td align=3D"right">4,99&nbsp;&euro;</td></tr>
+<tr><td><b>Total TTC</b></td><td align=3D"right"><b>46,39&nbsp;&euro;</b></=
+td></tr></table>
+<p><b>Adresse de livraison&nbsp;:</b><br>Camille Exemple<br>18 rue de l&rsq=
+uo;Exemple<br>Code postal&nbsp;: 75011 &nbsp; Ville&nbsp;: Paris</p>
+<p>Livraison estim&eacute;e&nbsp;: 27/10/2026</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#c2185b" style=3D"border-radius:6px;">
+<a href=3D"https://www.boutique-lumiere.example/compte/commandes/7730192" t=
+arget=3D"_blank" style=3D"display:inline-block;padding:14px 32px;font-famil=
+y:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;=
+text-decoration:none;border-radius:6px;border:1px solid #c2185b;">Suivre ma=
+ commande</a>
+</td>
+</tr>
+</table>
+</td></tr>
+<tr><td style=3D"padding:16px 24px 24px 24px;border-top:1px solid #cfd8dc;f=
+ont-size:11px;line-height:16px;color:#78909c;">
+Boutique Lumi&egrave;re SAS &ndash; 18 rue de l&rsquo;Exemple, 75011 Paris =
+&middot; <a href=3D"https://www.boutique-lumiere.example/cgv" style=3D"colo=
+r:#78909c;">CGV</a>
+</td></tr>
+</table>
+</center>
+
+</body>
+</html>
+
+--=-uKcEhRhwxhBEB6oTatBxN2F6--

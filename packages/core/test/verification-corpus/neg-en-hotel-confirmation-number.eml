@@ -1,0 +1,84 @@
+Return-Path: <bounces+osepliasgw8n@mail.harbourview-hotel.example>
+Received: from mx-4.mail.harbourview-hotel.example (mx-4.mail.harbourview-hotel.example [198.51.100.167])
+	by inbound-smtp.mx.tmp.example with SMTP id 2c8c1b6e4fe7d74a670a19a4854871a1
+	for <trip.n7b2@tmp.example>; Thu, 22 Oct 2026 20:40:16 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.harbourview-hotel.example (Postfix) with ESMTP id F4GUEDQMH7T
+	for <trip.n7b2@tmp.example>; Thu, 22 Oct 2026 20:40:16 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.harbourview-hotel.example;
+	dkim=pass header.d=harbourview-hotel.example;
+	dmarc=pass header.from=harbourview-hotel.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=harbourview-hotel.example;
+	s=s6; t=1792100075; h=from:to:subject:date:message-id:mime-version;
+	bh=zXM8XiD5C5jDe6b0Stm3G6gNAnUidg1ynjrHzWgh3v3=;
+	b=dP2ANZ2yoHJNZ4l1GbDkCBEjeHEvdpe7MFxGvsYuK9mUQBqoE2dva8GRPxkvAoSU
+	 T0wB9QQPqk2W0Et8hl00JCazGhIVLoqCerR6CZGk4kSpsrmIBSzcKLLrdUkAW82K
+	 6XHrmOwuAAknCzkxPBiuaRQa0Vw7s254eIxVdF7Cq85G==
+From: "Harbourview Hotel" <reservations@harbourview-hotel.example>
+To: trip.n7b2@tmp.example
+Subject: Your reservation is confirmed - 72849163
+Date: Thu, 22 Oct 2026 20:40:16 -0700
+Message-ID: <7b3d9cd7a35513e8.WzYj2cKBoM@harbourview-hotel.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="hvd31b439ec73c0915b6d27e11ed"
+
+--hvd31b439ec73c0915b6d27e11ed
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Dear Morgan Example,
+
+Thank you for choosing Harbourview Hotel. Your reservation is confirmed.
+
+Confirmation code: 72849163
+Check-in:  Thu, Nov 12, 2026 (after 3:00 PM)
+Check-out: Sat, Nov 14, 2026 (before 11:00 AM)
+Room: Deluxe King, 2 nights, 2 adults
+Total: $289.00 (taxes included)
+
+Please present this confirmation code at the front desk.
+
+Harbourview Hotel, 1 Example Wharf, San Francisco, CA 94133 =C2=B7 +1 555-0=
+177
+
+--hvd31b439ec73c0915b6d27e11ed
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"margin:0;background:#f4f1ea;font-family:Georgia,serif;=
+color:#2d2a26;">
+<table width=3D"600" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#ffffff;margin:24px auto;">
+<tr><td><img src=3D"https://harbourview-hotel.example/email/header-bay.jpg"=
+ width=3D"600" height=3D"180" alt=3D"Harbourview Hotel" style=3D"display:bl=
+ock;"></td></tr>
+<tr><td style=3D"padding:32px;">
+<p>Dear Morgan Example,</p>
+<p>Thank you for choosing Harbourview Hotel. Your reservation is confirmed.=
+</p>
+<table width=3D"100%" cellpadding=3D"8" cellspacing=3D"0" style=3D"border:1=
+px solid #e4dccb;font-family:Arial,sans-serif;font-size:14px;">
+<tr><td style=3D"background:#faf7f0;">Confirmation code</td><td style=3D"fo=
+nt-size:20px;font-weight:bold;">72849163</td></tr>
+<tr><td style=3D"background:#faf7f0;">Check-in</td><td>Thu, Nov 12, 2026 (a=
+fter 3:00 PM)</td></tr>
+<tr><td style=3D"background:#faf7f0;">Check-out</td><td>Sat, Nov 14, 2026 (=
+before 11:00 AM)</td></tr>
+<tr><td style=3D"background:#faf7f0;">Room</td><td>Deluxe King &middot; 2 n=
+ights &middot; 2 adults</td></tr>
+<tr><td style=3D"background:#faf7f0;">Total</td><td>$289.00 (taxes included=
+)</td></tr>
+</table>
+<p>Please present this confirmation code at the front desk.</p>
+<p style=3D"text-align:center;"><a href=3D"https://harbourview-hotel.exampl=
+e/reservations/72849163?ln=3DExample" style=3D"color:#8a6d3b;">View or modi=
+fy reservation</a></p>
+</td></tr>
+<tr><td style=3D"padding:16px 32px;font-size:11px;color:#8c8577;font-family=
+:Arial,sans-serif;">Harbourview Hotel, 1 Example Wharf, San Francisco, CA 9=
+4133 &middot; +1 555-0177 &middot; <a href=3D"https://harbourview-hotel.exa=
+mple/privacy" style=3D"color:#8c8577;">Privacy</a></td></tr>
+</table></body></html>
+
+--hvd31b439ec73c0915b6d27e11ed--

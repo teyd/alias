@@ -1,0 +1,41 @@
+Return-Path: <bounces+qfsghcqtflp6@mail.forum.retro-synths.example>
+Received: from mx-6.mail.forum.retro-synths.example (mx-6.mail.forum.retro-synths.example [198.51.100.64])
+	by inbound-smtp.mx.tmp.example with SMTP id e73336ab63cec9e668c3f2210202aea6
+	for <moog.fan.t6@tmp.example>; Thu, 22 Oct 2026 02:44:09 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.forum.retro-synths.example (Postfix) with ESMTP id GZN8AWOLGEY
+	for <moog.fan.t6@tmp.example>; Thu, 22 Oct 2026 02:44:09 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.forum.retro-synths.example;
+	dkim=pass header.d=forum.retro-synths.example;
+	dmarc=pass header.from=forum.retro-synths.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=forum.retro-synths.example;
+	s=s7; t=1792100175; h=from:to:subject:date:message-id:mime-version;
+	bh=amP56NC2PUeB9BCAnQNEonuSbBuYXqF6jU6lN6m09vH=;
+	b=A2RQiXEy9JwF3ZdQohffnajW1HbK0FRXX4QTYHdaye26tbotMAvOlsTdgK8sCyaY
+	 f2Fm5WlG7kdc0RzXtEGujETBi67Hu4SCUfO4C0UQcXlbOWMT2KHo0e2xybSQCQxD
+	 frHK8Hyeg93IXRSzHDDQ3iAvIHqRjZCsHO2OE8mivEKx==
+From: "Retro Synths Forum" <noreply@forum.retro-synths.example>
+To: moog.fan.t6@tmp.example
+Subject: Welcome to Retro Synths Forum
+Date: Thu, 22 Oct 2026 02:44:09 +0000
+Message-ID: <3e4834adad143ffe.cW8YrwoFWq@forum.retro-synths.example>
+MIME-Version: 1.0
+X-Mailer: SMF
+Content-Type: text/plain; charset="ISO-8859-1"
+Content-Transfer-Encoding: 7bit
+
+Thank you for registering at Retro Synths Forum. Your username is
+synth_wizard_88. If you forget your password, you can reset it by
+visiting <http://forum.retro-synths.example/index.php?action=reminder>.
+
+Before you can login, you first need to activate your account. To do so,
+please follow this link:
+
+<http://forum.retro-synths.example/index.php?action=activate;u=48291;code=fLjlTeh3sU>
+
+Should you have problems with activation, please contact the
+administrator. You are member number 48291.
+
+Regards,
+The Retro Synths Forum Team.

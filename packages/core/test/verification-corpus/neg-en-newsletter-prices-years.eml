@@ -1,0 +1,111 @@
+Return-Path: <bounces+h1s3ntexdnes@mail.news.gadgetpulse.example>
+Received: from mx-2.mail.news.gadgetpulse.example (mx-2.mail.news.gadgetpulse.example [198.51.100.20])
+	by inbound-smtp.mx.tmp.example with SMTP id 6a54058c346aae8f7351e6e8ce30af0b
+	for <tech.reader.z1@tmp.example>; Thu, 22 Oct 2026 07:00:00 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.news.gadgetpulse.example (Postfix) with ESMTP id RLJIKQBLFAO
+	for <tech.reader.z1@tmp.example>; Thu, 22 Oct 2026 07:00:00 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.news.gadgetpulse.example;
+	dkim=pass header.d=news.gadgetpulse.example;
+	dmarc=pass header.from=news.gadgetpulse.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=news.gadgetpulse.example;
+	s=s6; t=1792100188; h=from:to:subject:date:message-id:mime-version;
+	bh=rgJU8CN9Y5gOFdSGBt0ey1ncC5xamifAlVOXFclFq0n=;
+	b=2pPJK8AtSrQ4sCYiH3JCC5ux3RpHXz0Bv9miDib9wzGP8yT9JkRCtXxBsnIdcUDc
+	 hzE7SBrCAG3JqiowbQbjtBrbz4yLjka3Fr8kVa4OrEcw92aoiOp0SR0AhMcQFneb
+	 rRdMNAwfTqVsWbJX0896OMH28IJPwXlruLUP7G39F6PJ==
+From: "GadgetPulse Weekly" <digest@news.gadgetpulse.example>
+To: tech.reader.z1@tmp.example
+Subject: This week: 35% faster chips, a $99 e-reader, and 2026's best headphones
+Date: Thu, 22 Oct 2026 07:00:00 +0000
+Message-ID: <afc19639bfb67048.TeXFxmUMOb@news.gadgetpulse.example>
+MIME-Version: 1.0
+List-Unsubscribe: <https://news.gadgetpulse.example/unsubscribe?e=zMpxMhzfKcsKIgYNWccidF2hb8ci&l=4471>, <mailto:unsub-4471@news.gadgetpulse.example>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Precedence: bulk
+Content-Type: multipart/alternative; boundary="gpa92c015dd6fc14730a14a4c444"
+
+--gpa92c015dd6fc14730a14a4c444
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+GadgetPulse Weekly =E2=80=94 Issue #312
+
+1. New laptop chips are 35% faster than last year's
+Benchmarks show a big jump in multi-core scores. Read more: https://gadgetp=
+ulse.example/2026/10/chips-35-percent
+
+2. A $99 e-reader that doesn't cut corners
+Was $129 at launch; now down to $99. Read more: https://gadgetpulse.example=
+/2026/10/budget-ereader
+
+3. The best headphones of 2026
+Our top 7 picks after 400 hours of testing. Read more: https://gadgetpulse.=
+example/2026/10/best-headphones
+
+From the archive (1998): the first MP3 player we ever reviewed.
+
+Firmware 6.0.2 is rolling out to most phones this week.
+
+Unsubscribe: https://news.gadgetpulse.example/unsubscribe?e=3DzMpxMhzfKcsKI=
+gYNWccidF2hb8ci&l=3D4471
+GadgetPulse Media, 55 Example Ave, New York, NY 10001
+
+--gpa92c015dd6fc14730a14a4c444
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta charset=3D"utf-8"></head><body style=3D"margin:0;backgrou=
+nd:#ffffff;font-family:Georgia,serif;color:#222;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Plus: the first MP3 player we ever rev=
+iewed (1998)&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zw=
+nj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table width=3D"640" align=3D"center" cellpadding=3D"0" cellspacing=3D"0">
+<tr><td style=3D"padding:24px 0;border-bottom:3px solid #222;"><img src=3D"=
+https://gadgetpulse.example/mail/masthead.png" width=3D"300" alt=3D"GadgetP=
+ulse Weekly"> <span style=3D"float:right;font-family:Arial;font-size:12px;c=
+olor:#777;">Issue #312</span></td></tr>
+<tr><td style=3D"padding:24px 0;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr>
+<td width=3D"200" valign=3D"top"><img src=3D"https://gadgetpulse.example/im=
+g/2026/10/chip.jpg" width=3D"180" alt=3D""></td>
+<td valign=3D"top"><h2 style=3D"margin:0 0 8px 0;">New laptop chips are 35%=
+ faster than last year&rsquo;s</h2><p style=3D"margin:0 0 8px 0;">Benchmark=
+s show a big jump in multi-core scores.</p><a href=3D"https://gadgetpulse.e=
+xample/2026/10/chips-35-percent" style=3D"color:#c62828;font-family:Arial;"=
+>Read more &raquo;</a></td>
+</tr></table>
+<hr style=3D"border:none;border-top:1px solid #ddd;margin:24px 0;">
+<h2 style=3D"margin:0 0 8px 0;">A $99 e-reader that doesn&rsquo;t cut corne=
+rs</h2>
+<p>Was <s>$129</s> at launch; now down to <b>$99</b>. <a href=3D"https://ga=
+dgetpulse.example/2026/10/budget-ereader" style=3D"color:#c62828;">Read mor=
+e &raquo;</a></p>
+<hr style=3D"border:none;border-top:1px solid #ddd;margin:24px 0;">
+<h2 style=3D"margin:0 0 8px 0;">The best headphones of 2026</h2>
+<p>Our top 7 picks after 400 hours of testing. <a href=3D"https://gadgetpul=
+se.example/2026/10/best-headphones" style=3D"color:#c62828;">Read more &raq=
+uo;</a></p>
+<p style=3D"background:#fafafa;padding:12px;font-style:italic;">From the ar=
+chive (1998): the first MP3 player we ever reviewed. Firmware 6.0.2 is roll=
+ing out to most phones this week.</p>
+</td></tr>
+<tr><td style=3D"padding:20px 0;font-family:Arial;font-size:11px;color:#888=
+;border-top:1px solid #ddd;">You&rsquo;re receiving this because you subscr=
+ibed at gadgetpulse.example. <a href=3D"https://news.gadgetpulse.example/un=
+subscribe?e=3DzMpxMhzfKcsKIgYNWccidF2hb8ci&amp;l=3D4471" style=3D"color:#88=
+8;">Unsubscribe</a> &middot; <a href=3D"https://gadgetpulse.example/prefere=
+nces" style=3D"color:#888;">Preferences</a><br>GadgetPulse Media, 55 Exampl=
+e Ave, New York, NY 10001</td></tr>
+</table>
+<img src=3D"https://news.gadgetpulse.example/track/open.php?u=3D9b1aa162ee8=
+b99b08495&amp;id=3Db0d448242e5d54796c0fb03abe1ce1a3" width=3D"1" height=3D"=
+1" border=3D"0" alt=3D"" style=3D"height:1px !important;width:1px !importan=
+t;border-width:0 !important;margin-top:0 !important;margin-bottom:0 !import=
+ant;padding:0 !important;">
+</body></html>
+
+--gpa92c015dd6fc14730a14a4c444--

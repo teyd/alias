@@ -1,0 +1,43 @@
+Return-Path: <bounces+asv6jsgtwx1p@mail.quillpad.example>
+Received: from mx-11.mail.quillpad.example (mx-11.mail.quillpad.example [198.51.100.12])
+	by inbound-smtp.mx.tmp.example with SMTP id 570c39495f89c3012267ab4a797997f4
+	for <writer.3jd8@tmp.example>; Thu, 22 Oct 2026 15:27:39 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.quillpad.example (Postfix) with ESMTP id TQNKVMBDSYO
+	for <writer.3jd8@tmp.example>; Thu, 22 Oct 2026 15:27:39 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.quillpad.example;
+	dkim=pass header.d=quillpad.example;
+	dmarc=pass header.from=quillpad.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=quillpad.example;
+	s=s9; t=1792100206; h=from:to:subject:date:message-id:mime-version;
+	bh=vQ06QC3ujpzAffBhPyJjJKEpAICiFzfrP1NdyH88CiG=;
+	b=5wiFsYnkyATFeBQRnO3dHbSO48npUnEWkwwhlAWxymdEdFwSJbeyabLmOg2ppkdn
+	 qIFcmnaEsTB16m36mswRJ3Q2kMkd8ltua5PdHnzy3wuawYWhZTFu8rF3Cnq3SHwM
+	 Z7z0arfxQVuqIgXZffmHHgAy99zZejwz6PeY4NZjLsjX==
+From: "Quillpad" <auth@quillpad.example>
+To: writer.3jd8@tmp.example
+Subject: Your Quillpad code
+Date: Thu, 22 Oct 2026 15:27:39 +0000
+Message-ID: <8d24dfbfa79422e3.gxdXBJT8Tr@quillpad.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="qp-aa4e804290fee7cd104e"
+
+--qp-aa4e804290fee7cd104e
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+
+804163
+
+That's your Quillpad verification code. Paste it into the sign-in screen
+that you opened 2 minutes ago.
+
+Didn't ask for this? Reply to this email and mention ticket 2026102215 so
+our team can take a look.
+
+--qp-aa4e804290fee7cd104e
+Content-Type: text/html; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+
+<p style="font-size:28px;font-weight:bold;font-family:monospace">804163</p><p>That's your Quillpad verification code. Paste it into the sign-in screen that you opened 2&nbsp;minutes ago.</p><p style="color:#888">Didn't ask for this? Reply to this email and mention ticket 2026102215 so our team can take a look.</p>
+--qp-aa4e804290fee7cd104e--

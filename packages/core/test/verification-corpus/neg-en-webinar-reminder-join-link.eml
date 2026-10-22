@@ -1,0 +1,136 @@
+Return-Path: <bounces+ko78kzkv2ydc@mail.events.confero.example>
+Received: from mx-35.mail.events.confero.example (mx-35.mail.events.confero.example [198.51.100.11])
+	by inbound-smtp.mx.tmp.example with SMTP id c84ef990e9b5ce2948d77292905e0dba
+	for <learn.q5w8@tmp.example>; Thu, 29 Oct 2026 15:00:00 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.events.confero.example (Postfix) with ESMTP id 79MNRA2HKBQ
+	for <learn.q5w8@tmp.example>; Thu, 29 Oct 2026 15:00:00 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.events.confero.example;
+	dkim=pass header.d=events.confero.example;
+	dmarc=pass header.from=events.confero.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=events.confero.example;
+	s=s4; t=1792100055; h=from:to:subject:date:message-id:mime-version;
+	bh=FjFnEaJPVuqHhTMnZ13EByl6SM7C4Csix8BGOdoXyJS=;
+	b=RzAPdthUBYqUCjhDxixoOLnxlPa5wEA8mEc12yJejeDcmNzdkUzNotexE38LiKJl
+	 7klg3NpiNkQLhemIDxrABt4QBUo2txLJbCW0TBbTeIK25we7eEjB6RwqMY4z77L2
+	 Ua7SFppN6WccJhU1vYyuxGe7bDPpEI48noGmvIaohG6g==
+From: "DataDays 2026" <no-reply@events.confero.example>
+To: learn.q5w8@tmp.example
+Subject: Reminder: 'Scaling Postgres in 2026' starts in 1 hour
+Date: Thu, 29 Oct 2026 15:00:00 +0000
+Message-ID: <7c373e084b3506b6.XcY3jk2BS4@events.confero.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="cf9ac748c86935c4d9ca6b93e32c"
+
+--cf9ac748c86935c4d9ca6b93e32c
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hi Taylor,
+
+This is a reminder that "Scaling Postgres in 2026" begins in 1 hour.
+
+Date & Time: Oct 29, 2026 05:00 PM Central European Time
+Webinar ID: 912 4471 0038
+
+Join webinar: https://events.confero.example/w/91244710038?tk=3Dl-GW1uSnnJR=
+B9ce7Vqd-8uilkHgRwCNaDmtQP6kHo7ob5aymg_quQualOkpc
+
+Add to calendar: https://events.confero.example/w/91244710038/ics
+
+You can cancel your registration at any time.
+
+--cf9ac748c86935c4d9ca6b93e32c
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Webinar reminder</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Starts in 1 hour&#847;&zwnj;&nbsp;&#84=
+7;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://events.confero.example/img/datadays-2026.png" width=3D"=
+120" height=3D"32" alt=3D"DataDays 2026" style=3D"display:block;width:120px=
+;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;">Hi Taylor,</p>
+<p style=3D"margin:0 0 16px 0;">This is a reminder that &ldquo;Scaling Post=
+gres in 2026&rdquo; begins in 1&nbsp;hour.</p>
+<p style=3D"margin:0 0 4px 0;"><b>Date &amp; Time:</b> Oct 29, 2026 05:00 P=
+M Central European Time</p>
+<p style=3D"margin:0;"><b>Webinar ID:</b> 912 4471 0038</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#0e72ed" style=3D"border-radius:6px;">
+<a href=3D"https://events.confero.example/w/91244710038?tk=3Dl-GW1uSnnJRB9c=
+e7Vqd-8uilkHgRwCNaDmtQP6kHo7ob5aymg_quQualOkpc" target=3D"_blank" style=3D"=
+display:inline-block;padding:14px 32px;font-family:Helvetica,Arial,sans-ser=
+if;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;borde=
+r-radius:6px;border:1px solid #0e72ed;">Join webinar</a>
+</td>
+</tr>
+</table>
+<p style=3D"margin:0;font-size:13px;"><a href=3D"https://events.confero.exa=
+mple/w/91244710038/ics" style=3D"color:#0e72ed;">Add to calendar</a> &middo=
+t; <a href=3D"https://events.confero.example/w/91244710038/cancel?tk=3Dl-GW=
+1uSnnJRB9ce7Vqd-8uilkHgRwCNaDmtQP6kHo7ob5aymg_quQualOkpc" style=3D"color:#0=
+e72ed;">Cancel registration</a></p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Confero Events, 55 Example Way, San Jose, CA 95113<br><a href=3D"https://co=
+nfero.example/privacy" style=3D"color:#8c8c8c;text-decoration:underline;">P=
+rivacy</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
+
+--cf9ac748c86935c4d9ca6b93e32c--

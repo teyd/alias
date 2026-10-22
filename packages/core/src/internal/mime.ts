@@ -28,7 +28,7 @@ export type Rewrite<E = never, R = never> = (
   part: TextPart,
 ) => Effect.Effect<Option.Option<string>, E, R>;
 
-interface ContentType {
+export interface ContentType {
   readonly type: string;
   readonly subtype: string;
   readonly parameters: R.ReadonlyRecord<string, string>;
@@ -53,9 +53,9 @@ export const parseContentType = (value: string): ContentType => {
   return { type: type.trim(), subtype: subtype.trim(), parameters };
 };
 
-const DEFAULT_TYPE: ContentType = { type: "text", subtype: "plain", parameters: {} };
+export const DEFAULT_TYPE: ContentType = { type: "text", subtype: "plain", parameters: {} };
 
-const first = (message: Headers.Message, name: string): Option.Option<string> =>
+export const first = (message: Headers.Message, name: string): Option.Option<string> =>
   Arr.head(Headers.values(message, name));
 
 // Transfer encodings (RFC 2045 §6). Content is handled as byte strings throughout.
@@ -103,14 +103,14 @@ const encodeBase64 = (text: string, eol: string): string =>
     eol,
   );
 
-interface Codec {
+export interface Codec {
   readonly decode: (body: string) => Option.Option<string>;
   readonly encode: (content: string, eol: string) => string;
 }
 
 const identity: Codec = { decode: Option.some, encode: (content) => content };
 
-const codecs: R.ReadonlyRecord<string, Codec> = {
+export const codecs: R.ReadonlyRecord<string, Codec> = {
   "7bit": identity,
   "8bit": identity,
   binary: identity,
@@ -175,7 +175,7 @@ const rewriteLeaf = <E, R>(
  * before the next delimiter's line break. Returns the pieces in order: what is not a part
  * (preamble, delimiter lines, epilogue) is kept as it was.
  */
-const splitMultipart = (
+export const splitMultipart = (
   body: Uint8Array,
   boundary: string,
 ): ReadonlyArray<{ readonly isPart: boolean; readonly bytes: Uint8Array }> => {
@@ -209,7 +209,7 @@ const splitMultipart = (
 };
 
 /** A part with no header fields at all starts with its blank line (RFC 2046 §5.1.1). */
-const parseEntity = (raw: Uint8Array): Effect.Effect<Headers.Message> =>
+export const parseEntity = (raw: Uint8Array): Effect.Effect<Headers.Message> =>
   Headers.parse(raw).pipe(
     Effect.catchTag("MalformedMessage", () =>
       Effect.succeed<Headers.Message>({

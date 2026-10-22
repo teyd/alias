@@ -1,0 +1,69 @@
+Return-Path: <bounces+j9falz0vox1w@mail.notely.example>
+Received: from mx-39.mail.notely.example (mx-39.mail.notely.example [198.51.100.128])
+	by inbound-smtp.mx.tmp.example with SMTP id c48a76ed4366e68b64ee00ff64c396df
+	for <notes.u7c@tmp.example>; Tue, 20 Oct 2026 16:44:21 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.notely.example (Postfix) with ESMTP id KVYNP99K5OI
+	for <notes.u7c@tmp.example>; Tue, 20 Oct 2026 16:44:21 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.notely.example;
+	dkim=pass header.d=notely.example;
+	dmarc=pass header.from=notely.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=notely.example;
+	s=s5; t=1792100082; h=from:to:subject:date:message-id:mime-version;
+	bh=mYLRMQQ4J3MYmAsboRRBy5Xwy7y2EGFrCworoooHtHr=;
+	b=FxDDXAgkZpOs4vBF5EpeTIEA5PIJToTkCCHs8RHOCPlSCN8mUjzuA7GxmcMFF9DS
+	 y8ercjDqANu9LtAdkzvYqDlvtNKcRMZH9fuoEWTzrOR1gaiTySsE63FHwsxBHkY6
+	 aQ5lSsMBQflh8Swa5W2VqnQ3jySmIpwYdtwyMz0qWwrg==
+From: "Notely" <hello@notely.example>
+To: notes.u7c@tmp.example
+Subject: Your Notely login code
+Date: Tue, 20 Oct 2026 16:44:21 +0000
+Message-ID: <2efc892eb2ffd82e.XwGBBN77ED@notely.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="notely-660228dde4ac15b01e40"
+
+--notely-660228dde4ac15b01e40
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Here is your Notely login code:
+
+K7Q2M9
+
+Copy and paste this temporary login code into the Notely window. It is
+case-sensitive and works once.
+
+If you didn't try to log in, you can safely ignore this email.
+
+Notely desktop 4.12.0 is out - see what's new: https://notely.example/chang=
+elog
+
+--notely-660228dde4ac15b01e40
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta charset=3D"utf-8"></head><body style=3D"background:#fffff=
+f;margin:0;">
+<div style=3D"max-width:480px;margin:0 auto;padding:48px 24px;font-family:-=
+apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#37352f;">
+<img src=3D"https://notely.example/images/email/logo-64.png" width=3D"32" h=
+eight=3D"32" alt=3D"Notely" style=3D"margin-bottom:24px;">
+<h1 style=3D"font-size:24px;font-weight:700;margin:0 0 20px 0;">Here is you=
+r login code</h1>
+<p style=3D"font-size:14px;margin:0 0 12px 0;">Copy and paste this temporar=
+y login code:</p>
+<p style=3D"margin:0 0 20px 0;"><strong style=3D"display:inline-block;font-=
+family:SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;padding:16px =
+20px;background:#f4f4f4;border:1px solid #eee;border-radius:5px;color:#333;=
+">K7Q2M9</strong></p>
+<p style=3D"font-size:14px;color:#aaaaaa;margin:0 0 32px 0;">It is case-sen=
+sitive and works once. If you didn&rsquo;t try to log in, you can safely ig=
+nore this email.</p>
+<p style=3D"font-size:12px;color:#aaaaaa;">Notely desktop 4.12.0 is out &md=
+ash; <a href=3D"https://notely.example/changelog" style=3D"color:#aaaaaa;">=
+see what&rsquo;s new</a>.<br>Notely Labs, Inc. &middot; 2300 Harrison St, S=
+an Francisco, CA 94110</p>
+</div></body></html>
+
+--notely-660228dde4ac15b01e40--

@@ -1,0 +1,113 @@
+Return-Path: <bounces+774sf5qwrgog@mail.skyward-air.example>
+Received: from mx-19.mail.skyward-air.example (mx-19.mail.skyward-air.example [198.51.100.188])
+	by inbound-smtp.mx.tmp.example with SMTP id ead656a4a95bb88b8ea9aa2d6f35645b
+	for <traveller.88q@tmp.example>; Thu, 22 Oct 2026 12:31:08 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.skyward-air.example (Postfix) with ESMTP id OTHRMIQTYOY
+	for <traveller.88q@tmp.example>; Thu, 22 Oct 2026 12:31:08 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.skyward-air.example;
+	dkim=pass header.d=skyward-air.example;
+	dmarc=pass header.from=skyward-air.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=skyward-air.example;
+	s=s7; t=1792100240; h=from:to:subject:date:message-id:mime-version;
+	bh=8Kerw1aeIAnjbFHoMoKNkSQX7KKuo3z7habqMLkX1n2=;
+	b=BBo5CtkYyZxic2m91FSWHjuW9p7krQZMoPNcYyVMgEXyej88rH3EVVZxZkHUCPwu
+	 KPHbCC7wvJXa9N3B20BG35HnyRv3VQtoNZq0X5056wicpBHCNBFAXDslt38k5H9A
+	 conNYe4mw5dXcFlKt8mc6VMyHOJsfuS9HafEyVWFOdcE==
+From: "Skyward Air" <bookings@skyward-air.example>
+To: traveller.88q@tmp.example
+Subject: Booking confirmation K7Q2M9 - Frankfurt to Lisbon
+Date: Thu, 22 Oct 2026 12:31:08 +0200
+Message-ID: <9823ab4a8fdb10b3.GFwWPNOA0A@skyward-air.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix-ab7502c194fc3c7327"
+
+--mix-ab7502c194fc3c7327
+Content-Type: multipart/alternative; boundary="alt-2290fc2a99613c777f"
+
+--alt-2290fc2a99613c777f
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Your booking is confirmed
+
+Booking code (PNR): K7Q2M9
+E-ticket number: 220-4829137701
+
+Flight SA 2291
+Thu, 29 Oct 2026  07:35  Frankfurt (FRA) Terminal 1
+                  09:40  Lisbon (LIS) Terminal 1
+Passenger: Jordan Example  Seat 14C  Economy Light (1 x 8 kg hand baggage)
+
+Total paid: EUR 187.40
+
+Manage booking: https://www.skyward-air.example/manage-booking?pnr=3DK7Q2M9=
+&lastname=3DExample
+
+Your itinerary is attached as a PDF.
+
+--alt-2290fc2a99613c777f
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"margin:0;background:#e9eef5;font-family:'Trebuchet MS'=
+,Arial,sans-serif;color:#0a2240;">
+<table width=3D"600" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#fff;margin:20px auto;">
+<tr><td style=3D"background:#0a2240;padding:20px 30px;"><img src=3D"https:/=
+/media.skyward-air.example/mail/logo-white.png" width=3D"160" alt=3D"Skywar=
+d Air"></td></tr>
+<tr><td style=3D"padding:30px;">
+<h1 style=3D"font-size:24px;margin:0 0 20px 0;">Your booking is confirmed</=
+h1>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgrou=
+nd:#f3f6fa;"><tr>
+<td style=3D"padding:16px;"><span style=3D"font-size:12px;color:#5a6b80;">B=
+ooking code (PNR)</span><br><span style=3D"font-size:28px;font-weight:bold;=
+letter-spacing:3px;">K7Q2M9</span></td>
+<td style=3D"padding:16px;" align=3D"right"><span style=3D"font-size:12px;c=
+olor:#5a6b80;">E-ticket number</span><br><span style=3D"font-size:16px;">22=
+0-4829137701</span></td></tr></table>
+<table width=3D"100%" cellpadding=3D"8" cellspacing=3D"0" style=3D"margin-t=
+op:20px;font-size:14px;border:1px solid #dde3ea;">
+<tr><td colspan=3D"2" style=3D"background:#0a2240;color:#fff;">Flight SA 22=
+91 &middot; Thu, 29 Oct 2026</td></tr>
+<tr><td>07:35 Frankfurt (FRA) T1</td><td align=3D"right">09:40 Lisbon (LIS)=
+ T1</td></tr>
+<tr><td>Jordan Example &middot; Seat 14C</td><td align=3D"right">Economy Li=
+ght &middot; 1 &times; 8&nbsp;kg</td></tr>
+</table>
+<p style=3D"font-size:16px;margin:20px 0;">Total paid: <b>EUR 187.40</b></p=
+>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#c8102e" style=3D"border-radius:6px;">
+<a href=3D"https://www.skyward-air.example/manage-booking?pnr=3DK7Q2M9&amp;=
+lastname=3DExample" target=3D"_blank" style=3D"display:inline-block;padding=
+:14px 32px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weigh=
+t:bold;color:#ffffff;text-decoration:none;border-radius:6px;border:1px soli=
+d #c8102e;">Manage booking</a>
+</td>
+</tr>
+</table>
+<p style=3D"font-size:13px;color:#5a6b80;">Your itinerary is attached as a =
+PDF.</p>
+</td></tr></table></body></html>
+
+--alt-2290fc2a99613c777f--
+
+--mix-ab7502c194fc3c7327
+Content-Type: application/pdf; name="Itinerary-K7Q2M9.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Itinerary-K7Q2M9.pdf"
+
+JVBERi0xLjQKMSAwIG9iaiA8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4gZW5kb2Jq
+CjIgMCBvYmogPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4gZW5kb2Jq
+CjMgMCBvYmogPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA1OTUg
+ODQyXSAvQ29udGVudHMgNCAwIFIgPj4gZW5kb2JqCjQgMCBvYmogPDwgL0xlbmd0aCA0NCA+PiBz
+dHJlYW0KQlQgL0YxIDE4IFRmIDcyIDc2MCBUZCAoSXRpbmVyYXJ5IEs3UTJNOSkgVGogRVQKZW5k
+c3RyZWFtIGVuZG9iagp0cmFpbGVyIDw8IC9Sb290IDEgMCBSID4+CiUlRU9GCkhGZGd2cXh2ekdJ
+RXg2akJIRkkzRlp2OHhIUTNvSkJ1TW9mUlBaSVlubkNsZjlHVU1XcEtHUDVkYzRlejFPMFY=
+--mix-ab7502c194fc3c7327--

@@ -1,0 +1,71 @@
+Return-Path: <bounces+hdcqi7d4qgy2@mail.sklep-bursztyn.example>
+Received: from mx-5.mail.sklep-bursztyn.example (mx-5.mail.sklep-bursztyn.example [198.51.100.86])
+	by inbound-smtp.mx.tmp.example with SMTP id b8de4824c1acf76ac5da890a2eca72a3
+	for <zakupy.w2e9@tmp.example>; Thu, 22 Oct 2026 16:36:51 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.sklep-bursztyn.example (Postfix) with ESMTP id JHOONUZVUCQ
+	for <zakupy.w2e9@tmp.example>; Thu, 22 Oct 2026 16:36:51 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.sklep-bursztyn.example;
+	dkim=pass header.d=sklep-bursztyn.example;
+	dmarc=pass header.from=sklep-bursztyn.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=sklep-bursztyn.example;
+	s=s3; t=1792100070; h=from:to:subject:date:message-id:mime-version;
+	bh=74snqsXl9Kftq3ZCbA5M56zYMUTRPVQNdDEASB1EzTS=;
+	b=XnoQ2CwGHoyjLU3ukvmXAq7ClzEcvSFM7LIYBVWBYriG8DBGZeby9vHiKSrgzc9j
+	 ful5MVMbwHZ34iOTzyY9X0QzhSOjYDUeJTnK4JwOJXcLqVPMlsqeUx3AUuKXUuyW
+	 UNJpznHAR990H4rVj4nsob1ACivDZB2n7pfS9NNcELtJ==
+From: "Sklep Bursztyn" <powiadomienia@sklep-bursztyn.example>
+To: zakupy.w2e9@tmp.example
+Subject: =?UTF-8?B?VHfDs2oga29kIHdlcnlmaWthY3lqbnk=?=
+Date: Thu, 22 Oct 2026 16:36:51 +0200
+Message-ID: <c65d1a9cc52f6e27.scGjZ7xhOo@sklep-bursztyn.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="bursztyn-cc06635707ba79db1a"
+
+--bursztyn-cc06635707ba79db1a
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Dzie=C5=84 dobry, Pawe=C5=82!
+
+Tw=C3=B3j kod weryfikacyjny to 842 517.
+
+Wpisz go w formularzu logowania. Kod jest wa=C5=BCny przez 10 minut.
+Je=C5=9Bli to nie Ty, zignoruj t=C4=99 wiadomo=C5=9B=C4=87.
+
+Pozdrawiamy,
+Zesp=C3=B3=C5=82 Sklepu Bursztyn
+
+Sklep Bursztyn sp. z o.o., ul. Przyk=C5=82adowa 5, kod pocztowy 00-950 Wars=
+zawa, NIP 000-000-00-00
+
+--bursztyn-cc06635707ba79db1a
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"pl"><head><meta charset=3D"utf-8"></head>
+<body style=3D"background:#f7f3ea;margin:0;font-family:Tahoma,Arial,sans-se=
+rif;">
+<div style=3D"max-width:560px;margin:24px auto;background:#ffffff;border:1p=
+x solid #e8dcc2;">
+<div style=3D"background:#c68a00;color:#fff;padding:18px 24px;font-size:20p=
+x;font-weight:bold;">Sklep Bursztyn</div>
+<div style=3D"padding:24px;color:#333;font-size:15px;line-height:22px;">
+<p>Dzie=C5=84 dobry, Pawe=C5=82!</p>
+<p>Tw=C3=B3j kod weryfikacyjny to:</p>
+<p style=3D"font-size:30px;font-weight:bold;color:#8a5a00;letter-spacing:3p=
+x;margin:12px 0 20px 0;">842 517</p>
+<p>Wpisz go w formularzu logowania. Kod jest wa=C5=BCny przez 10&nbsp;minut=
+. Je=C5=9Bli to nie Ty, zignoruj t=C4=99 wiadomo=C5=9B=C4=87.</p>
+<p>Pozdrawiamy,<br>Zesp=C3=B3=C5=82 Sklepu Bursztyn</p>
+</div>
+<div style=3D"padding:14px 24px;font-size:11px;color:#999;border-top:1px so=
+lid #eee;">Sklep Bursztyn sp. z o.o., ul. Przyk=C5=82adowa 5, kod pocztowy =
+00-950 Warszawa, NIP 000-000-00-00<br><a href=3D"https://sklep-bursztyn.exa=
+mple/polityka-prywatnosci" style=3D"color:#999;">Polityka prywatno=C5=9Bci<=
+/a> =C2=B7 <a href=3D"https://sklep-bursztyn.example/wypisz?id=3DqTZnBbFA4N=
+0RZGt6RG" style=3D"color:#999;">Wypisz si=C4=99</a></div>
+</div></body></html>
+
+--bursztyn-cc06635707ba79db1a--

@@ -1,0 +1,92 @@
+Return-Path: <bounces+le3ge2oqxqa2@mail.greengrocer.example>
+Received: from mx-17.mail.greengrocer.example (mx-17.mail.greengrocer.example [198.51.100.189])
+	by inbound-smtp.mx.tmp.example with SMTP id bf19837b063179701ff853a0d299a3df
+	for <veggies.k8p4@tmp.example>; Thu, 22 Oct 2026 08:00:00 +0100
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.greengrocer.example (Postfix) with ESMTP id YFGBAPNU32C
+	for <veggies.k8p4@tmp.example>; Thu, 22 Oct 2026 08:00:00 +0100
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.greengrocer.example;
+	dkim=pass header.d=greengrocer.example;
+	dmarc=pass header.from=greengrocer.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=greengrocer.example;
+	s=s3; t=1792100006; h=from:to:subject:date:message-id:mime-version;
+	bh=osTdJApeEjzKkaaThZCm4HJbNRk1b8oiN9VvY7TYBOS=;
+	b=5a8f2i12DHPqmvFiB6yvUXmxu4uFSWHHa5dvwXhms97G6uNFhNqUJOSWI16jZU3U
+	 uHCFituVcY7GpImaqCWYUDzmrNlCTWTAn7k22KaErPU6t5avd0VC6hitEFSwYczm
+	 szwo7p8DvkztEN2psH7F3xPIcAK9YaTNrBG25Pnouvt3==
+From: "GreenGrocer Rewards" <rewards@greengrocer.example>
+To: veggies.k8p4@tmp.example
+Subject: You have 4,820 points to spend
+Date: Thu, 22 Oct 2026 08:00:00 +0100
+Message-ID: <4cbe6f2dd600a380.ym4IQSPtCm@greengrocer.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="gg_3026b793371f877efbdd"
+
+--gg_3026b793371f877efbdd
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Your GreenGrocer Rewards update
+
+Member ID: 5501-2283-91
+Points balance: 4,820 (worth =C2=A34.82)
+
+Still want summer prices? Discount code SUMMER2026 gives you 15% off
+fresh fruit until 31 Oct 2026.
+
+Shop now: https://www.greengrocer.example/offers
+Unsubscribe: https://www.greengrocer.example/prefs?m=3Da417cPZBstnAiIfI1H6U
+
+--gg_3026b793371f877efbdd
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html lang=3D"en">
+<head>
+<meta charset=3D"utf-8">
+<title>Rewards update</title>
+</head>
+<body style=3D"margin:0;padding:0;background:#eceff1;font-family:Arial,Helv=
+etica,sans-serif;">
+
+<center>
+<table width=3D"640" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#2e7d32;padding:18px 24px;color:#ffffff;font-si=
+ze:20px;font-weight:bold;letter-spacing:0.5px;">GreenGrocer Rewards</td></t=
+r>
+<tr><td style=3D"padding:28px 24px 12px 24px;font-size:14px;line-height:21p=
+x;color:#263238;">
+<p>Member ID: 5501-2283-91</p>
+<p style=3D"font-size:26px;font-weight:bold;color:#2e7d32;margin:12px 0;">4=
+,820 points</p>
+<p>worth &pound;4.82 at the till.</p>
+<p style=3D"border:2px dashed #2e7d32;padding:14px;">Still want summer pric=
+es? Discount code <b style=3D"font-size:18px;">SUMMER2026</b> gives you 15%=
+ off fresh fruit until 31&nbsp;Oct&nbsp;2026.</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#2e7d32" style=3D"border-radius:6px;">
+<a href=3D"https://www.greengrocer.example/offers" target=3D"_blank" style=
+=3D"display:inline-block;padding:14px 32px;font-family:Helvetica,Arial,sans=
+-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;b=
+order-radius:6px;border:1px solid #2e7d32;">Shop offers</a>
+</td>
+</tr>
+</table>
+</td></tr>
+<tr><td style=3D"padding:16px 24px 24px 24px;border-top:1px solid #cfd8dc;f=
+ont-size:11px;line-height:16px;color:#78909c;">
+<a href=3D"https://www.greengrocer.example/prefs?m=3Da417cPZBstnAiIfI1H6U" =
+style=3D"color:#78909c;">Unsubscribe</a> &middot; GreenGrocer Ltd, 4 Market=
+ Row, Leeds LS1 6AA
+</td></tr>
+</table>
+</center>
+
+</body>
+</html>
+
+--gg_3026b793371f877efbdd--

@@ -1,0 +1,67 @@
+Return-Path: <bounces+e4hwjzttetgg@mail.cartera-movil.example>
+Received: from mx-8.mail.cartera-movil.example (mx-8.mail.cartera-movil.example [198.51.100.165])
+	by inbound-smtp.mx.tmp.example with SMTP id abb5718f7ca9f9eed7e779ed1728838c
+	for <pago.r8t1@tmp.example>; Thu, 22 Oct 2026 21:17:09 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.cartera-movil.example (Postfix) with ESMTP id XOPLEE12AKE
+	for <pago.r8t1@tmp.example>; Thu, 22 Oct 2026 21:17:09 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.cartera-movil.example;
+	dkim=pass header.d=cartera-movil.example;
+	dmarc=pass header.from=cartera-movil.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=cartera-movil.example;
+	s=s3; t=1792100057; h=from:to:subject:date:message-id:mime-version;
+	bh=qLmhMa0g9bBDG8g0NRGRbJ306ghJdnpn41e6aXoJDlG=;
+	b=lsvBVVRPN9gljtaPrp3VsieBJxHmVtz7CvrDdLxBsSHG3XlBL2HeYwCMzv6SZrPm
+	 wQtVPdITJrXU0RdA2iJjXt6a1FQ856BtWhZ4tYjpPkxpbM1DNI0IHmGZViQvCjrI
+	 EEvXtXGLAOnvoUDRJPDtvOdQbxVZYwZNbibOh6d6kZAc==
+From: =?UTF-8?B?Q2FydGVyYSBNw7N2aWw=?= <seguridad@cartera-movil.example>
+To: pago.r8t1@tmp.example
+Subject: =?UTF-8?B?VHUgY8OzZGlnbyBkZSB2ZXJpZmljYWNpw7Nu?=
+Date: Thu, 22 Oct 2026 21:17:09 +0200
+Message-ID: <f8db8b87393d9cbc.OtBBHvxu6N@cartera-movil.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="_002_bfb95ac3e01eb3434385a0bec71808"
+
+--_002_bfb95ac3e01eb3434385a0bec71808
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+SG9sYSBMdWPDrWE6DQoNClR1IGPDs2RpZ28gZGUgdmVyaWZpY2FjacOzbiBlcyAyMDU4MzYuDQoN
+CsOac2FsbyBwYXJhIGNvbmZpcm1hciBlbCBpbmljaW8gZGUgc2VzacOzbiBlbiB0dSBjdWVudGEu
+IENhZHVjYSBlbiA1IG1pbnV0b3MuDQpOdW5jYSB0ZSBwZWRpcmVtb3MgZXN0ZSBjw7NkaWdvIHBv
+ciB0ZWzDqWZvbm8uDQoNCkNhcnRlcmEgTcOzdmlsIFMuTC4gwrcgQ2FsbGUgZGUgRWplbXBsbyA3
+IMK3IDI4MDEzIE1hZHJpZCDCtyBDSUYgQjAwMDAwMDAwDQo=
+--_002_bfb95ac3e01eb3434385a0bec71808
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWwgbGFuZz0iZXMiPg0KPGhlYWQ+DQo8bWV0YSBjaGFyc2V0PSJ1dGYtOCI+DQo8dGl0bGU+
+Q8OzZGlnbyBkZSB2ZXJpZmljYWNpw7NuPC90aXRsZT4NCjwvaGVhZD4NCjxib2R5IHN0eWxlPSJt
+YXJnaW46MDtwYWRkaW5nOjA7YmFja2dyb3VuZDojZWNlZmYxO2ZvbnQtZmFtaWx5OkFyaWFsLEhl
+bHZldGljYSxzYW5zLXNlcmlmOyI+DQo8c3BhbiBjbGFzcz0icHJlaGVhZGVyIiBzdHlsZT0iZGlz
+cGxheTpub25lICFpbXBvcnRhbnQ7dmlzaWJpbGl0eTpoaWRkZW47bXNvLWhpZGU6YWxsO2ZvbnQt
+c2l6ZToxcHg7bGluZS1oZWlnaHQ6MXB4O2NvbG9yOiNmZmZmZmY7bWF4LWhlaWdodDowO21heC13
+aWR0aDowO29wYWNpdHk6MDtvdmVyZmxvdzpoaWRkZW47Ij5UdSBjw7NkaWdvIGNhZHVjYSBlbiA1
+IG1pbnV0b3MmIzg0NzsmenduajsmbmJzcDsmIzg0NzsmenduajsmbmJzcDsmIzg0Nzsmenduajsm
+bmJzcDsmIzg0NzsmenduajsmbmJzcDsmIzg0NzsmenduajsmbmJzcDs8L3NwYW4+DQo8Y2VudGVy
+Pg0KPHRhYmxlIHdpZHRoPSI2NDAiIGNlbGxwYWRkaW5nPSIwIiBjZWxsc3BhY2luZz0iMCIgYm9y
+ZGVyPSIwIiBzdHlsZT0iYmFja2dyb3VuZDojZmZmZmZmO21hcmdpbjoyMHB4IGF1dG87Ij4NCjx0
+cj48dGQgc3R5bGU9ImJhY2tncm91bmQ6IzVlMzViMTtwYWRkaW5nOjE4cHggMjRweDtjb2xvcjoj
+ZmZmZmZmO2ZvbnQtc2l6ZToyMHB4O2ZvbnQtd2VpZ2h0OmJvbGQ7bGV0dGVyLXNwYWNpbmc6MC41
+cHg7Ij5DYXJ0ZXJhIE3Ds3ZpbDwvdGQ+PC90cj4NCjx0cj48dGQgc3R5bGU9InBhZGRpbmc6Mjhw
+eCAyNHB4IDEycHggMjRweDtmb250LXNpemU6MTRweDtsaW5lLWhlaWdodDoyMXB4O2NvbG9yOiMy
+NjMyMzg7Ij4NCjxwPkhvbGEgTHVjw61hOjwvcD4NCjxwPlR1IGPDs2RpZ28gZGUgdmVyaWZpY2Fj
+acOzbiBlcyA8c3BhbiBzdHlsZT0iZm9udC1zaXplOjI0cHg7Zm9udC13ZWlnaHQ6Ym9sZDtjb2xv
+cjojNWUzNWIxOyI+MjA1ODM2PC9zcGFuPi48L3A+DQo8cD7DmnNhbG8gcGFyYSBjb25maXJtYXIg
+ZWwgaW5pY2lvIGRlIHNlc2nDs24gZW4gdHUgY3VlbnRhLiBDYWR1Y2EgZW4gNSZuYnNwO21pbnV0
+b3MuIE51bmNhIHRlIHBlZGlyZW1vcyBlc3RlIGPDs2RpZ28gcG9yIHRlbMOpZm9uby48L3A+DQo8
+L3RkPjwvdHI+DQo8dHI+PHRkIHN0eWxlPSJwYWRkaW5nOjE2cHggMjRweCAyNHB4IDI0cHg7Ym9y
+ZGVyLXRvcDoxcHggc29saWQgI2NmZDhkYztmb250LXNpemU6MTFweDtsaW5lLWhlaWdodDoxNnB4
+O2NvbG9yOiM3ODkwOWM7Ij4NCkNhcnRlcmEgTcOzdmlsIFMuTC4gwrcgQ2FsbGUgZGUgRWplbXBs
+byA3IMK3IDI4MDEzIE1hZHJpZCDCtyBDSUYgQjAwMDAwMDAwPGJyPjxhIGhyZWY9Imh0dHBzOi8v
+Y2FydGVyYS1tb3ZpbC5leGFtcGxlL3ByaXZhY2lkYWQiIHN0eWxlPSJjb2xvcjojNzg5MDljOyI+
+UHJpdmFjaWRhZDwvYT4gwrcgPGEgaHJlZj0iaHR0cHM6Ly9jYXJ0ZXJhLW1vdmlsLmV4YW1wbGUv
+YXl1ZGEiIHN0eWxlPSJjb2xvcjojNzg5MDljOyI+QXl1ZGE8L2E+DQo8L3RkPjwvdHI+DQo8L3Rh
+YmxlPg0KPC9jZW50ZXI+DQoNCjwvYm9keT4NCjwvaHRtbD4NCg==
+--_002_bfb95ac3e01eb3434385a0bec71808--

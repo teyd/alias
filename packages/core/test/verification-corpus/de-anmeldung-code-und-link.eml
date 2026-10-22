@@ -1,0 +1,144 @@
+Return-Path: <bounces+iztj2yh423e4@mail.wohnwelt-portal.example>
+Received: from mx-19.mail.wohnwelt-portal.example (mx-19.mail.wohnwelt-portal.example [198.51.100.13])
+	by inbound-smtp.mx.tmp.example with SMTP id 7b086eb3ccd79afa5e08699eb4020387
+	for <wohnung.suche.d8@tmp.example>; Thu, 22 Oct 2026 07:44:18 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.wohnwelt-portal.example (Postfix) with ESMTP id X1VFWIFXVDT
+	for <wohnung.suche.d8@tmp.example>; Thu, 22 Oct 2026 07:44:18 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.wohnwelt-portal.example;
+	dkim=pass header.d=wohnwelt-portal.example;
+	dmarc=pass header.from=wohnwelt-portal.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=wohnwelt-portal.example;
+	s=s2; t=1792100222; h=from:to:subject:date:message-id:mime-version;
+	bh=J7nADYeBfQOUwGTbc64rdFOCvCmjcYFt0GfPH0G2ze5=;
+	b=W7vjWaPeEFVnklJZLCJgAqyHpxJI9dxzCDBDprORcIdG1Y3au9oB0HaReZygTymY
+	 S80CC4xlPqrUnlO4m9qgUL1osNCA6AkdYyaw2tgzhNHZOPnkMmWk7G8i2TAiObgN
+	 bgYYr0eGSYDi38cMAY4syI2thwE1840JqeSqook1XoF2==
+From: "WohnWelt Portal" <noreply@wohnwelt-portal.example>
+To: wohnung.suche.d8@tmp.example
+Subject: =?UTF-8?B?SWhyIEFubWVsZGVjb2RlIGbDvHIgV29obldlbHQ=?=
+Date: Thu, 22 Oct 2026 07:44:18 +0200
+Message-ID: <9cdb6d01bbf68c24.j1iwHymX3i@wohnwelt-portal.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="ww=3afe98b7a75567b0fbc9d3bf"
+
+--ww=3afe98b7a75567b0fbc9d3bf
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Guten Tag Herr Beispiel,
+
+Ihr Code lautet 618402.
+
+Alternativ k=C3=B6nnen Sie Ihre Anmeldung direkt =C3=BCber diesen Link best=
+=C3=A4tigen:
+https://login.wohnwelt-portal.example/bestaetigen?vorgang=3D2b6270152a5882a=
+c150e9a91&t=3D6fSzXODwaiTYT7BVcXTBxaLCXa_BPtIcvJvXwt-y
+
+Der Code und der Link sind 20 Minuten g=C3=BCltig.
+
+Zuletzt angesehen: Objektnummer 4471-2026, 3 Zimmer, Kaltmiete 1.250,00 =E2=
+=82=AC, 50667 K=C3=B6ln
+
+WohnWelt Portal GmbH, Domstra=C3=9Fe 1, 50667 K=C3=B6ln
+
+--ww=3afe98b7a75567b0fbc9d3bf
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"de">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Ihr Anmeldecode</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Ihr Code lautet 618402&#847;&zwnj;&nbs=
+p;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;<=
+/span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://login.wohnwelt-portal.example/img/logo.png" width=3D"12=
+0" height=3D"32" alt=3D"WohnWelt" style=3D"display:block;width:120px;height=
+:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;">Guten Tag Herr Beispiel,</p>
+<p style=3D"margin:0 0 16px 0;">Ihr Code lautet <strong style=3D"font-size:=
+24px;color:#e65100;letter-spacing:2px;">618402</strong>.</p>
+<p style=3D"margin:0;">Alternativ k&ouml;nnen Sie Ihre Anmeldung direkt bes=
+t&auml;tigen:</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#e65100" style=3D"border-radius:6px;">
+<a href=3D"https://login.wohnwelt-portal.example/bestaetigen?vorgang=3D2b62=
+70152a5882ac150e9a91&amp;t=3D6fSzXODwaiTYT7BVcXTBxaLCXa_BPtIcvJvXwt-y" targ=
+et=3D"_blank" style=3D"display:inline-block;padding:14px 32px;font-family:H=
+elvetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;tex=
+t-decoration:none;border-radius:6px;border:1px solid #e65100;">Anmeldung be=
+st=C3=A4tigen</a>
+</td>
+</tr>
+</table>
+<p style=3D"margin:0 0 20px 0;font-size:13px;color:#777;">Der Code und der =
+Link sind 20&nbsp;Minuten g&uuml;ltig.</p>
+<table width=3D"100%" style=3D"border:1px solid #eee;"><tr><td style=3D"pad=
+ding:12px;font-size:13px;color:#555;">Zuletzt angesehen: Objektnummer 4471-=
+2026 &middot; 3&nbsp;Zimmer &middot; Kaltmiete 1.250,00&nbsp;&euro; &middot=
+; 50667 K&ouml;ln &middot; <a href=3D"https://www.wohnwelt-portal.example/e=
+xpose/4471-2026" style=3D"color:#e65100;">Expos&eacute; ansehen</a></td></t=
+r></table>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+WohnWelt Portal GmbH, Domstra&szlig;e 1, 50667 K&ouml;ln<br><a href=3D"http=
+s://www.wohnwelt-portal.example/datenschutz" style=3D"color:#8c8c8c;text-de=
+coration:underline;">Datenschutz</a> &nbsp;&middot;&nbsp; <a href=3D"https:=
+//www.wohnwelt-portal.example/impressum" style=3D"color:#8c8c8c;text-decora=
+tion:underline;">Impressum</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
+
+--ww=3afe98b7a75567b0fbc9d3bf--

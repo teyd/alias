@@ -1,0 +1,129 @@
+Return-Path: <bounces+rqn5eb6stccp@mail.mercado-facil.example>
+Received: from mx-30.mail.mercado-facil.example (mx-30.mail.mercado-facil.example [198.51.100.166])
+	by inbound-smtp.mx.tmp.example with SMTP id 13a6468b387b66f4d76095fbe1444d47
+	for <compras.b6y2@tmp.example>; Thu, 22 Oct 2026 11:25:37 -0300
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.mercado-facil.example (Postfix) with ESMTP id YJEVDVE82Y5
+	for <compras.b6y2@tmp.example>; Thu, 22 Oct 2026 11:25:37 -0300
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.mercado-facil.example;
+	dkim=pass header.d=mercado-facil.example;
+	dmarc=pass header.from=mercado-facil.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=mercado-facil.example;
+	s=s2; t=1792100173; h=from:to:subject:date:message-id:mime-version;
+	bh=MZgahYaOPFJgb2REW4h8rU24EzrUg4HynHSQRh3Bfc2=;
+	b=CmvhZnhTUkR946209S2MEPUspKZgS5SUTYVKPl7RLvI6QEQSPGhhW0LtnaSPhcoT
+	 XXqSh6zWE7QXgMP2uzJDTeAANXiiHBTmth6a1nhGHcIUjpMgVXmTkRT3Ql7xZIJx
+	 Rny01TXOBsLlIeMF73Gendg7kXGCiLAIHiD4kbQiiIG5==
+From: =?UTF-8?B?TWVyY2FkbyBGw6FjaWw=?= <nao-responda@mercado-facil.example>
+To: compras.b6y2@tmp.example
+Subject: =?UTF-8?Q?Seu_c=C3=B3digo_de_verifica=C3=A7=C3=A3o_chegou?=
+Date: Thu, 22 Oct 2026 11:25:37 -0300
+Message-ID: <e58a8a72aabe6d0b.8nWWMyzF7D@mercado-facil.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="mf_c55dd5514f5efe22c6650b"
+
+--mf_c55dd5514f5efe22c6650b
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Ol=C3=A1, Ana!
+
+Seu c=C3=B3digo de verifica=C3=A7=C3=A3o: 480127
+
+Digite-o para confirmar seu cadastro. Ele expira em 15 minutos.
+
+Frete gr=C3=A1tis em compras acima de R$ 99,00 na primeira compra!
+
+Mercado F=C3=A1cil Ltda. =C2=B7 CNPJ 00.000.000/0001-00
+Av. Exemplo, 1000 =C2=B7 CEP 01310-100 =C2=B7 S=C3=A3o Paulo/SP =C2=B7 (11)=
+ 0000-0000
+
+--mf_c55dd5514f5efe22c6650b
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"pt-BR">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>C=C3=B3digo de verifica=C3=A7=C3=A3o</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#ededed;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Use o c=C3=B3digo para confirmar seu c=
+adastro&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&n=
+bsp;&#847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#ededed">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://static.mercado-facil.example/email/logo.png" width=3D"1=
+20" height=3D"32" alt=3D"Mercado F=C3=A1cil" style=3D"display:block;width:1=
+20px;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;font-size:18px;">Ol&aacute;, Ana!</p>
+<p style=3D"margin:0 0 8px 0;">Seu c&oacute;digo de verifica&ccedil;&atilde=
+;o:</p>
+<div style=3D"margin:0 0 24px 0;padding:16px;background:#fff9db;border:1px =
+solid #ffe066;border-radius:4px;text-align:center;font-size:30px;font-weigh=
+t:bold;letter-spacing:6px;color:#333;">480127</div>
+<p style=3D"margin:0 0 16px 0;">Digite-o para confirmar seu cadastro. Ele e=
+xpira em 15&nbsp;minutos.</p>
+<p style=3D"margin:0;font-size:13px;color:#666;">Frete gr&aacute;tis em com=
+pras acima de R$&nbsp;99,00 na primeira compra!</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Mercado F&aacute;cil Ltda. &middot; CNPJ 00.000.000/0001-00<br>Av. Exemplo,=
+ 1000 &middot; CEP 01310-100 &middot; S&atilde;o Paulo/SP &middot; (11) 000=
+0-0000<br><a href=3D"https://www.mercado-facil.example/privacidade" style=
+=3D"color:#8c8c8c;text-decoration:underline;">Privacidade</a> &nbsp;&middot=
+;&nbsp; <a href=3D"https://www.mercado-facil.example/ajuda" style=3D"color:=
+#8c8c8c;text-decoration:underline;">Ajuda</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://px.mercado-facil.example/e/263d971e690fa2c771dd07d431eb=
+8d6226d973ca2f92b440fe2192c5d8f3358d.gif" width=3D"1" height=3D"1" border=
+=3D"0" alt=3D"" style=3D"height:1px !important;width:1px !important;border-=
+width:0 !important;margin-top:0 !important;margin-bottom:0 !important;paddi=
+ng:0 !important;">
+</body>
+</html>
+
+--mf_c55dd5514f5efe22c6650b--

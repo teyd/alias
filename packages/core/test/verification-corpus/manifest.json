@@ -1,0 +1,485 @@
+[
+  {
+    "file": "en-social-login-code-subject.eml",
+    "code": "482913",
+    "link": null,
+    "lang": "en",
+    "notes": "Social network login code in subject ('482913 is your Chirpbook code') and both parts; preheader repeats it; footer has © 2026 and a ZIP code."
+  },
+  {
+    "file": "en-codehost-device-verification.eml",
+    "code": "730194",
+    "link": null,
+    "lang": "en",
+    "notes": "Plain-text only, 7bit; code hosting device verification with IP 203.0.113.58, timestamp, browser, and a later 'expires in 1 hour' line."
+  },
+  {
+    "file": "en-cloud-console-html-base64.eml",
+    "code": "615072",
+    "link": null,
+    "lang": "en",
+    "notes": "HTML-only, base64 body; cloud console code in a letter-spaced <div>; request ID with digits, account ID 4471 0938 2210, '10 minutes' expiry."
+  },
+  {
+    "file": "de-bank-sicherheitscode-latin1.eml",
+    "code": "908213",
+    "link": null,
+    "lang": "de",
+    "notes": "German bank 'Sicherheitscode' in ISO-8859-1 quoted-printable with Q-encoded Latin-1 subject; distractors: Kontonummer endet auf 4821, PLZ 20095, phone, BIC, HRB number, 5 Minuten."
+  },
+  {
+    "file": "en-payment-confirm-code-amount.eml",
+    "code": "274615",
+    "link": null,
+    "lang": "en",
+    "notes": "Payment approval code with distracting amount €49.99, merchant, card ending 0005, and date; code is in a bold <strong> inside a paragraph."
+  },
+  {
+    "file": "en-gaming-chat-digit-cells.eml",
+    "code": "381904",
+    "link": null,
+    "lang": "en",
+    "notes": "Gaming chat app; HTML puts each digit in its own <td> (no contiguous code in HTML); text part has the code contiguous; footer has street number and © 2026."
+  },
+  {
+    "file": "en-messenger-5digit-plain.eml",
+    "code": "50317",
+    "link": null,
+    "lang": "en",
+    "notes": "Messenger 5-digit login code, plain text 8bit UTF-8; mentions '2 devices' and an IP."
+  },
+  {
+    "file": "en-shop-login-4digit.eml",
+    "code": "8352",
+    "link": null,
+    "lang": "en",
+    "notes": "Shop login 4-digit code; footer has ZIP 98109, phone 1-555-0142, © 2026, and '30% off' banner; the 4-digit code is the only OTP."
+  },
+  {
+    "file": "en-gov-portal-8digit-grouped.eml",
+    "code": "40713392",
+    "link": null,
+    "lang": "en",
+    "notes": "Government-like portal one-time passcode shown as '4071 3392' (8 digits grouped by a space); case reference CSP-2026-004417 and helpline 0300 000 0000 nearby."
+  },
+  {
+    "file": "en-airline-login-code.eml",
+    "code": "662041",
+    "link": null,
+    "lang": "en",
+    "notes": "Airline loyalty login code with distractors: flight SA 2291, frequent flyer number ending 7781, 'valid for 15 minutes', departure date/time in an upsell box."
+  },
+  {
+    "file": "en-g-prefix-code.eml",
+    "code": "482913",
+    "link": null,
+    "lang": "en",
+    "notes": "Google-style 'G-482913 is your verification code' in subject and body; expected is the 6 digits a user types (form has the G- prefix fixed or accepts digits only)."
+  },
+  {
+    "file": "en-alnum-code-strong.eml",
+    "code": "K7Q2M9",
+    "link": null,
+    "lang": "en",
+    "notes": "Alphanumeric 6-char code 'K7Q2M9' in a <strong> with monospace; text part uses it too; distractor 'version 4.12.0' in footer."
+  },
+  {
+    "file": "en-alnum-dash-confirmation-code.eml",
+    "code": "Q8W3ZK",
+    "link": null,
+    "lang": "en",
+    "notes": "Workspace chat confirmation code 'Q8W-3ZK' (letters+digits with a grouping dash, subject 'Slackish confirmation code: Q8W-3ZK'); expected without the dash."
+  },
+  {
+    "file": "en-security-code-space-grouped.eml",
+    "code": "519207",
+    "link": null,
+    "lang": "en",
+    "notes": "Account security code shown as '519 207' (space-grouped); account email partly masked 'k7**9@tmp.example'; 'Thanks, the Microhard account team' style."
+  },
+  {
+    "file": "en-verification-code-hyphen-grouped.eml",
+    "code": "731806",
+    "link": null,
+    "lang": "en",
+    "notes": "Verification code '731-806' (hyphen-grouped) in a styled <span>; support phone 555-0187 also has a hyphen, ZIP 95014 in footer."
+  },
+  {
+    "file": "en-7digit-code.eml",
+    "code": "6038417",
+    "link": null,
+    "lang": "en",
+    "notes": "7-digit verification code from a ride-hailing app, HTML-only quoted-printable; also shows a 4-digit 'trip PIN' policy sentence without digits and a promo for '$5 off'."
+  },
+  {
+    "file": "en-8char-alnum-dash-vpn.eml",
+    "code": "K7Q2M9XD",
+    "link": null,
+    "lang": "en",
+    "notes": "VPN sign-in code 'K7Q2-M9XD' (8 alphanumerics, dash-grouped) in a <code> element; plan price $4.99 and 'server 37' distractors; expected without dash, case kept."
+  },
+  {
+    "file": "en-code-in-h1-html-only-8bit.eml",
+    "code": "290574",
+    "link": null,
+    "lang": "en",
+    "notes": "HTML-only 8bit UTF-8 body; code in an <h1>; fitness app with step count 10,482, '7-day streak' and © 2026 as distractors."
+  },
+  {
+    "file": "en-code-first-line-plain.eml",
+    "code": "804163",
+    "link": null,
+    "lang": "en",
+    "notes": "Text part begins with the bare code on line one, then explanation; multipart with minimal HTML; '2 minutes ago' and a 10-digit ticket number later."
+  },
+  {
+    "file": "en-code-spaced-digits.eml",
+    "code": "618027",
+    "link": null,
+    "lang": "en",
+    "notes": "Code rendered with spaces between every digit ('6 1 8 0 2 7') in both text and HTML; distractor phone '+1 555 0100 199' also space-separated."
+  },
+  {
+    "file": "de-bestaetigungscode-8bit.eml",
+    "code": "347920",
+    "link": null,
+    "lang": "de",
+    "notes": "German 'Ihr Bestätigungscode lautet: 347920', 8bit UTF-8, Q-encoded subject; distractors: PLZ 80331, HRB 123456, USt-IdNr, 'Gültig für 15 Minuten'."
+  },
+  {
+    "file": "fr-code-de-verification.eml",
+    "code": "739281",
+    "link": null,
+    "lang": "fr",
+    "notes": "French 'Votre code de vérification est : 739 281' (space-grouped, French space before colon); B-encoded subject; SIRET 000 000 000 00000 and code postal 75011 as distractors."
+  },
+  {
+    "file": "es-codigo-de-verificacion-base64.eml",
+    "code": "205836",
+    "link": null,
+    "lang": "es",
+    "notes": "Spanish 'Tu código de verificación es 205836'; both parts base64; distractors: CIF B00000000, código postal 28013, '5 minutos'."
+  },
+  {
+    "file": "it-codice-di-verifica-latin1.eml",
+    "code": "917364",
+    "link": null,
+    "lang": "it",
+    "notes": "Italian 'Il tuo codice di verifica è 917364' in ISO-8859-1 quoted-printable (è as =E8); P.IVA 00000000000 (11 digits) and CAP 20121 in footer."
+  },
+  {
+    "file": "pt-codigo-de-verificacao.eml",
+    "code": "480127",
+    "link": null,
+    "lang": "pt",
+    "notes": "Brazilian Portuguese 'Seu código de verificação: 480127'; distractors: CNPJ 00.000.000/0001-00, CEP 01310-100, phone (11) 0000-0000, 'R$ 99,00'."
+  },
+  {
+    "file": "nl-verificatiecode-kvk.eml",
+    "code": "563018",
+    "link": null,
+    "lang": "nl",
+    "notes": "Dutch 'Je verificatiecode is 563018'; hard distractor KvK-nummer 12345678 (8 digits) and BTW number, postcode 1012 AB, '30 minuten'."
+  },
+  {
+    "file": "pl-kod-weryfikacyjny.eml",
+    "code": "842517",
+    "link": null,
+    "lang": "pl",
+    "notes": "Polish 'Twój kod weryfikacyjny to 842 517' (space-grouped), UTF-8 QP with ę/ł/ó; NIP 000-000-00-00, kod pocztowy 00-950 ('kod' near non-OTP digits)."
+  },
+  {
+    "file": "sv-verifieringskod-latin1-base64.eml",
+    "code": "390712",
+    "link": null,
+    "lang": "sv",
+    "notes": "Swedish 'Din verifieringskod är 390712', plain-only ISO-8859-1 in base64; distractors: org.nr 556000-0000, postnummer 111 22, '+46 8 000 000 00'."
+  },
+  {
+    "file": "ja-kakunin-code-utf8.eml",
+    "code": "528146",
+    "link": null,
+    "lang": "ja",
+    "notes": "Japanese 確認コード in UTF-8 base64 with B-encoded subject and From name; distractors 〒150-0002, 2026年10月22日, 03-0000-0000, 有効期限30分."
+  },
+  {
+    "file": "ja-ninsho-code-leading-zero.eml",
+    "code": "071953",
+    "link": null,
+    "lang": "ja",
+    "notes": "Japanese 認証コード with a leading zero (071953), plain-only UTF-8 quoted-printable; 6-digit-looking distractors: お客様番号 1048-2270, date 2026/10/22 09:41, 有効期限10分."
+  },
+  {
+    "file": "en-magic-link-sign-in.eml",
+    "code": null,
+    "link": "https://www.pagewise.example/loginwithemail?token=Xh0sosNVapq58-ypsJ9F8z8otsvLDtJk9-vNS8oGOvh52588VQWP28iNN0mCZlmvVJSKGI2RRYjca1UynhAlrbweOwavKzQSsJs7NjFANx2lFMu9W-v8ZFBZORvzGMl7uHLqWGeX16jpnfrI68vNNOv0GfvAhXPuuuZVCnfODnv5&email=k7m2qx9pzr%40tmp.example&redirect=%2Fworkspace%2Finbox&state=7ffb73f244962c1d9a2371f9c613a830",
+    "lang": "en",
+    "notes": "Magic sign-in link button with a 172-char token and several query params (&amp; in HTML); footer has help/unsubscribe links that must not be picked."
+  },
+  {
+    "file": "en-confirm-email-address-button.eml",
+    "code": null,
+    "link": "https://app.taskhive.example/confirm-email?uid=58201&exp=1792664400&sig=20597ded7ac686dab8108a20cfa451cd4781e8a843b9f0dc65c301d79a45637a",
+    "lang": "en",
+    "notes": "'Confirm your email address' button; href contains &amp; in HTML (expected decoded); also a 'Get the app' link and a 5-digit uid inside the URL that is not a code."
+  },
+  {
+    "file": "en-verify-email-click-tracking.eml",
+    "code": null,
+    "link": "https://u4829137.ct.sendmail-relay.example/ls/click?upn=mtSstGwN-di6MQHEOdN_6-CUI1_coaEmlhaHfKz35tgLT4m2Z9XcPE-ogRcFtKPzKlgi4djGK8QXPKCCgHnt-ju0hfxK35G35H62ezLTNLk0RhE6RqhA5sTVIZUoVsEn_jscDo1yxVT9V56WTYFjO2fStDNKOd0i2laH6gKgc4dfLUpPxSxvoZpm9Ac__I2lihBW687-mJaLx92E66HmKVblUP-uZ61XSShr0upmwGFzqfLzt3zVNcTmzgFoONEqx1Ke-3D-3Dx8n7Pulp5G25vi7RkJtkqf4Nfh34qjvENOQVJ3Wg",
+    "lang": "en",
+    "notes": "'Verify email' button whose href is a click-tracking redirect (ESP ls/click?upn=...); expected is the wrapped URL as written. Tracking host contains 7 digits (u4829137), unsubscribe is also wrapped."
+  },
+  {
+    "file": "en-password-reset-link.eml",
+    "code": null,
+    "link": "https://accounts.bookcircle.example/password/reset/QXeEPkT8hie-FkvY5uwO-2SJEhvSfWlWtnFVdtaI?expires=1792666800&signature=74acd9d90370424b06c2bde37da4ea72f14c9ff21e02ade3402aeea39dd0b601",
+    "lang": "en",
+    "notes": "Password reset button; '60 minutes' expiry and a 'Contact support' link; the reset URL carries expires/signature params."
+  },
+  {
+    "file": "en-account-activation-plain.eml",
+    "code": null,
+    "link": "http://forum.retro-synths.example/index.php?action=activate;u=48291;code=fLjlTeh3sU",
+    "lang": "en",
+    "notes": "Old-school forum activation mail, plain text only (7bit), link in angle brackets with ';'-separated params including 'code=' inside the URL (not a standalone code); member number 48291."
+  },
+  {
+    "file": "de-newsletter-double-opt-in.eml",
+    "code": null,
+    "link": "https://newsletter.gartenfreunde.example/optin/confirm?l=7&s=574de744717cb3353291fb5f7e3501a7344933b5&h=iUiBvPoC9BAP",
+    "lang": "de",
+    "notes": "German newsletter double opt-in ('Anmeldung bestätigen' button); text mentions 10 % Rabatt, Datenschutz/Impressum links; only the confirm link counts."
+  },
+  {
+    "file": "en-newsletter-confirm-subscription.eml",
+    "code": null,
+    "link": "https://localbrews.us21.list-manage.example/subscribe/confirm?u=5c5c9f5a7921bf0347dfff447&id=6ba51722bf&e=5ac3a41206&c=81c669568f",
+    "lang": "en",
+    "notes": "Newsletter double-opt-in 'Yes, subscribe me to this list.' button on a list-manager host; four &amp;-separated params; footer has a 'not you? unsubscribe' style link and a referral badge."
+  },
+  {
+    "file": "fr-confirmez-adresse-email.eml",
+    "code": null,
+    "link": "https://compte.covoit-rapide.example/verification-email?jeton=PzZRNAhBKDtdBTvWUgakmlWXkSNRWLkop04J5JEsywI37ohu&lang=fr",
+    "lang": "fr",
+    "notes": "French 'Confirmez votre adresse e-mail' button; footer has 'Gérer mes notifications' and a referral link; '48 heures' and '2026' distractors."
+  },
+  {
+    "file": "it-reimposta-password.eml",
+    "code": null,
+    "link": "https://www.libreria-aurora.example/account/reimposta-password?t=rUnmlRs2Dvw0CqW2Eg6EufZCiNGvPuy_C1bBUiWqorBaKCwGMM8PN_A1e2qlpAJK",
+    "lang": "it",
+    "notes": "Italian password reset ('Reimposta la password') link; mentions 'richiesta n. 20261022-0042' and 24 ore; 'Accedi' homepage link must not be picked."
+  },
+  {
+    "file": "es-enlace-inicio-sesion.eml",
+    "code": null,
+    "link": "https://app.agenda-viva.example/auth/magic?t=yS3pR1duRGgX7nkuAbsv05TMz-h-A-p8YKgC57_YUIWOdVwURaRRpxkTBJ46XcWOfJIAaJ8rYb-brXhC3BNxOX9mvjXPhMRQ&next=%2Fcalendario",
+    "lang": "es",
+    "notes": "Spanish magic sign-in link ('Iniciar sesión'), HTML-only base64; also a link to the app store and 'Cambiar preferencias'."
+  },
+  {
+    "file": "en-code-and-magic-link.eml",
+    "code": "194628",
+    "link": "https://auth.streamforge.example/v1/email/verify?flow=6ee735910796a5a62457f45ba51936de&token=vzQQBntpuZDywWYJUf7Ebe5C1p1CVmHk2d0QAYtpmIFW0z3e3si42hzZjwY2paop",
+    "lang": "en",
+    "notes": "Both: 'Enter 194628 or click Sign in' — code shown in large <div> and a magic sign-in button; streaming service with '4K plan' and 'season 2' distractors."
+  },
+  {
+    "file": "de-anmeldung-code-und-link.eml",
+    "code": "618402",
+    "link": "https://login.wohnwelt-portal.example/bestaetigen?vorgang=2b6270152a5882ac150e9a91&t=6fSzXODwaiTYT7BVcXTBxaLCXa_BPtIcvJvXwt-y",
+    "lang": "de",
+    "notes": "German: 'Ihr Code lautet 618402' plus an 'Anmeldung bestätigen' button; Objektnummer 4471-2026, Kaltmiete 1.250,00 €, PLZ 50667 as distractors."
+  },
+  {
+    "file": "en-activation-code-link-pdf-attachment.eml",
+    "code": "5174",
+    "link": "https://my.solarnest.example/activate?account=SN-77120&key=o6e8pQpvWZ7wYgcvtIjZQr5dTUmyky84",
+    "lang": "en",
+    "notes": "multipart/mixed with a PDF welcome guide attachment; 4-digit activation PIN 5174 plus 'Activate account' link; contract number SN-77120, 6.4 kWp, 12 panels, hotline as distractors."
+  },
+  {
+    "file": "en-inline-logo-cid-related.eml",
+    "code": "703518",
+    "link": null,
+    "lang": "en",
+    "notes": "multipart/related with inline cid: logo image inside multipart/alternative; code in a bordered <td>; '2-step verification' and 'step 1 of 2' digits nearby."
+  },
+  {
+    "file": "en-2fa-many-distractors.eml",
+    "code": "357081",
+    "link": null,
+    "lang": "en",
+    "notes": "2FA code surrounded by distractors: 'Oct 22, 2026 at 09:41', IP 203.0.113.42, Berlin, 'Chrome 141 on macOS 26', 'expires in 10 minutes', support +1 555-0199, request ID 4471902385, ZIP 10115, © 2026; Review activity link is not a verification link."
+  },
+  {
+    "file": "en-card-transaction-otp-distractors.eml",
+    "code": "926304",
+    "link": null,
+    "lang": "en",
+    "notes": "Card purchase OTP (3-D Secure style) where the code comes last after amount $1,250.00, card ending 4242, merchant ID 000184729, date 10/22/2026 21:03 and 'valid 5 min'; plain + HTML table layout."
+  },
+  {
+    "file": "en-password-reset-8digit-code.eml",
+    "code": "75039184",
+    "link": null,
+    "lang": "en",
+    "notes": "8-digit password reset code in HTML-only base64 with code split into two <span>s ('7503' '9184') visually grouped; order history mentions 'Order #4410' style numbers."
+  },
+  {
+    "file": "neg-en-order-confirmation.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: order confirmation with Order #4829137, €49.99/€12.50 prices, qty 2, ZIP 10115, phone, delivery date 'Oct 27, 2026'; 'View order' link is not verification."
+  },
+  {
+    "file": "neg-en-shipping-tracking.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: shipping notification with tracking number PG482913706DE and a 'Track package' link (tracking, not verification); delivery window 10:00-14:00."
+  },
+  {
+    "file": "neg-de-rechnung-iban-pdf.eml",
+    "code": null,
+    "link": null,
+    "lang": "de",
+    "notes": "Negative: German invoice (Rechnungsnummer RE-2026-104471, Kundennummer 482913, Betrag 89,90 €, IBAN, fällig am 05.11.2026) with base64 PDF attachment; 'Kundennummer 482913' is a 6-digit non-OTP."
+  },
+  {
+    "file": "neg-en-bank-statement-sort-code.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: statement ready notice; 'Sort code 40-12-76' looks like a hyphen-grouped 6-digit code next to the word 'code'; account ending 8821, balance £2,431.07."
+  },
+  {
+    "file": "neg-en-newsletter-prices-years.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: tech newsletter with years (2026, 1998), prices ($129, $99), percentages (35%), version 6.0.2, 'Read more' links and List-Unsubscribe."
+  },
+  {
+    "file": "neg-en-meeting-invite-passcode.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: calendar invite (text/calendar part) with Meeting ID 845 2913 7702 and meeting 'Passcode: 482913' plus dial-in numbers; a meeting passcode is not a one-time verification code."
+  },
+  {
+    "file": "neg-en-flight-booking-pnr.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: flight booking confirmation 'Booking code (PNR): K7Q2M9' (alphanumeric next to 'code') and flight SA 2291, seat 14C, e-ticket 220-4829137701 and PDF itinerary attachment; a PNR is not an OTP."
+  },
+  {
+    "file": "neg-en-social-notifications.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: social digest '3 new messages', '12 people liked your post', '5 friend suggestions', with 'Log in to see' link (a plain login page, not a magic link)."
+  },
+  {
+    "file": "neg-en-new-sign-in-alert.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: 'New sign-in from Chrome on Windows' alert with IP/time/location and a 'Review activity' / 'Secure your account' link; no code, and the links review activity rather than verify, so null."
+  },
+  {
+    "file": "neg-en-password-changed.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: 'Your password was changed' confirmation, Oct 22, 2026 10:03 UTC, with an 'If this wasn't you, reset your password' recovery link that is not a verification of this action; null."
+  },
+  {
+    "file": "neg-en-receipt-card-last4.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: payment receipt with Transaction ID 8F31-2026-55102, receipt #1849-2271, card '•••• 4242', amount $18.40, auth number; HTML-only quoted-printable."
+  },
+  {
+    "file": "neg-en-promo-code-save20.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: marketing mail 'Use code SAVE20 at checkout' with code in a big dashed box, ends 10/31/2026; a promo code is not an OTP."
+  },
+  {
+    "file": "neg-en-email-verified-done.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: 'Your email address has been verified' completion notice with words 'verified'/'verification' but no code and no action link (only help/privacy footer links)."
+  },
+  {
+    "file": "neg-de-adressaenderung-plz.eml",
+    "code": null,
+    "link": null,
+    "lang": "de",
+    "notes": "Negative, hard: German address change confirmation 'Postleitzahl 10115', Kundennummer 4829137, Vorgangsnummer; says 'bestätigen' (we confirm) but has no code or link to click."
+  },
+  {
+    "file": "neg-en-discount-code-loyalty.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: loyalty statement with 'Discount code SUMMER2026' (alphanumeric, next to 'code'), 4,820 points, member ID 5501-2283-91; nothing to verify."
+  },
+  {
+    "file": "neg-fr-confirmation-commande.eml",
+    "code": null,
+    "link": null,
+    "lang": "fr",
+    "notes": "Negative, hard: French order confirmation 'Commande n° 7730192', 'Code postal : 75011', 'Code client : 004827' (6 digits after 'Code'), prices 34,90 €."
+  },
+  {
+    "file": "neg-es-factura-codigo-cliente.eml",
+    "code": null,
+    "link": null,
+    "lang": "es",
+    "notes": "Negative, hard: Spanish telecom invoice with 'Código de cliente: 1048372' (digits after 'código'), factura FAC-2026-0099182, importe 39,95 €, fecha de cargo 05/11/2026."
+  },
+  {
+    "file": "neg-en-2fa-enabled-notice.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: 'Two-factor authentication enabled' notice that talks about 'authentication codes' and '10 recovery codes' but contains no code; 'Manage security settings' link is not verification."
+  },
+  {
+    "file": "neg-ja-hassou-order-number.eml",
+    "code": null,
+    "link": null,
+    "lang": "ja",
+    "notes": "Negative: Japanese shipping notice (発送のお知らせ) with ご注文番号 250-4829137-0012, 郵便番号 〒100-0001, お問い合わせ番号 4829-1370-0921, お届け予定日; UTF-8 base64."
+  },
+  {
+    "file": "neg-en-pull-request-merged.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: code-hosting notification 'Merged #4829' with commit a3f9c21, '+128 −37' line counts and 'View it on Gitforge' link; alphanumeric/numeric tokens but no OTP."
+  },
+  {
+    "file": "neg-en-webinar-reminder-join-link.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative: webinar reminder 'starts in 1 hour' (Oct 29, 2026 17:00 CET) with a personal 'Join webinar' link and webinar ID 912 4471 0038; joining an event is not verification."
+  },
+  {
+    "file": "neg-en-hotel-confirmation-number.eml",
+    "code": null,
+    "link": null,
+    "lang": "en",
+    "notes": "Negative, hard: hotel reservation 'Confirmation code: 72849163' (8 digits next to 'code'), check-in Nov 12, 2026 after 3:00 PM, 2 nights, $289.00; a reservation reference is not an OTP."
+  }
+]

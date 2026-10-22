@@ -1,0 +1,146 @@
+Return-Path: <bounces+nooegiglqkik@mail.paywell.example>
+Received: from mx-27.mail.paywell.example (mx-27.mail.paywell.example [198.51.100.123])
+	by inbound-smtp.mx.tmp.example with SMTP id 0212d7a329ff4e8abc5ba70a95386bfd
+	for <shopper.r2d9@tmp.example>; Wed, 21 Oct 2026 18:22:51 +0100
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.paywell.example (Postfix) with ESMTP id V42FP3MKZM9
+	for <shopper.r2d9@tmp.example>; Wed, 21 Oct 2026 18:22:51 +0100
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.paywell.example;
+	dkim=pass header.d=paywell.example;
+	dmarc=pass header.from=paywell.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=paywell.example;
+	s=s8; t=1792100106; h=from:to:subject:date:message-id:mime-version;
+	bh=HxipcL68zawwDK91RVuXAOkEJ8Zlop3JsAD324DF2ZG=;
+	b=h3LHt89C4l5tABjQ0hyiKqux7JLsFRMlsXpJnFsx2owYrBhqdhfshHQOcLQwfakp
+	 ukRiafJavdjurGyxgvPXHqPpGYZRdaSa5YxYB4CyP4H7CbdOWMS416kiZJWDuRds
+	 rL8aU4LMld6CHZDIAEVgU4WrhIpqnQ2GkZByVNnnI77N==
+From: "Paywell" <service@paywell.example>
+To: shopper.r2d9@tmp.example
+Subject: Confirm your payment to Northwind Shop
+Date: Wed, 21 Oct 2026 18:22:51 +0100
+Message-ID: <8c5199eb98027727.YyE7jAHzQK@paywell.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1_127add3881678e4a002c4c25cd8b7787"
+
+--b1_127add3881678e4a002c4c25cd8b7787
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Confirm your payment
+
+You're paying =E2=82=AC49.99 to Northwind Shop with your card ending in 000=
+5.
+Date: 21 Oct 2026, 18:22
+
+Your Paywell security code is 274615. Enter it on the checkout page to
+approve this payment. Never share this code - Paywell will never ask you fo=
+r it.
+
+Paywell (Europe) S.=C3=A0 r.l. et Cie, S.C.A., 22-24 Boulevard Exemple, L-2=
+449 Luxembourg
+
+--b1_127add3881678e4a002c4c25cd8b7787
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Confirm your payment</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f5f7fa;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Approve your =E2=82=AC49.99 payment to=
+ Northwind Shop&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;=
+&zwnj;&nbsp;&#847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f5f7fa">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://www.paywell.example/media/logo-email.png" width=3D"120"=
+ height=3D"32" alt=3D"Paywell" style=3D"display:block;width:120px;height:32=
+px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<h1 style=3D"font-size:24px;line-height:32px;margin:0 0 20px 0;color:#00143=
+5;">Confirm your payment</h1>
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=
+=3D"0" style=3D"margin:0 0 20px 0;border:1px solid #e3e8ee;border-radius:6p=
+x;">
+<tr><td style=3D"padding:12px 16px;color:#687385;">Amount</td><td align=3D"=
+right" style=3D"padding:12px 16px;font-weight:bold;">&euro;49.99</td></tr>
+<tr><td style=3D"padding:12px 16px;color:#687385;border-top:1px solid #e3e8=
+ee;">Merchant</td><td align=3D"right" style=3D"padding:12px 16px;border-top=
+:1px solid #e3e8ee;">Northwind Shop</td></tr>
+<tr><td style=3D"padding:12px 16px;color:#687385;border-top:1px solid #e3e8=
+ee;">Card</td><td align=3D"right" style=3D"padding:12px 16px;border-top:1px=
+ solid #e3e8ee;">Visa &bull;&bull;&bull;&bull; 0005</td></tr>
+<tr><td style=3D"padding:12px 16px;color:#687385;border-top:1px solid #e3e8=
+ee;">Date</td><td align=3D"right" style=3D"padding:12px 16px;border-top:1px=
+ solid #e3e8ee;">21 Oct 2026, 18:22</td></tr>
+</table>
+<p style=3D"margin:0 0 16px 0;">Your Paywell security code is <strong style=
+=3D"font-size:20px;color:#003087;">274615</strong>. Enter it on the checkou=
+t page to approve this payment.</p>
+<p style=3D"margin:0;color:#687385;font-size:13px;">Never share this code &=
+mdash; Paywell will never ask you for it.</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Paywell (Europe) S.&agrave; r.l. et Cie, S.C.A., 22-24 Boulevard Exemple, L=
+-2449 Luxembourg<br/><a href=3D"https://www.paywell.example/help" style=3D"=
+color:#8c8c8c;text-decoration:underline;">Help</a> &nbsp;&middot;&nbsp; <a =
+href=3D"https://www.paywell.example/security" style=3D"color:#8c8c8c;text-d=
+ecoration:underline;">Security Center</a> &nbsp;&middot;&nbsp; <a href=3D"h=
+ttps://www.paywell.example/privacy-full" style=3D"color:#8c8c8c;text-decora=
+tion:underline;">Privacy</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://t.paywell.example/ts?ppid=3D3485d962cd641ce67d00a623401=
+0eb38ed994f94&amp;cnac=3DGB&amp;rsta=3Den_GB&amp;cust=3D2BGCS066XLGPQ&amp;u=
+nptid=3D1f0b7524ed7d4a306671c6ab2c9e5555&amp;t=3D&amp;cal=3D5f55bebd3b9e&am=
+p;calc=3D1be537390192&amp;calf=3Dcb703e6e3d09&amp;unp_tpcid=3Demail-payment=
+-otp&amp;page=3Dmain:email&amp;pgrp=3Dmain:email&amp;e=3Dop&amp;mchn=3Dem&a=
+mp;s=3Dci&amp;mail=3Dsys" width=3D"1" height=3D"1" border=3D"0" alt=3D"" st=
+yle=3D"height:1px !important;width:1px !important;border-width:0 !important=
+;margin-top:0 !important;margin-bottom:0 !important;padding:0 !important;">
+</body>
+</html>
+
+--b1_127add3881678e4a002c4c25cd8b7787--

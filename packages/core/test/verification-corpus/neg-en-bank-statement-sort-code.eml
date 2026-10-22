@@ -1,0 +1,84 @@
+Return-Path: <bounces+waiakxdgvgcc@mail.thamesbank.example>
+Received: from mx-24.mail.thamesbank.example (mx-24.mail.thamesbank.example [198.51.100.21])
+	by inbound-smtp.mx.tmp.example with SMTP id b8c256ed199ee450e1f0abe7783aa85d
+	for <saver.q2w6@tmp.example>; Thu, 22 Oct 2026 06:00:00 +0100
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.thamesbank.example (Postfix) with ESMTP id LIIYPHWI9HP
+	for <saver.q2w6@tmp.example>; Thu, 22 Oct 2026 06:00:00 +0100
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.thamesbank.example;
+	dkim=pass header.d=thamesbank.example;
+	dmarc=pass header.from=thamesbank.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=thamesbank.example;
+	s=s5; t=1792100230; h=from:to:subject:date:message-id:mime-version;
+	bh=S7GKnaoanQ6r27ySgARCF7Ht7aMZif9EUbmk0UY9xvE=;
+	b=yXdNhjdW4JT1cCQS7GtFFijq9cilDMIQvVdlaD7rhfwkS4qTUtJOZz3BpiFBXLKV
+	 GVa7CFufxLiSVb2n6n8SbON3uVE5TMmST6m5zEzEoXIwQ1KST4T7GY2NfMZzvJy5
+	 fzsQQ2bLH9PGmxEnJwDbgePQvDF79B5ahcgApicp3Ob4==
+From: "Thames Bank" <statements@thamesbank.example>
+To: saver.q2w6@tmp.example
+Subject: Your October statement is ready
+Date: Thu, 22 Oct 2026 06:00:00 +0100
+Message-ID: <ac486bc9557a4582.V3UKAXrLKc@thamesbank.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="tb3fd667704037e0bec0762658ac"
+
+--tb3fd667704037e0bec0762658ac
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Your October statement is ready
+
+Current Account
+Sort code 40-12-76  |  Account ending 8821
+
+Closing balance on 21 Oct 2026: =C2=A32,431.07
+
+Log in to Online Banking or the Thames Bank app to view your statement.
+We will never ask you for your full PIN or password by email.
+
+Thames Bank plc. Registered in England and Wales no. 00000000.
+
+--tb3fd667704037e0bec0762658ac
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html lang=3D"en">
+<head>
+<meta charset=3D"utf-8">
+<title>Your statement is ready</title>
+</head>
+<body style=3D"margin:0;padding:0;background:#eceff1;font-family:Arial,Helv=
+etica,sans-serif;">
+
+<center>
+<table width=3D"640" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#005eb8;padding:18px 24px;color:#ffffff;font-si=
+ze:20px;font-weight:bold;letter-spacing:0.5px;">Thames Bank</td></tr>
+<tr><td style=3D"padding:28px 24px 12px 24px;font-size:14px;line-height:21p=
+x;color:#263238;">
+<p style=3D"font-size:18px;"><b>Your October statement is ready</b></p>
+<table width=3D"100%" cellpadding=3D"8" cellspacing=3D"0" style=3D"border:1=
+px solid #cfd8dc;font-size:14px;">
+<tr><td style=3D"background:#f5f7f9;">Current Account</td></tr>
+<tr><td>Sort code <b>40-12-76</b> &nbsp;|&nbsp; Account ending <b>8821</b><=
+/td></tr>
+<tr><td>Closing balance on 21 Oct 2026: <b>&pound;2,431.07</b></td></tr>
+</table>
+<p>Log in to Online Banking or the Thames Bank app to view your statement. =
+We will never ask you for your full PIN or password by email.</p>
+</td></tr>
+<tr><td style=3D"padding:16px 24px 24px 24px;border-top:1px solid #cfd8dc;f=
+ont-size:11px;line-height:16px;color:#78909c;">
+Thames Bank plc. Registered in England and Wales no. 00000000. &middot; <a =
+href=3D"https://www.thamesbank.example/security" style=3D"color:#78909c;">S=
+ecurity centre</a>
+</td></tr>
+</table>
+</center>
+
+</body>
+</html>
+
+--tb3fd667704037e0bec0762658ac--

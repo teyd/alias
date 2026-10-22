@@ -1,0 +1,61 @@
+Return-Path: <bounces+28obklromus2@mail.gitforge.example>
+Received: from mx-31.mail.gitforge.example (mx-31.mail.gitforge.example [198.51.100.35])
+	by inbound-smtp.mx.tmp.example with SMTP id f82e9a641a8cbf13244059caf77812d2
+	for <dev-x81kq3@tmp.example>; Thu, 22 Oct 2026 16:02:33 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.gitforge.example (Postfix) with ESMTP id KRKDGJNV2LT
+	for <dev-x81kq3@tmp.example>; Thu, 22 Oct 2026 16:02:33 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.gitforge.example;
+	dkim=pass header.d=gitforge.example;
+	dmarc=pass header.from=gitforge.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gitforge.example;
+	s=s5; t=1792100077; h=from:to:subject:date:message-id:mime-version;
+	bh=rNST4b8y7M04WiKuv8hig1QTxfnLyfLWP7ERgTK4hdQ=;
+	b=CnnTqOvYkeBtzfjAEwFnFQCFCFH8S62eKemGBLG4xqpPzueRPxrcTKmHybwlBLC5
+	 xiUHPep0XEENUX1jOgyCZWRkLNlp0M3cn9NehDpOYldHDjic6QhwmbvdAnYAIkbd
+	 pwGlgFX1z8Zck165rhTRjLIf068jE2ObyuKgX2aNFCdq==
+From: "Lena Example" <notifications@gitforge.example>
+To: dev-x81kq3@tmp.example
+Subject: Re: [acme/widgets] Fix race in token refresh (PR #4829)
+Date: Thu, 22 Oct 2026 16:02:33 +0000
+Message-ID: <f463c6b5f121c522.h8KIUkjeZY@gitforge.example>
+MIME-Version: 1.0
+In-Reply-To: <acme/widgets/pull/4829@gitforge.example>
+References: <acme/widgets/pull/4829@gitforge.example>
+List-ID: acme/widgets <widgets.acme.gitforge.example>
+Content-Type: multipart/alternative; boundary="--==_mimepart_96bd0c94718e56daf191"
+
+----==_mimepart_96bd0c94718e56daf191
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Merged #4829 into main.
+
+Commit a3f9c21 =E2=80=94 4 files changed, +128 =E2=88=9237
+
+=E2=80=94
+Reply to this email directly, view it on Gitforge:
+https://gitforge.example/acme/widgets/pull/4829#event-1938274650
+You are receiving this because you were mentioned.
+
+----==_mimepart_96bd0c94718e56daf191
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<p></p>
+<p>Merged <a class=3D"issue-link" href=3D"https://gitforge.example/acme/wid=
+gets/pull/4829">#4829</a> into <code>main</code>.</p>
+<p>Commit <a href=3D"https://gitforge.example/acme/widgets/commit/a3f9c21e8=
+b0d4471">a3f9c21</a> &mdash; 4 files changed, <span style=3D"color:#1a7f37;=
+">+128</span> <span style=3D"color:#d1242f;">&minus;37</span></p>
+<p style=3D"font-size:small;-webkit-text-size-adjust:none;color:#666;">&mda=
+sh;<br />Reply to this email directly, <a href=3D"https://gitforge.example/=
+acme/widgets/pull/4829#event-1938274650">view it on Gitforge</a>, or <a hre=
+f=3D"https://gitforge.example/notifications/unsubscribe-auth/ipDSQO533TbMNV=
+yhlhGS1jYAxPy9nYUtPld6327P">unsubscribe</a>.<br />You are receiving this be=
+cause you were mentioned.<img src=3D"https://gitforge.example/notifications=
+/beacon/jtkFTrsAcxFuaZ8mbkT84zxEP1nEz3Dzlb0pb1o3pasVKz7nX5QiizyM6M44.gif" h=
+eight=3D"1" width=3D"1" alt=3D"" /></p>
+
+----==_mimepart_96bd0c94718e56daf191--

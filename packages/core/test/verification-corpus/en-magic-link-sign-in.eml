@@ -1,0 +1,144 @@
+Return-Path: <bounces+dfwe0ruhovyn@mail.mail.pagewise.example>
+Received: from mx-21.mail.mail.pagewise.example (mx-21.mail.mail.pagewise.example [198.51.100.97])
+	by inbound-smtp.mx.tmp.example with SMTP id 1820629589101f1a7efbb9eb5c325a88
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:02:17 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.mail.pagewise.example (Postfix) with ESMTP id BSSK7WAOX5C
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:02:17 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.mail.pagewise.example;
+	dkim=pass header.d=mail.pagewise.example;
+	dmarc=pass header.from=mail.pagewise.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=mail.pagewise.example;
+	s=s8; t=1792100005; h=from:to:subject:date:message-id:mime-version;
+	bh=ast6N3CAhJt07cETfTvBe1O62zpEb0oTK6b2spE6rQi=;
+	b=ikDkqsnurnNUjsJxvjAZuLwt8ToPeVxsbUCD0vKjAH0gPK4h0FN88VfBjGdOlX8c
+	 Vo6p4S6fJtEt0dWmYDbGRjYbN51dmMblNjPia3kny1sFG5zLBF1OcJ3zOYAy6jrK
+	 tiIhLCz3nUXynWApJZj54cbVJNpCPJ68sOTeZb3etH9h==
+From: "Pagewise" <notify@mail.pagewise.example>
+To: k7m2qx9pzr@tmp.example
+Subject: Sign in to Pagewise
+Date: Thu, 22 Oct 2026 09:02:17 +0000
+Message-ID: <1cfd8288a44b5460.MqVfkXhNTF@mail.pagewise.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="pw_7c754428af591195b8e1dea6"
+
+--pw_7c754428af591195b8e1dea6
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Sign in to Pagewise
+
+Click the link below to sign in to your Pagewise account. This link will ex=
+pire in 15 minutes and can only be used once.
+
+Sign in to Pagewise: https://www.pagewise.example/loginwithemail?token=3DXh=
+0sosNVapq58-ypsJ9F8z8otsvLDtJk9-vNS8oGOvh52588VQWP28iNN0mCZlmvVJSKGI2RRYjca=
+1UynhAlrbweOwavKzQSsJs7NjFANx2lFMu9W-v8ZFBZORvzGMl7uHLqWGeX16jpnfrI68vNNOv0=
+GfvAhXPuuuZVCnfODnv5&email=3Dk7m2qx9pzr%40tmp.example&redirect=3D%2Fworkspa=
+ce%2Finbox&state=3D7ffb73f244962c1d9a2371f9c613a830
+
+If you didn't try to sign in, you can safely ignore this email.
+
+Pagewise Labs, 548 Market St, San Francisco, CA 94104
+Help: https://www.pagewise.example/help
+
+--pw_7c754428af591195b8e1dea6
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Sign in to Pagewise</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Your sign-in link expires in 15 minute=
+s&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#=
+847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://www.pagewise.example/images/email/pagewise-logo.png" wi=
+dth=3D"120" height=3D"32" alt=3D"Pagewise" style=3D"display:block;width:120=
+px;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<h1 style=3D"font-size:24px;margin:0 0 20px 0;color:#37352f;">Sign in to Pa=
+gewise</h1>
+<p style=3D"margin:0 0 8px 0;">Click the button below to sign in to your Pa=
+gewise account. This link will expire in 15&nbsp;minutes and can only be us=
+ed once.</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#2eaadc" style=3D"border-radius:6px;">
+<a href=3D"https://www.pagewise.example/loginwithemail?token=3DXh0sosNVapq5=
+8-ypsJ9F8z8otsvLDtJk9-vNS8oGOvh52588VQWP28iNN0mCZlmvVJSKGI2RRYjca1UynhAlrbw=
+eOwavKzQSsJs7NjFANx2lFMu9W-v8ZFBZORvzGMl7uHLqWGeX16jpnfrI68vNNOv0GfvAhXPuuu=
+ZVCnfODnv5&amp;email=3Dk7m2qx9pzr%40tmp.example&amp;redirect=3D%2Fworkspace=
+%2Finbox&amp;state=3D7ffb73f244962c1d9a2371f9c613a830" target=3D"_blank" st=
+yle=3D"display:inline-block;padding:14px 32px;font-family:Helvetica,Arial,s=
+ans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:non=
+e;border-radius:6px;border:1px solid #2eaadc;">Sign in to Pagewise</a>
+</td>
+</tr>
+</table>
+<p style=3D"margin:0;font-size:13px;color:#9b9a97;">If you didn&rsquo;t try=
+ to sign in, you can safely ignore this email.</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Pagewise Labs, 548 Market St, San Francisco, CA 94104<br><a href=3D"https:/=
+/www.pagewise.example/help" style=3D"color:#8c8c8c;text-decoration:underlin=
+e;">Help</a> &nbsp;&middot;&nbsp; <a href=3D"https://www.pagewise.example/u=
+nsubscribe?id=3D1wIO6CLsPxrlAD19uvuKjAg32s3YbXK3" style=3D"color:#8c8c8c;te=
+xt-decoration:underline;">Unsubscribe</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://mail.pagewise.example/o/Zq5FMy0ZaFp-1m_PqrOWiq1NM02Pem6=
+O8GdoKzzQdZq6iy8jAY39MLvCCXpr9UK_Pa4k9mEcaeMDzEZXGUZUNfJel6GuMUo9" width=3D=
+"1" height=3D"1" border=3D"0" alt=3D"" style=3D"height:1px !important;width=
+:1px !important;border-width:0 !important;margin-top:0 !important;margin-bo=
+ttom:0 !important;padding:0 !important;">
+</body>
+</html>
+
+--pw_7c754428af591195b8e1dea6--

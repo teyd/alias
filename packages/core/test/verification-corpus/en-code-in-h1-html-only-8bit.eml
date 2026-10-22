@@ -1,0 +1,41 @@
+Return-Path: <bounces+qprp3ipnezaw@mail.stridely.example>
+Received: from mx-17.mail.stridely.example (mx-17.mail.stridely.example [198.51.100.169])
+	by inbound-smtp.mx.tmp.example with SMTP id 6ea451ef586b9686891c6c8e3c778a84
+	for <runner.z0x4@tmp.example>; Thu, 22 Oct 2026 06:31:04 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.stridely.example (Postfix) with ESMTP id CAVUL0M7WTG
+	for <runner.z0x4@tmp.example>; Thu, 22 Oct 2026 06:31:04 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.stridely.example;
+	dkim=pass header.d=stridely.example;
+	dmarc=pass header.from=stridely.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=stridely.example;
+	s=s8; t=1792100164; h=from:to:subject:date:message-id:mime-version;
+	bh=D0CmLGCmCikkfSHHmSiYHEjLsCyDUuVhLBYNH9sYzaT=;
+	b=Inv2wdFQH8dRsEgZSYpppj2OcoVu4d8ECI3o6yUjMUyzgWmotte86xKopvAKPZuU
+	 G5AphA1aTIV0FGjKPqCdqesVbv74fFFdG3UJ4Dt8pj3KkpaxDA2mxDuDqvIxmlEU
+	 Gh6qjOn5IzSt5wyptdRYcXK8GlK9N6DpwL796pkEpuXY==
+From: "Stridely" <team@stridely.example>
+To: runner.z0x4@tmp.example
+Subject: =?UTF-8?B?U3RyaWRlbHk6IGNvbmZpcm0gaXTigJlzIHlvdQ==?=
+Date: Thu, 22 Oct 2026 06:31:04 +0200
+Message-ID: <7aa680c55226daa1.7CIPA4LGpj@stridely.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Confirm it’s you</title></head>
+<body style="margin:0;background:#fafafa;font-family:system-ui,-apple-system,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;">Your code is inside – it expires soon.&nbsp;‌&nbsp;‌&nbsp;‌&nbsp;‌</div>
+<table role="presentation" width="100%"><tr><td align="center">
+<table role="presentation" width="520" style="background:#ffffff;border:1px solid #ececec;border-radius:16px;margin:32px 0;">
+<tr><td style="padding:40px 40px 0 40px;"><img src="https://cdn.stridely.example/e/logo-dark.png" alt="Stridely" width="110"></td></tr>
+<tr><td style="padding:24px 40px 40px 40px;color:#222;">
+<p style="font-size:16px;">Confirm it’s you – enter this code in the app:</p>
+<h1 style="font-size:48px;letter-spacing:12px;margin:16px 0 24px 0;color:#ff4f00;">290574</h1>
+<p style="font-size:14px;color:#777;">You’re on a 7-day streak and walked 10,482 steps yesterday – nice work!</p>
+</td></tr></table>
+<p style="font-size:11px;color:#aaa;">© 2026 Stridely GmbH · Torstraße 1 · 10119 Berlin · <a href="https://stridely.example/unsubscribe?e=g1SeIvOMKd7KawNcG1SVpYmL0Ga4XC" style="color:#aaa;">Unsubscribe</a></p>
+</td></tr></table>
+</body></html>

@@ -1,0 +1,88 @@
+Return-Path: <bounces+3ge9wggor6mg@mail.accounts.gloogle.example>
+Received: from mx-38.mail.accounts.gloogle.example (mx-38.mail.accounts.gloogle.example [198.51.100.40])
+	by inbound-smtp.mx.tmp.example with SMTP id ebf5dd8cf99f0fff6304cbe36fbab54f
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:47:14 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.accounts.gloogle.example (Postfix) with ESMTP id O7XJP8WAEAU
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:47:14 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.accounts.gloogle.example;
+	dkim=pass header.d=accounts.gloogle.example;
+	dmarc=pass header.from=accounts.gloogle.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=accounts.gloogle.example;
+	s=s7; t=1792100102; h=from:to:subject:date:message-id:mime-version;
+	bh=EkJypGbWts8jYyq9e2UkLSW07iGFMSDL4oa0auMcrOi=;
+	b=SKi8CmcFkOrBJ8KlfAINlTbeg9uREG2pA9CnDavUaYLsSSLOo6Z1B9RLznKFY1ca
+	 968IxEw0zfZgXCAU9Oaz0fLdUtbdAABPE55T8HKfVYTvr9zwukBnBxCJnzpHAg1P
+	 rWhK9nsrDqFJMTTH4Q8ynNXCXoYgHB4rD3mtSiZD5WFm==
+From: "Gloogle" <no-reply@accounts.gloogle.example>
+To: k7m2qx9pzr@tmp.example
+Subject: Security alert
+Date: Thu, 22 Oct 2026 09:47:14 -0700
+Message-ID: <d35c7f9203db998e.XAzs3tCSfx@accounts.gloogle.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="0000000000006d66414b36104a72"
+
+--0000000000006d66414b36104a72
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+New sign-in to your account
+
+k7m2qx9pzr@tmp.example
+
+We noticed a new sign-in to your Gloogle Account on a Windows device. If th=
+is was you, you don't need to do anything. If not, we'll help you secure yo=
+ur account.
+
+Chrome on Windows
+Thursday, October 22, 2026 at 9:47 AM
+Near Hamburg, Germany (IP 192.0.2.211)
+
+Check activity: https://myaccount.gloogle.example/alert/nt/1792661234000?rf=
+n=3D31&rfnc=3D1&eid=3DNyJn1y5RCudRSGiAtA9wHHVGi8Zm2h2ovmHPMUBJ&et=3D0
+
+You can also see security activity at
+https://myaccount.gloogle.example/notifications
+
+=C2=A9 2026 Gloogle LLC, 1600 Example Parkway, Mountain View, CA 94043, USA
+
+--0000000000006d66414b36104a72
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"margin:0;font-family:Roboto,Arial,sans-serif;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center" style=3D"padding:32px 8px;">
+<div style=3D"max-width:516px;border:thin solid #dadce0;border-radius:8px;p=
+adding:40px 20px;text-align:center;">
+<img src=3D"https://www.gstatic.gloogle.example/images/branding/googlelogo/=
+2x/googlelogo_color_74x24dp.png" width=3D"74" height=3D"24" alt=3D"Gloogle"=
+>
+<div style=3D"font-size:24px;padding:16px 0 8px 0;">New sign-in to your acc=
+ount</div>
+<div style=3D"font-size:14px;color:#5f6368;padding-bottom:24px;border-botto=
+m:thin solid #dadce0;">k7m2qx9pzr@tmp.example</div>
+<div style=3D"font-size:14px;line-height:20px;text-align:left;padding-top:2=
+0px;color:#3c4043;">We noticed a new sign-in to your Gloogle Account on a W=
+indows device. If this was you, you don&#39;t need to do anything. If not, =
+we&#39;ll help you secure your account.<br><br>
+<b>Chrome on Windows</b><br>Thursday, October 22, 2026 at 9:47 AM<br>Near H=
+amburg, Germany (IP 192.0.2.211)</div>
+<div style=3D"padding-top:32px;"><a href=3D"https://myaccount.gloogle.examp=
+le/alert/nt/1792661234000?rfn=3D31&amp;rfnc=3D1&amp;eid=3DNyJn1y5RCudRSGiAt=
+A9wHHVGi8Zm2h2ovmHPMUBJ&amp;et=3D0" style=3D"font-family:'Google Sans',Robo=
+to,sans-serif;font-size:14px;color:#ffffff;font-weight:500;text-decoration:=
+none;background:#4184f3;border-radius:5px;padding:10px 24px;display:inline-=
+block;">Check activity</a></div>
+<div style=3D"padding-top:20px;font-size:12px;color:#5f6368;">You can also =
+see security activity at<br><a href=3D"https://myaccount.gloogle.example/no=
+tifications" style=3D"color:#5f6368;">https://myaccount.gloogle.example/not=
+ifications</a></div>
+</div>
+<div style=3D"font-size:11px;color:rgba(0,0,0,0.54);padding-top:12px;">&cop=
+y; 2026 Gloogle LLC, 1600 Example Parkway, Mountain View, CA 94043, USA</di=
+v>
+</td></tr></table></body></html>
+
+--0000000000006d66414b36104a72--

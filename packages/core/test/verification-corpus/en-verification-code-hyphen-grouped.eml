@@ -1,0 +1,91 @@
+Return-Path: <bounces+smrcvwd9txp3@mail.id.orchard.example>
+Received: from mx-31.mail.id.orchard.example (mx-31.mail.id.orchard.example [198.51.100.11])
+	by inbound-smtp.mx.tmp.example with SMTP id 498c447da66322b2a0f163e72d770a94
+	for <fruit.l0p2@tmp.example>; Thu, 22 Oct 2026 14:09:33 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.id.orchard.example (Postfix) with ESMTP id BXDDT82XOX8
+	for <fruit.l0p2@tmp.example>; Thu, 22 Oct 2026 14:09:33 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.id.orchard.example;
+	dkim=pass header.d=id.orchard.example;
+	dmarc=pass header.from=id.orchard.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=id.orchard.example;
+	s=s9; t=1792100015; h=from:to:subject:date:message-id:mime-version;
+	bh=NJQsBoBzQxIi6wQMlxb1E0JC35gtlakvAyThARruuEo=;
+	b=RLjTpp5U9sIyZN7I7gGtd8eNeSGGMicYy2TBB4aj5mgPmAuqO4tCop9AMXxRDnFz
+	 e6K2HtIHHoaLoikegrZZBkN0AFnUoXO7kqCVEXBY0csfH0M6rCWJSBniKMxlQNGO
+	 fZjfiZTtQ3HCRlh8iS5s9WVf31CdmlkxqiCZ5HMEAmHQ==
+From: "Orchard" <noreply@id.orchard.example>
+To: fruit.l0p2@tmp.example
+Subject: Verify your Orchard ID email address
+Date: Thu, 22 Oct 2026 14:09:33 -0700
+Message-ID: <0a5fd377d3105daa.BKAXE798pI@id.orchard.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="Apple-Mail=_96CF11F2-CE60"
+
+--Apple-Mail=_96CF11F2-CE60
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Verify your email address.
+
+You've entered k7m2qx9pzr@tmp.example as the email address for your Orchard=
+ ID. To verify this email address belongs to you, enter the code below on t=
+he email verification page:
+
+731-806
+
+This code will expire three hours after this email was sent.
+
+Why you received this email.
+Orchard requires verification whenever an email address is selected as an O=
+rchard ID. Your Orchard ID cannot be used until you verify it.
+
+If you did not make this request, you can ignore this email. No Orchard ID =
+will be created without verification. Questions? Call 555-0187.
+
+Orchard ID | Support | Privacy Policy
+Copyright =C2=A9 2026 Orchard Inc. One Orchard Park, Cupertino, CA 95014, U=
+nited States. All rights reserved.
+
+--Apple-Mail=_96CF11F2-CE60
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"en"><head><meta charset=3D"utf-8"></head>
+<body style=3D"margin:0;padding:0;font-family:-apple-system,'Helvetica Neue=
+',Helvetica,Arial,sans-serif;background:#ffffff;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center">
+<table width=3D"692" cellpadding=3D"0" cellspacing=3D"0" style=3D"max-width=
+:692px;">
+<tr><td align=3D"right" style=3D"padding:31px 0 0 0;"><img src=3D"https://i=
+d.orchard.example/static/emails/orchard_logo_web.png" width=3D"22" height=
+=3D"26" alt=3D"Orchard"></td></tr>
+<tr><td style=3D"padding:40px 0 0 0;font-size:17px;line-height:1.47;color:#=
+333333;">
+<p style=3D"font-size:22px;font-weight:600;margin:0 0 30px 0;">Verify your =
+email address.</p>
+<p>You&#8217;ve entered <b>k7m2qx9pzr@tmp.example</b> as the email address =
+for your Orchard ID. To verify this email address belongs to you, enter the=
+ code below on the email verification page:</p>
+<p style=3D"margin:30px 0;"><span style=3D"font-size:24px;font-weight:bold;=
+letter-spacing:2px;">731-806</span></p>
+<p>This code will expire three hours after this email was sent.</p>
+<p><b>Why you received this email.</b><br>Orchard requires verification whe=
+never an email address is selected as an Orchard ID. Your Orchard ID cannot=
+ be used until you verify it.</p>
+<p>If you did not make this request, you can ignore this email. No Orchard =
+ID will be created without verification. Questions? Call 555-0187.</p>
+</td></tr>
+<tr><td style=3D"padding:40px 0 20px 0;font-size:12px;color:#888888;border-=
+top:1px solid #d6d6d6;">
+<a href=3D"https://id.orchard.example/" style=3D"color:#0070c9;">Orchard&nb=
+sp;ID</a> | <a href=3D"https://support.orchard.example/" style=3D"color:#00=
+70c9;">Support</a> | <a href=3D"https://www.orchard.example/legal/privacy/"=
+ style=3D"color:#0070c9;">Privacy Policy</a><br>
+Copyright &#169; 2026 Orchard Inc. One Orchard Park, Cupertino, CA 95014, U=
+nited States. All rights reserved.</td></tr>
+</table></td></tr></table></body></html>
+
+--Apple-Mail=_96CF11F2-CE60--

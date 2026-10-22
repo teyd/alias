@@ -1,0 +1,144 @@
+Return-Path: <bounces+qqmpdlq2ralt@mail.corp.example>
+Received: from mx-27.mail.corp.example (mx-27.mail.corp.example [198.51.100.196])
+	by inbound-smtp.mx.tmp.example with SMTP id b53a78236e811d4d1d4a8365cced28e8
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 10:15:00 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.corp.example (Postfix) with ESMTP id CTCGDGE6MUV
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 10:15:00 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.corp.example;
+	dkim=pass header.d=corp.example;
+	dmarc=pass header.from=corp.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=corp.example;
+	s=s1; t=1792100243; h=from:to:subject:date:message-id:mime-version;
+	bh=xMUnQhv3I9ma1srkZqRBvgqjHZuBfVaP49NnVCGqW5P=;
+	b=CscLmxCq46sNJAM7Xx5T9wJJWhDZLXcRVNxlcC1ZSdCixJMKj18SzTzTGI9wW1Ay
+	 Q84gRPfWuuVr466eElRDCmdLNfaaJEjHKuTkqmYDoUCZjyRMeSURVdlBqWR4uEN2
+	 1gzHp292qzhRKXNJ21WBycaBlBZorpmfejn2SfZNThPB==
+From: "Priya Example" <priya@corp.example>
+To: k7m2qx9pzr@tmp.example
+Subject: Invitation: Q4 launch weekly sync @ Thu Oct 29, 2026 4pm - 4:30pm (CET)
+Date: Thu, 22 Oct 2026 10:15:00 +0000
+Message-ID: <56247194bcf37167.FgBo2LSZZn@corp.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed2d81d8ce4bdb14e346c2"
+
+--mixed2d81d8ce4bdb14e346c2
+Content-Type: multipart/alternative; boundary="altaa83b8724af8ec4eba26"
+
+--altaa83b8724af8ec4eba26
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Q4 launch weekly sync
+Thursday Oct 29, 2026 =E2=8B=85 4pm =E2=80=93 4:30pm (Central European Time=
+ - Berlin)
+
+Hi team,
+
+Weekly sync for the Q4 launch.
+
+Join Confero Meeting
+https://meet.confero.example/j/84529137702?pwd=3DIbb7iWq7xrthBmBXBzcxsEHho6=
+6S062m
+
+Meeting ID: 845 2913 7702
+Passcode: 482913
+
+Dial by your location
++1 555 0100 123 US
++49 30 000000 Germany
+
+Invitation from Calendar
+You are receiving this email because you are an attendee on the event.
+
+--altaa83b8724af8ec4eba26
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div style=3D"font-family:Roboto,Arial,sans-serif;font-size:14px;color:#3c4=
+043;">
+<h2 style=3D"font-weight:400;font-size:20px;margin:0 0 8px 0;">Q4 launch we=
+ekly sync</h2>
+<p style=3D"margin:0 0 16px 0;">Thursday Oct 29, 2026 &sdot; 4pm &ndash; 4:=
+30pm (Central European Time - Berlin)</p>
+<p>Hi team,<br><br>Weekly sync for the Q4 launch.</p>
+<p><a href=3D"https://meet.confero.example/j/84529137702?pwd=3DIbb7iWq7xrth=
+BmBXBzcxsEHho66S062m" style=3D"color:#1a73e8;">Join Confero Meeting</a><br>=
+Meeting ID: 845 2913 7702<br>Passcode: 482913</p>
+<p>Dial by your location<br>+1 555 0100 123 US<br>+49 30 000000 Germany</p>
+<table cellpadding=3D"0" cellspacing=3D"0"><tr>
+<td style=3D"padding-right:8px;"><a href=3D"https://calendar.corp.example/e=
+vent?action=3DRESPOND&amp;eid=3DDOWKjDUxnlG6V1FpbA6PW0pii7ANOqgLbfLJfgnt&am=
+p;rst=3D1" style=3D"border:1px solid #dadce0;border-radius:4px;padding:6px =
+12px;color:#3c4043;text-decoration:none;">Yes</a></td>
+<td style=3D"padding-right:8px;"><a href=3D"https://calendar.corp.example/e=
+vent?action=3DRESPOND&amp;eid=3DDOWKjDUxnlG6V1FpbA6PW0pii7ANOqgLbfLJfgnt&am=
+p;rst=3D2" style=3D"border:1px solid #dadce0;border-radius:4px;padding:6px =
+12px;color:#3c4043;text-decoration:none;">No</a></td>
+<td><a href=3D"https://calendar.corp.example/event?action=3DRESPOND&amp;eid=
+=3DDOWKjDUxnlG6V1FpbA6PW0pii7ANOqgLbfLJfgnt&amp;rst=3D3" style=3D"border:1p=
+x solid #dadce0;border-radius:4px;padding:6px 12px;color:#3c4043;text-decor=
+ation:none;">Maybe</a></td>
+</tr></table>
+<p style=3D"font-size:11px;color:#70757a;margin-top:24px;">Invitation from =
+Calendar<br>You are receiving this email because you are an attendee on the=
+ event.</p>
+</div>
+
+--altaa83b8724af8ec4eba26
+Content-Type: text/calendar; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+PRODID:-//Confero//Calendar 2.0//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+DTSTART:20261029T150000Z
+DTEND:20261029T153000Z
+DTSTAMP:20261022T101500Z
+ORGANIZER;CN=Priya Example:mailto:priya@corp.example
+UID:70fced4e4495dcbad3319b4d66@corp.example
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP
+ =TRUE;CN=k7m2qx9pzr@tmp.example:mailto:k7m2qx9pzr@tmp.example
+CREATED:20261022T101500Z
+DESCRIPTION:Hi team,\n\nWeekly sync for the Q4 launch.\n\nJoin Confero Mee
+ ting\nhttps://meet.confero.example/j/84529137702?pwd=Ibb7iWq7xrthBmBXBzcxs
+ EHho66S062m\n\nMeeting ID: 845 2913 7702\nPasscode: 482913\n\nDial by your
+  location\n+1 555 0100 123 US\n+49 30 000000 Germany
+LOCATION:https://meet.confero.example/j/84529137702?pwd=Ibb7iWq7xrthBmBXBz
+ cxsEHho66S062m
+SEQUENCE:0
+STATUS:CONFIRMED
+SUMMARY:Q4 launch weekly sync
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR
+
+--altaa83b8724af8ec4eba26--
+
+--mixed2d81d8ce4bdb14e346c2
+Content-Type: application/ics; name="invite.ics"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="invite.ics"
+
+QkVHSU46VkNBTEVOREFSDQpQUk9ESUQ6LS8vQ29uZmVyby8vQ2FsZW5kYXIgMi4wLy9FTg0KVkVS
+U0lPTjoyLjANCkNBTFNDQUxFOkdSRUdPUklBTg0KTUVUSE9EOlJFUVVFU1QNCkJFR0lOOlZFVkVO
+VA0KRFRTVEFSVDoyMDI2MTAyOVQxNTAwMDBaDQpEVEVORDoyMDI2MTAyOVQxNTMwMDBaDQpEVFNU
+QU1QOjIwMjYxMDIyVDEwMTUwMFoNCk9SR0FOSVpFUjtDTj1Qcml5YSBFeGFtcGxlOm1haWx0bzpw
+cml5YUBjb3JwLmV4YW1wbGUNClVJRDo3MGZjZWQ0ZTQ0OTVkY2JhZDMzMTliNGQ2NkBjb3JwLmV4
+YW1wbGUNCkFUVEVOREVFO0NVVFlQRT1JTkRJVklEVUFMO1JPTEU9UkVRLVBBUlRJQ0lQQU5UO1BB
+UlRTVEFUPU5FRURTLUFDVElPTjtSU1ZQDQogPVRSVUU7Q049azdtMnF4OXB6ckB0bXAuZXhhbXBs
+ZTptYWlsdG86azdtMnF4OXB6ckB0bXAuZXhhbXBsZQ0KQ1JFQVRFRDoyMDI2MTAyMlQxMDE1MDBa
+DQpERVNDUklQVElPTjpIaSB0ZWFtLFxuXG5XZWVrbHkgc3luYyBmb3IgdGhlIFE0IGxhdW5jaC5c
+blxuSm9pbiBDb25mZXJvIE1lZQ0KIHRpbmdcbmh0dHBzOi8vbWVldC5jb25mZXJvLmV4YW1wbGUv
+ai84NDUyOTEzNzcwMj9wd2Q9SWJiN2lXcTd4cnRoQm1CWEJ6Y3hzDQogRUhobzY2UzA2Mm1cblxu
+TWVldGluZyBJRDogODQ1IDI5MTMgNzcwMlxuUGFzc2NvZGU6IDQ4MjkxM1xuXG5EaWFsIGJ5IHlv
+dXINCiAgbG9jYXRpb25cbisxIDU1NSAwMTAwIDEyMyBVU1xuKzQ5IDMwIDAwMDAwMCBHZXJtYW55
+DQpMT0NBVElPTjpodHRwczovL21lZXQuY29uZmVyby5leGFtcGxlL2ovODQ1MjkxMzc3MDI/cHdk
+PUliYjdpV3E3eHJ0aEJtQlhCeg0KIGN4c0VIaG82NlMwNjJtDQpTRVFVRU5DRTowDQpTVEFUVVM6
+Q09ORklSTUVEDQpTVU1NQVJZOlE0IGxhdW5jaCB3ZWVrbHkgc3luYw0KVFJBTlNQOk9QQVFVRQ0K
+RU5EOlZFVkVOVA0KRU5EOlZDQUxFTkRBUg0K
+--mixed2d81d8ce4bdb14e346c2--

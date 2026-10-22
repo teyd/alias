@@ -1,0 +1,148 @@
+Return-Path: <bounces+huk0uhfoxt0a@mail.ledgerly.example>
+Received: from mx-5.mail.ledgerly.example (mx-5.mail.ledgerly.example [198.51.100.10])
+	by inbound-smtp.mx.tmp.example with SMTP id 23ccf9c6abbed72898e1db284184ed34
+	for <fin.k4j9@tmp.example>; Thu, 22 Oct 2026 09:41:52 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.ledgerly.example (Postfix) with ESMTP id LPGH596ZFRD
+	for <fin.k4j9@tmp.example>; Thu, 22 Oct 2026 09:41:52 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.ledgerly.example;
+	dkim=pass header.d=ledgerly.example;
+	dmarc=pass header.from=ledgerly.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=ledgerly.example;
+	s=s2; t=1792100236; h=from:to:subject:date:message-id:mime-version;
+	bh=8G7GVygZT6XQqXL7anrwl6LyZSpfhKHPEFnMpUSI91y=;
+	b=Vs5rHbDEWjpURwWSILVgbjI353o9ZhVHnSldclAzIF3EurJDa3HwRcaMrFBcC9Oj
+	 h9Slle0UJ7PhbRllMDh60CNE8KHIxHKHov9xWxpscjWNuOum71oXabYpYY13dUCy
+	 mnL4Q2ryvKQuDKQtTXIRAotl7hei8HZEzWSZHSOWkC91==
+From: "Ledgerly" <no-reply@ledgerly.example>
+To: fin.k4j9@tmp.example
+Subject: Your Ledgerly two-factor code
+Date: Thu, 22 Oct 2026 09:41:52 +0200
+Message-ID: <fe141d9ced3175ae.bfzeIDkT3o@ledgerly.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="ldg_843cb70b01b12eece38e19bdf3"
+
+--ldg_843cb70b01b12eece38e19bdf3
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Ledgerly
+
+We received a sign-in request on Oct 22, 2026 at 09:41 (CEST).
+
+  Location:   Berlin, Germany (approximate)
+  IP address: 203.0.113.42
+  Device:     Chrome 141 on macOS 26
+
+Your two-factor authentication code is 357081.
+It expires in 10 minutes.
+
+Not you? Review activity: https://app.ledgerly.example/security/activity
+Questions? Call +1 555-0199 (24/7).
+
+Request ID: 4471902385
+
+Ledgerly GmbH, Friedrichstra=C3=9Fe 100, 10115 Berlin
+=C2=A9 2026 Ledgerly
+
+--ldg_843cb70b01b12eece38e19bdf3
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Two-factor code</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Sign-in request from Berlin, Germany&#=
+847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847=
+;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://app.ledgerly.example/static/mail/ledgerly.png" width=3D=
+"120" height=3D"32" alt=3D"Ledgerly" style=3D"display:block;width:120px;hei=
+ght:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;">We received a sign-in request on <b>Oct 22,=
+ 2026 at 09:41</b> (CEST).</p>
+<table role=3D"presentation" cellpadding=3D"0" cellspacing=3D"0" style=3D"m=
+argin:0 0 20px 0;font-size:14px;">
+<tr><td style=3D"padding:4px 16px 4px 0;color:#6b7280;">Location</td><td>Be=
+rlin, Germany (approximate)</td></tr>
+<tr><td style=3D"padding:4px 16px 4px 0;color:#6b7280;">IP address</td><td>=
+203.0.113.42</td></tr>
+<tr><td style=3D"padding:4px 16px 4px 0;color:#6b7280;">Device</td><td>Chro=
+me 141 on macOS 26</td></tr>
+</table>
+<p style=3D"margin:0 0 8px 0;">Your two-factor authentication code is</p>
+<p style=3D"margin:0 0 8px 0;font-size:36px;font-weight:700;letter-spacing:=
+6px;color:#0f766e;">357081</p>
+<p style=3D"margin:0 0 20px 0;color:#6b7280;">It expires in 10&nbsp;minutes=
+.</p>
+<p style=3D"margin:0 0 8px 0;">Not you? <a href=3D"https://app.ledgerly.exa=
+mple/security/activity" style=3D"color:#0f766e;">Review activity</a></p>
+<p style=3D"margin:0 0 8px 0;">Questions? Call <a href=3D"tel:+15550199" st=
+yle=3D"color:#0f766e;">+1 555-0199</a> (24/7).</p>
+<p style=3D"margin:16px 0 0 0;font-size:12px;color:#9ca3af;">Request ID: 44=
+71902385</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Ledgerly GmbH, Friedrichstra&szlig;e 100, 10115 Berlin<br>&copy; 2026 Ledge=
+rly<br><a href=3D"https://ledgerly.example/privacy" style=3D"color:#8c8c8c;=
+text-decoration:underline;">Privacy</a> &nbsp;&middot;&nbsp; <a href=3D"htt=
+ps://help.ledgerly.example" style=3D"color:#8c8c8c;text-decoration:underlin=
+e;">Help</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://links.ledgerly.example/e/o/u3igz7vDqqq9MMXCi6fec1qxFVKC=
+dBq8-C8p-EyflyW1AWz6gKBHH57j84MnrFB4tJYwsEIGqBWa-noyRb-FMpHvV0kov_O4CGQDQUB=
+UNySqftVcLGyyyf0HnFEC-2C46QwWLf7wmveg" width=3D"1" height=3D"1" border=3D"0=
+" alt=3D"" style=3D"height:1px !important;width:1px !important;border-width=
+:0 !important;margin-top:0 !important;margin-bottom:0 !important;padding:0 =
+!important;">
+</body>
+</html>
+
+--ldg_843cb70b01b12eece38e19bdf3--

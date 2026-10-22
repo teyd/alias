@@ -1,0 +1,72 @@
+Return-Path: <bounces+jitcb9wpngwj@mail.harborstack.example>
+Received: from mx-17.mail.harborstack.example (mx-17.mail.harborstack.example [198.51.100.187])
+	by inbound-smtp.mx.tmp.example with SMTP id d3176eac066dbfe5cdc2d263e64e8a99
+	for <infra.p6o2@tmp.example>; Thu, 22 Oct 2026 04:17:39 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.harborstack.example (Postfix) with ESMTP id WPVKWAKDB2A
+	for <infra.p6o2@tmp.example>; Thu, 22 Oct 2026 04:17:39 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.harborstack.example;
+	dkim=pass header.d=harborstack.example;
+	dmarc=pass header.from=harborstack.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=harborstack.example;
+	s=s2; t=1792100030; h=from:to:subject:date:message-id:mime-version;
+	bh=DGUjBnNjBEqoigTOXQPcNszpWwnetfytFEVME83wC1v=;
+	b=YAm4FVmH6jGI5dhMNl4W7lCk8dGjtofuXi22njObrDZNBC3VCj5Ps7jyPTBeJHUL
+	 cTIBSjASvUfk8YPecajuQ5NJnT8aaYxInHY9PNmjGVeQe0lIpiqpj5wBJZB6nb8M
+	 d0uourcFm19e3pATfJqjpMOyHrd6AbuMulj1ngZIQDAA==
+From: "Harborstack" <security@harborstack.example>
+To: infra.p6o2@tmp.example
+Subject: Harborstack 2-step verification
+Date: Thu, 22 Oct 2026 04:17:39 +0000
+Message-ID: <c28445d6c530a25e.GuroH4nKI1@harborstack.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt_185e7470464d75ecf340"
+
+--alt_185e7470464d75ecf340
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Harborstack 2-step verification (step 1 of 2)
+
+Your verification code: 703518
+
+It expires in 5 minutes.
+
+--alt_185e7470464d75ecf340
+Content-Type: multipart/related; boundary="rel_3867b9110f3de2944e09"; type="text/html"
+
+--rel_3867b9110f3de2944e09
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"font-family:Arial,sans-serif;background:#f5f8fb;margin=
+:0;">
+<table width=3D"560" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#fff;margin:24px auto;border:1px solid #dbe3eb;">
+<tr><td style=3D"padding:24px;"><img src=3D"cid:logo-af25805b@harborstack.e=
+xample" width=3D"160" height=3D"40" alt=3D"Harborstack"></td></tr>
+<tr><td style=3D"padding:0 24px;font-size:15px;color:#24292f;">
+<p><b>2-step verification</b> &mdash; step 1 of 2</p>
+<p>Your verification code:</p>
+<table cellpadding=3D"0" cellspacing=3D"0"><tr><td style=3D"border:2px soli=
+d #0969da;border-radius:6px;padding:10px 22px;font-size:28px;font-weight:bo=
+ld;letter-spacing:5px;color:#0969da;">703518</td></tr></table>
+<p style=3D"color:#57606a;">It expires in 5 minutes.</p>
+</td></tr>
+<tr><td style=3D"padding:16px 24px;font-size:11px;color:#8c959f;">Harborsta=
+ck, Inc. &middot; <a href=3D"https://harborstack.example/legal/privacy" sty=
+le=3D"color:#8c959f;">Privacy</a></td></tr>
+</table></body></html>
+
+--rel_3867b9110f3de2944e09
+Content-Type: image/png; name="logo.png"
+Content-Transfer-Encoding: base64
+Content-ID: <logo-af25805b@harborstack.example>
+Content-Disposition: inline; filename="logo.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8A
+AAAASUVORK5CYII=
+--rel_3867b9110f3de2944e09--
+
+--alt_185e7470464d75ecf340--

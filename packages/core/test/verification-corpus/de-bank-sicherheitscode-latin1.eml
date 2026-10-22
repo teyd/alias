@@ -1,0 +1,83 @@
+Return-Path: <bounces+ppqhiezvtfzr@mail.hanseatische-bank.example>
+Received: from mx-5.mail.hanseatische-bank.example (mx-5.mail.hanseatische-bank.example [198.51.100.49])
+	by inbound-smtp.mx.tmp.example with SMTP id d066b28d08edee2c02d15a0211c5759d
+	for <lk8w2mzt@tmp.example>; Thu, 22 Oct 2026 10:15:02 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.hanseatische-bank.example (Postfix) with ESMTP id JXFJDFJYJPH
+	for <lk8w2mzt@tmp.example>; Thu, 22 Oct 2026 10:15:02 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.hanseatische-bank.example;
+	dkim=pass header.d=hanseatische-bank.example;
+	dmarc=pass header.from=hanseatische-bank.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=hanseatische-bank.example;
+	s=s2; t=1792100024; h=from:to:subject:date:message-id:mime-version;
+	bh=oCqzzCiQ1tSkKSDFKRaztMqpnZ2rcyoNeWe05iMujhW=;
+	b=HSPqunUksxWPV5BJPrbCag4taYVcjfIu56JrMv2DnYtuNKnTrktUfCaPjLnex0xy
+	 HCIpmbskswuTtRGBvN45uSByQIbHGCA1p3Lf9kixOJI3JAw4saoJTCMalKJsEnnK
+	 ibhtFU7rkknOprjSZ7LIQIAUZnMqtor4nDV4BDfvdP0h==
+From: "Hanseatische Bank" <sicherheit@hanseatische-bank.example>
+To: lk8w2mzt@tmp.example
+Subject: =?ISO-8859-1?Q?Ihr_Sicherheitscode_f=FCr_die_Anmeldung?=
+Date: Thu, 22 Oct 2026 10:15:02 +0200
+Message-ID: <a0a19bfe843c77a1.U3BKMn7TEK@hanseatische-bank.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=_alt_5f2c0e81a"
+
+--=_alt_5f2c0e81a
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+Sehr geehrte Frau Musterfrau,
+
+f=FCr die Anmeldung im Online-Banking (Konto endet auf 4821) ben=F6tigen wi=
+r
+Ihre Best=E4tigung. Ihr Sicherheitscode lautet:
+
+    908213
+
+Der Code ist 5 Minuten g=FCltig. Geben Sie ihn niemals telefonisch weiter -
+unsere Mitarbeiter fragen Sie nie nach diesem Code.
+
+Mit freundlichen Gr=FC=DFen
+Ihre Hanseatische Bank
+
+Hanseatische Bank AG =B7 Jungfernstieg 99 =B7 20095 Hamburg
+Telefon: +49 40 000000-0 =B7 BIC HNSBDEHHXXX
+Amtsgericht Hamburg HRB 000123 =B7 Vorstand: Dr. Erika Beispiel
+
+--=_alt_5f2c0e81a
+Content-Type: text/html; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta http-equiv=3D"Content-Type" content=3D"text/html; charset=
+=3Diso-8859-1"></head>
+<body style=3D"font-family:Verdana,Arial,sans-serif;font-size:13px;color:#1=
+b1b1b;background:#ffffff;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center">
+<table width=3D"580" cellpadding=3D"0" cellspacing=3D"0" style=3D"border:1p=
+x solid #c8c8c8;">
+<tr><td style=3D"background:#003366;padding:14px 20px;"><img src=3D"https:/=
+/www.hanseatische-bank.example/img/mail/logo_weiss.gif" alt=3D"Hanseatische=
+ Bank" width=3D"180" height=3D"28"></td></tr>
+<tr><td style=3D"padding:24px 20px;">
+<p>Sehr geehrte Frau Musterfrau,</p>
+<p>f=FCr die Anmeldung im Online-Banking (Konto endet auf 4821) ben=F6tigen=
+ wir Ihre Best=E4tigung. Ihr Sicherheitscode lautet:</p>
+<p style=3D"font-size:26px;font-weight:bold;color:#003366;letter-spacing:4p=
+x;margin:20px 0;">908213</p>
+<p>Der Code ist 5&nbsp;Minuten g=FCltig. Geben Sie ihn niemals telefonisch =
+weiter &ndash; unsere Mitarbeiter fragen Sie nie nach diesem Code.</p>
+<p>Mit freundlichen Gr=FC=DFen<br>Ihre Hanseatische Bank</p>
+</td></tr>
+<tr><td style=3D"padding:12px 20px;background:#f0f0f0;font-size:10px;color:=
+#666666;">Hanseatische Bank AG &middot; Jungfernstieg 99 &middot; 20095 Ham=
+burg &middot; Telefon: +49 40 000000-0 &middot; BIC HNSBDEHHXXX<br>Amtsgeri=
+cht Hamburg HRB 000123 &middot; Vorstand: Dr. Erika Beispiel<br><a href=3D"=
+https://www.hanseatische-bank.example/datenschutz" style=3D"color:#666666;"=
+>Datenschutz</a> | <a href=3D"https://www.hanseatische-bank.example/impress=
+um" style=3D"color:#666666;">Impressum</a></td></tr>
+</table></td></tr></table>
+</body></html>
+
+--=_alt_5f2c0e81a--

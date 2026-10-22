@@ -1,0 +1,39 @@
+Return-Path: <bounces+ykfsgqbpszaf@mail.whisp.example>
+Received: from mx-29.mail.whisp.example (mx-29.mail.whisp.example [198.51.100.22])
+	by inbound-smtp.mx.tmp.example with SMTP id bd6197b9fba23169ef29382238c1b036
+	for <anon.qw7e@tmp.example>; Thu, 22 Oct 2026 06:05:59 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.whisp.example (Postfix) with ESMTP id ZVPJDUUABLR
+	for <anon.qw7e@tmp.example>; Thu, 22 Oct 2026 06:05:59 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.whisp.example;
+	dkim=pass header.d=whisp.example;
+	dmarc=pass header.from=whisp.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=whisp.example;
+	s=s6; t=1792100123; h=from:to:subject:date:message-id:mime-version;
+	bh=QJ91Y4KCOgoEHxVIEAaHVgYaOcylbyHeYfuCUapPJw0=;
+	b=wxMUtsDCHMG8Y5NVdH4GeYeUuE6kYyDT8EcPoDCtSN5JfnvUMs71DYtE1cfs16Wt
+	 RpEN1hHbsEFr2HtcsxIA5a6V9ZPJcI1FI7mf056YnJNEutxSjGVNHd8eSY8nNPSv
+	 GAFv7y29tydUbE1gzNLOvhrSupHdw0pjuIkFuBrDXg3g==
+From: "Whisp" <login@whisp.example>
+To: anon.qw7e@tmp.example
+Subject: Whisp login code
+Date: Thu, 22 Oct 2026 06:05:59 +0000
+Message-ID: <3a40f4f7f14b5d1c.UF71HI0hDK@whisp.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Your login code: 50317
+
+Do not give this code to anyone, even if they say they are from Whisp!
+
+This code can be used to log in to your Whisp account. We never ask it for
+anything else.
+
+If you didn't request this code by trying to log in on another device,
+simply ignore this message. You are logged in on 2 devices.
+
+Request from IP 198.51.100.23 (Lisbon, Portugal).
+
+— Whisp

@@ -1,0 +1,67 @@
+Return-Path: <bounces+5lvjoqjvwow4@mail.tunnelfox.example>
+Received: from mx-5.mail.tunnelfox.example (mx-5.mail.tunnelfox.example [198.51.100.31])
+	by inbound-smtp.mx.tmp.example with SMTP id 93f36c22fc8d1b6ef2066f172bc35211
+	for <privacy.v8n1@tmp.example>; Thu, 22 Oct 2026 23:14:50 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.tunnelfox.example (Postfix) with ESMTP id 2GGOPTA1YLK
+	for <privacy.v8n1@tmp.example>; Thu, 22 Oct 2026 23:14:50 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.tunnelfox.example;
+	dkim=pass header.d=tunnelfox.example;
+	dmarc=pass header.from=tunnelfox.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=tunnelfox.example;
+	s=s1; t=1792100169; h=from:to:subject:date:message-id:mime-version;
+	bh=iaN0OJdI6bQqRpSY5m1KGKKUbzS8oVVzqxjC1v87KuX=;
+	b=y4ggC85SwgkXSamgpWGgL0AMd0DfLYli8AVHKiOecuhCMRU7GqKMW6FXYV0BiRKN
+	 7ifsf7E4I21SJZJBCXK9rnCEt2W32IZ8ayxMiqXwTcInZJxsZBzgY9R8HVgRydeU
+	 XBpoPBZueVOo81GKUMhRqvL4hWT8oghcLGydRLsnOq06==
+From: "TunnelFox VPN" <support@tunnelfox.example>
+To: privacy.v8n1@tmp.example
+Subject: Your TunnelFox sign-in code
+Date: Thu, 22 Oct 2026 23:14:50 +0000
+Message-ID: <e52d7e54d71f5ed7.jDLgo4lIWl@tunnelfox.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="tf-5cf95fce0a7b756ec5253e98b2"
+
+--tf-5cf95fce0a7b756ec5253e98b2
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+TunnelFox VPN
+
+Your sign-in code: K7Q2-M9XD
+
+Type this code into the TunnelFox app on your new device. It expires in
+30 minutes and can be used once.
+
+Your plan: TunnelFox Plus ($4.99/month), renews on 2026-11-22.
+Last connected server: Zurich #37.
+
+TunnelFox AG, Bahnhofstrasse 1, 8001 Zürich
+
+--tf-5cf95fce0a7b756ec5253e98b2
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHkgc3R5bGU9ImJhY2tncm91bmQ6IzE0MTQxZjttYXJnaW46MDtwYWRkaW5nOjMy
+cHggMDsiPg0KPGRpdiBzdHlsZT0id2lkdGg6NTIwcHg7bWFyZ2luOjAgYXV0bztiYWNrZ3JvdW5k
+OiMxZjFmMmU7Ym9yZGVyLXJhZGl1czoxMnB4O3BhZGRpbmc6MzZweDtmb250LWZhbWlseTpJbnRl
+cixBcmlhbCxzYW5zLXNlcmlmO2NvbG9yOiNlNGU0ZjA7Ij4NCjxpbWcgc3JjPSJodHRwczovL2Fz
+c2V0cy50dW5uZWxmb3guZXhhbXBsZS9tYWlsL2ZveC5wbmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0
+OCIgYWx0PSJUdW5uZWxGb3giPg0KPGgyIHN0eWxlPSJmb250LXdlaWdodDo2MDA7Zm9udC1zaXpl
+OjIycHg7bWFyZ2luOjIwcHggMDsiPllvdXIgc2lnbi1pbiBjb2RlPC9oMj4NCjxwIHN0eWxlPSJt
+YXJnaW46MCAwIDIwcHggMDsiPjxjb2RlIHN0eWxlPSJmb250LXNpemU6MjhweDtsZXR0ZXItc3Bh
+Y2luZzozcHg7YmFja2dyb3VuZDojMmQyZDQ0O2NvbG9yOiNmZjhhM2Q7cGFkZGluZzoxMHB4IDE2
+cHg7Ym9yZGVyLXJhZGl1czo4cHg7Ij5LN1EyLU05WEQ8L2NvZGU+PC9wPg0KPHAgc3R5bGU9ImZv
+bnQtc2l6ZToxNHB4O2xpbmUtaGVpZ2h0OjIycHg7Ij5UeXBlIHRoaXMgY29kZSBpbnRvIHRoZSBU
+dW5uZWxGb3ggYXBwIG9uIHlvdXIgbmV3IGRldmljZS4gSXQgZXhwaXJlcyBpbiAzMCZuYnNwO21p
+bnV0ZXMgYW5kIGNhbiBiZSB1c2VkIG9uY2UuPC9wPg0KPHAgc3R5bGU9ImZvbnQtc2l6ZToxM3B4
+O2NvbG9yOiM5YTlhYjA7bGluZS1oZWlnaHQ6MjBweDsiPllvdXIgcGxhbjogVHVubmVsRm94IFBs
+dXMgKCQ0Ljk5L21vbnRoKSwgcmVuZXdzIG9uIDIwMjYtMTEtMjIuPGJyPkxhc3QgY29ubmVjdGVk
+IHNlcnZlcjogWnVyaWNoICMzNy48L3A+DQo8cCBzdHlsZT0iZm9udC1zaXplOjExcHg7Y29sb3I6
+IzZlNmU4ODttYXJnaW4tdG9wOjMycHg7Ij5UdW5uZWxGb3ggQUcsIEJhaG5ob2ZzdHJhc3NlIDEs
+IDgwMDEgWiZ1dW1sO3JpY2ggJm1pZGRvdDsgPGEgaHJlZj0iaHR0cHM6Ly90dW5uZWxmb3guZXhh
+bXBsZS9wcml2YWN5IiBzdHlsZT0iY29sb3I6IzZlNmU4ODsiPlByaXZhY3k8L2E+ICZtaWRkb3Q7
+IDxhIGhyZWY9Imh0dHBzOi8vdHVubmVsZm94LmV4YW1wbGUvc3VwcG9ydCIgc3R5bGU9ImNvbG9y
+OiM2ZTZlODg7Ij5TdXBwb3J0PC9hPjwvcD4NCjwvZGl2PjwvYm9keT48L2h0bWw+DQo=
+--tf-5cf95fce0a7b756ec5253e98b2--

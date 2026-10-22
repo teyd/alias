@@ -1,0 +1,70 @@
+Return-Path: <bounces+ojut2aykofzm@mail.pizzeria-veloce.example>
+Received: from mx-19.mail.pizzeria-veloce.example (mx-19.mail.pizzeria-veloce.example [198.51.100.52])
+	by inbound-smtp.mx.tmp.example with SMTP id df6f0f4dabfa49aba088ae89fcf2436d
+	for <fame.n3w8@tmp.example>; Thu, 22 Oct 2026 19:40:00 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.pizzeria-veloce.example (Postfix) with ESMTP id OOVCZCDUFME
+	for <fame.n3w8@tmp.example>; Thu, 22 Oct 2026 19:40:00 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.pizzeria-veloce.example;
+	dkim=pass header.d=pizzeria-veloce.example;
+	dmarc=pass header.from=pizzeria-veloce.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=pizzeria-veloce.example;
+	s=s5; t=1792100111; h=from:to:subject:date:message-id:mime-version;
+	bh=0SugrIuxBXdeDak8iqrnxGsz5OD2iv5oGWqOYFsFLuT=;
+	b=FePyQbXN3WtslDuy6RtzDsGY230OqhVsv4d2SNwARVGZJZelgJZpgK04PGxtVdDr
+	 hCWsN5UKgy4CJJaN5wJIceRFm9N2qnlE6gCsGQWiupSjLGIibEHToxG3ZZjCVc5e
+	 6Ng7nwT97sKFFkJlWQx5pJ25k9wX4DLvMpHVbWdzNhJC==
+From: "Pizzeria Veloce" <noreply@pizzeria-veloce.example>
+To: fame.n3w8@tmp.example
+Subject: =?ISO-8859-1?Q?Il_tuo_codice_di_verifica_=E8_917364?=
+Date: Thu, 22 Oct 2026 19:40:00 +0200
+Message-ID: <4492a6f494943022.wHTyXbVws5@pizzeria-veloce.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----_=_NextPart_001_2ADF789C1B2168B3"
+
+------_=_NextPart_001_2ADF789C1B2168B3
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+Ciao Giulia,
+
+Il tuo codice di verifica =E8 917364.
+
+Inseriscilo nell'app per completare la registrazione. Il codice =E8 valido =
+per 10 minuti.
+
+Buon appetito!
+Il team di Pizzeria Veloce
+
+Pizzeria Veloce S.r.l. - Via Esempio 3 - 20121 Milano - P.IVA 00000000000
+
+------_=_NextPart_001_2ADF789C1B2168B3
+Content-Type: text/html; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta http-equiv=3D"Content-Type" content=3D"text/html; charset=
+=3Diso-8859-1"></head>
+<body style=3D"font-family:Arial,sans-serif;background:#fff8f0;margin:0;">
+<table width=3D"560" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#ffffff;margin:24px auto;border-top:6px solid #d32f2f;">
+<tr><td style=3D"padding:28px;">
+<img src=3D"https://cdn.pizzeria-veloce.example/mail/logo.png" alt=3D"Pizze=
+ria Veloce" width=3D"150"><br><br>
+<p>Ciao Giulia,</p>
+<p>Il tuo codice di verifica =E8:</p>
+<p style=3D"font-size:30px;font-weight:bold;color:#d32f2f;letter-spacing:6p=
+x;">917364</p>
+<p>Inseriscilo nell'app per completare la registrazione. Il codice =E8 vali=
+do per 10&nbsp;minuti.</p>
+<p>Buon appetito!<br>Il team di Pizzeria Veloce</p>
+</td></tr>
+<tr><td style=3D"padding:14px 28px;font-size:11px;color:#999;background:#fa=
+fafa;">Pizzeria Veloce S.r.l. - Via Esempio 3 - 20121 Milano - P.IVA 000000=
+00000<br><a href=3D"https://pizzeria-veloce.example/privacy" style=3D"color=
+:#999;">Privacy</a> | <a href=3D"https://pizzeria-veloce.example/disiscrivi=
+ti?u=3DjHonPaYfquxQrjLmCRpt" style=3D"color:#999;">Disiscriviti</a></td></t=
+r>
+</table></body></html>
+
+------_=_NextPart_001_2ADF789C1B2168B3--

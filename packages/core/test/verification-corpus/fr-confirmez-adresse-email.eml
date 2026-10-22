@@ -1,0 +1,109 @@
+Return-Path: <bounces+vfcectn67ig6@mail.covoit-rapide.example>
+Received: from mx-10.mail.covoit-rapide.example (mx-10.mail.covoit-rapide.example [198.51.100.27])
+	by inbound-smtp.mx.tmp.example with SMTP id df9c3b59799cbd68ab1cb1be40709a31
+	for <trajet.e5r9@tmp.example>; Thu, 22 Oct 2026 08:30:55 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.covoit-rapide.example (Postfix) with ESMTP id EPXLJTXAITG
+	for <trajet.e5r9@tmp.example>; Thu, 22 Oct 2026 08:30:55 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.covoit-rapide.example;
+	dkim=pass header.d=covoit-rapide.example;
+	dmarc=pass header.from=covoit-rapide.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=covoit-rapide.example;
+	s=s3; t=1792100169; h=from:to:subject:date:message-id:mime-version;
+	bh=g17dwIDddPsXq4bFWnOGE8b8Ql4jLo7WcmJRtdn566P=;
+	b=SRExAVLuSMNlkkDTAumuzKw8thmHrvTgjAtE5Ic21nOmb3FvKA25u1QgRU0XFgSo
+	 eMJeFsR3htKZwOzMG9rQKwBbbsqCpr9BTghgiXVcaSQ7h8wSIdvYVZr2uSoOi3cV
+	 K6DZlqcLHURoY4Nh48b3kqW0rUrLNcCdgVXZeFjnxOiC==
+From: "Covoit'Rapide" <ne-pas-repondre@covoit-rapide.example>
+To: trajet.e5r9@tmp.example
+Subject: Confirmez votre adresse e-mail
+Date: Thu, 22 Oct 2026 08:30:55 +0200
+Message-ID: <c6922d57b4e8021a.zpOLwVc2xd@covoit-rapide.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="cr_114927d1ab33bf0b2aa126d7"
+
+--cr_114927d1ab33bf0b2aa126d7
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Bonjour L=C3=A9a,
+
+Merci de vous =C3=AAtre inscrite sur Covoit'Rapide ! Pour s=C3=A9curiser vo=
+tre compte, confirmez votre adresse e-mail :
+
+https://compte.covoit-rapide.example/verification-email?jeton=3DPzZRNAhBKDt=
+dBTvWUgakmlWXkSNRWLkop04J5JEsywI37ohu&lang=3Dfr
+
+Ce lien est valable 48 heures.
+
+Parrainez un ami et gagnez 10 =E2=82=AC : https://www.covoit-rapide.example=
+/parrainage
+G=C3=A9rer mes notifications : https://www.covoit-rapide.example/notificati=
+ons
+
+=C2=A9 2026 Covoit'Rapide SAS
+
+--cr_114927d1ab33bf0b2aa126d7
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html lang=3D"fr">
+<head>
+<meta charset=3D"utf-8">
+<title>Confirmez votre adresse e-mail</title>
+</head>
+<body style=3D"margin:0;padding:0;background:#eceff1;font-family:Arial,Helv=
+etica,sans-serif;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Un dernier clic pour s=C3=A9curiser vo=
+tre compte&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj=
+;&nbsp;&#847;&zwnj;&nbsp;</span>
+<center>
+<table width=3D"640" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#0b7fab;padding:18px 24px;color:#ffffff;font-si=
+ze:20px;font-weight:bold;letter-spacing:0.5px;">Covoit&rsquo;Rapide</td></t=
+r>
+<tr><td style=3D"padding:28px 24px 12px 24px;font-size:14px;line-height:21p=
+x;color:#263238;">
+<p>Bonjour L&eacute;a,</p>
+<p>Merci de vous &ecirc;tre inscrite sur Covoit&rsquo;Rapide&nbsp;! Pour s&=
+eacute;curiser votre compte, confirmez votre adresse e-mail&nbsp;:</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#0b7fab" style=3D"border-radius:6px;">
+<a href=3D"https://compte.covoit-rapide.example/verification-email?jeton=3D=
+PzZRNAhBKDtdBTvWUgakmlWXkSNRWLkop04J5JEsywI37ohu&amp;lang=3Dfr" target=3D"_=
+blank" style=3D"display:inline-block;padding:14px 32px;font-family:Helvetic=
+a,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decor=
+ation:none;border-radius:6px;border:1px solid #0b7fab;">Confirmer mon adres=
+se e-mail</a>
+</td>
+</tr>
+</table>
+<p>Ce lien est valable 48&nbsp;heures.</p>
+<p style=3D"background:#e1f5fe;padding:12px;">Parrainez un ami et gagnez 10=
+&nbsp;&euro;&nbsp;! <a href=3D"https://www.covoit-rapide.example/parrainage=
+" style=3D"color:#0b7fab;">J&rsquo;en profite</a></p>
+</td></tr>
+<tr><td style=3D"padding:16px 24px 24px 24px;border-top:1px solid #cfd8dc;f=
+ont-size:11px;line-height:16px;color:#78909c;">
+&copy; 2026 Covoit&rsquo;Rapide SAS &middot; <a href=3D"https://www.covoit-=
+rapide.example/notifications" style=3D"color:#78909c;">G&eacute;rer mes not=
+ifications</a> &middot; <a href=3D"https://www.covoit-rapide.example/confid=
+entialite" style=3D"color:#78909c;">Confidentialit&eacute;</a>
+</td></tr>
+</table>
+</center>
+<img src=3D"https://www.covoit-rapide.example/e/o/26cd765882579b8d7fce6855a=
+b1d8c3122bfb5663b1c20a0.png" width=3D"1" height=3D"1" border=3D"0" alt=3D""=
+ style=3D"height:1px !important;width:1px !important;border-width:0 !import=
+ant;margin-top:0 !important;margin-bottom:0 !important;padding:0 !important=
+;">
+</body>
+</html>
+
+--cr_114927d1ab33bf0b2aa126d7--

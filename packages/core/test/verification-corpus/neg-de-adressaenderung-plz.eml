@@ -1,0 +1,43 @@
+Return-Path: <bounces+y3r7vhnwpje1@mail.versicherung-beispiel.example>
+Received: from mx-3.mail.versicherung-beispiel.example (mx-3.mail.versicherung-beispiel.example [198.51.100.70])
+	by inbound-smtp.mx.tmp.example with SMTP id be33a12cf55d6af724d70da3168d3fa8
+	for <lk8w2mzt@tmp.example>; Thu, 22 Oct 2026 11:40:00 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.versicherung-beispiel.example (Postfix) with ESMTP id RYXATO3K24E
+	for <lk8w2mzt@tmp.example>; Thu, 22 Oct 2026 11:40:00 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.versicherung-beispiel.example;
+	dkim=pass header.d=versicherung-beispiel.example;
+	dmarc=pass header.from=versicherung-beispiel.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=versicherung-beispiel.example;
+	s=s5; t=1792100230; h=from:to:subject:date:message-id:mime-version;
+	bh=XICIy6ZtTjkOGwAAPHkrxkMGMnsYYMPQE5ILS42KC7n=;
+	b=D76D34z5QvfBRGsfSdgGqR9H1Hs8KqybnMUefIjlHe72MvsAGYkway1V4kJ8uSWw
+	 fxZ7cxiIWgemxth3sxHpN88BSwMkCwMcJWM6fDDB7uYgkdEXpQ7ETYKqoitBC2Pw
+	 10quHkZtCEE1lOJ0sWPjKP034IdxOQzrhh1X3KNEVtaA==
+From: "Beispiel Versicherung" <kundenservice@versicherung-beispiel.example>
+To: lk8w2mzt@tmp.example
+Subject: =?ISO-8859-1?Q?Best=E4tigung_Ihrer_Adress=E4nderung?=
+Date: Thu, 22 Oct 2026 11:40:00 +0200
+Message-ID: <a2a2713f7cf02731.WlyNe8I7I3@versicherung-beispiel.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+
+Sehr geehrter Herr Mustermann,
+
+hiermit best=E4tigen wir die =C4nderung Ihrer Anschrift zum 01.11.2026:
+
+  Stra=DFe:        Invalidenstra=DFe 117
+  Postleitzahl:  10115
+  Ort:           Berlin
+
+Kundennummer:    4829137
+Vorgangsnummer:  2026-10-22-0815
+
+Ihr Versicherungsschutz bleibt unver=E4ndert bestehen. Sie m=FCssen nichts
+weiter tun.
+
+Mit freundlichen Gr=FC=DFen
+Ihr Kundenservice der Beispiel Versicherung AG
+Telefon 0800 000 0000 (kostenfrei)

@@ -1,0 +1,122 @@
+Return-Path: <bounces+dzz1vaiqivxr@mail.helixhealth.example>
+Received: from mx-20.mail.helixhealth.example (mx-20.mail.helixhealth.example [198.51.100.166])
+	by inbound-smtp.mx.tmp.example with SMTP id a6b280411dff127c9aff048f3fc33cff
+	for <patient.c5r2@tmp.example>; Thu, 22 Oct 2026 08:48:16 -0500
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.helixhealth.example (Postfix) with ESMTP id NWGHEXU7NPP
+	for <patient.c5r2@tmp.example>; Thu, 22 Oct 2026 08:48:16 -0500
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.helixhealth.example;
+	dkim=pass header.d=helixhealth.example;
+	dmarc=pass header.from=helixhealth.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=helixhealth.example;
+	s=s2; t=1792100177; h=from:to:subject:date:message-id:mime-version;
+	bh=llHn2gBCDASH1ZBJXpCC4lHJjAutAifxqETtUoUszwt=;
+	b=048hKlulWrk3HvbYXREFTwjwZcy07DLfHJb1yJe6PiJwt5B9mLf7KEQsMpxq9wZy
+	 GP7uEhE1BhmM68ppTKTHFq97v92DSeqrudufafH3lB3Wt7dDby6TDyUBFcYbTbBc
+	 E0JrEvhBWGl13JihEJ4kwlGOD4rE02WX16T69hDJ3V9A==
+From: "Helix Health Portal" <verify@helixhealth.example>
+To: patient.c5r2@tmp.example
+Subject: Your Helix Health verification code
+Date: Thu, 22 Oct 2026 08:48:16 -0500
+Message-ID: <7f9ddc97f0d95b9b.JpcvkJFzC5@helixhealth.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="hx_cbf140dccf85b24fba2af601"
+
+--hx_cbf140dccf85b24fba2af601
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Helix Health Portal
+
+Your verification code is:
+
+    6 1 8 0 2 7
+
+Enter it on the portal to view your new message from your care team.
+The code expires in 10 minutes.
+
+Need help? Call +1 555 0100 199, available 24/7.
+Helix Health, 200 Example Blvd, Suite 1400, Chicago, IL 60601
+
+--hx_cbf140dccf85b24fba2af601
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Verification code</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Your verification code expires in 10 m=
+inutes&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nb=
+sp;&#847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://portal.helixhealth.example/assets/email/helix.png" widt=
+h=3D"120" height=3D"32" alt=3D"Helix Health" style=3D"display:block;width:1=
+20px;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;">Your verification code is:</p>
+<p style=3D"text-align:center;margin:0 0 24px 0;"><span style=3D"font-size:=
+34px;font-weight:bold;color:#00796b;font-family:Georgia,serif;">6&nbsp;1&nb=
+sp;8&nbsp;0&nbsp;2&nbsp;7</span></p>
+<p style=3D"margin:0 0 16px 0;">Enter it on the portal to view your new mes=
+sage from your care team. The code expires in 10&nbsp;minutes.</p>
+<p style=3D"margin:0;font-size:13px;color:#666;">Need help? Call +1 555 010=
+0 199, available 24/7.</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Helix Health, 200 Example Blvd, Suite 1400, Chicago, IL 60601<br><a href=3D=
+"https://www.helixhealth.example/privacy" style=3D"color:#8c8c8c;text-decor=
+ation:underline;">Notice of Privacy Practices</a> &nbsp;&middot;&nbsp; <a h=
+ref=3D"https://www.helixhealth.example/contact" style=3D"color:#8c8c8c;text=
+-decoration:underline;">Contact us</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
+
+--hx_cbf140dccf85b24fba2af601--

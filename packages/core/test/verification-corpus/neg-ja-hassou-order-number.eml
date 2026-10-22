@@ -1,0 +1,36 @@
+Return-Path: <bounces+wmfp4qrkauys@mail.kaimono-ichiba.example>
+Received: from mx-19.mail.kaimono-ichiba.example (mx-19.mail.kaimono-ichiba.example [198.51.100.55])
+	by inbound-smtp.mx.tmp.example with SMTP id 30c398a1b0fe7dadad8c3e1c5f46c631
+	for <kenji.t7u3@tmp.example>; Fri, 23 Oct 2026 10:05:00 +0900
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.kaimono-ichiba.example (Postfix) with ESMTP id L6H1WH059AU
+	for <kenji.t7u3@tmp.example>; Fri, 23 Oct 2026 10:05:00 +0900
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.kaimono-ichiba.example;
+	dkim=pass header.d=kaimono-ichiba.example;
+	dmarc=pass header.from=kaimono-ichiba.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kaimono-ichiba.example;
+	s=s8; t=1792100098; h=from:to:subject:date:message-id:mime-version;
+	bh=4B8nR7i3I2Xv3GpHZ0P2eJiksVXT2aLV69EP02VwE5V=;
+	b=RsMUueplWUfHqHDutVfrlsHNWYgJNrAPJ269SUl34x9WiBSynzCfHB0DXwPGKgao
+	 x9JTGjfbTr4Eqgx3lHj6TCVoew3RYlhBNLGgTkyvVTYP0M6BrQWQN4h1h1DG192n
+	 NCkndovCRkKvdkRi7bUGCdvbsTTVAeIz2LNAavz9aFNY==
+From: =?UTF-8?B?44GL44GE44KC44Gu5biC5aC0?= <shop@kaimono-ichiba.example>
+To: kenji.t7u3@tmp.example
+Subject: =?UTF-8?B?44CQ44GL44GE44KC44Gu5biC5aC044CR5ZWG5ZOB55m66YCB44Gu44GK55+l?=
+ =?UTF-8?B?44KJ44Gb?=
+Date: Fri, 23 Oct 2026 10:05:00 +0900
+Message-ID: <c8a375c84fafc89a.IulYdMQj8e@kaimono-ichiba.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+5bGx55SwIOWkqumDjiDmp5gNCg0K44GU5rOo5paH44GE44Gf44Gg44GE44Gf5ZWG5ZOB44KS55m6
+6YCB44GE44Gf44GX44G+44GX44Gf44CCDQoNCuOBlOazqOaWh+eVquWPt++8mjI1MC00ODI5MTM3
+LTAwMTINCuOBiuWxiuOBkeWFiO+8muOAkjEwMC0wMDAxIOadseS6rOmDveWNg+S7o+eUsOWMuuS+
+i+eUujEtMQ0K6YWN6YCB5qWt6ICF77ya44Ok44Oe44ON44Kz6YGL6Ly4DQrjgYrllY/jgYTlkIjj
+go/jgZvnlarlj7fvvJo0ODI5LTEzNzAtMDkyMQ0K44GK5bGK44GR5LqI5a6a5pel77yaMjAyNuW5
+tDEw5pyIMjXml6XvvIjml6XvvInljYjliY3kuK0NCg0K6YWN6YCB54q25rOB44Gu56K66KqN77ya
+DQpodHRwczovL3RyYWNrLnlhbWFuZWtvLXVueXUuZXhhbXBsZS8/bm89NDgyOTEzNzAwOTIxDQoN
+CuOBlOWIqeeUqOOBguOCiuOBjOOBqOOBhuOBlOOBluOBhOOBvuOBl+OBn+OAgg0K44GL44GE44KC
+44Gu5biC5aC0DQo=

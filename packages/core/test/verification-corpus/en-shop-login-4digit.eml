@@ -1,0 +1,136 @@
+Return-Path: <bounces+zmuanfu86jfe@mail.northwind-shop.example>
+Received: from mx-14.mail.northwind-shop.example (mx-14.mail.northwind-shop.example [198.51.100.40])
+	by inbound-smtp.mx.tmp.example with SMTP id 8610d35b7155b2fab67f0438a57a9226
+	for <bargain.h4x@tmp.example>; Thu, 22 Oct 2026 13:30:00 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.northwind-shop.example (Postfix) with ESMTP id KJCOKSUHK0N
+	for <bargain.h4x@tmp.example>; Thu, 22 Oct 2026 13:30:00 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.northwind-shop.example;
+	dkim=pass header.d=northwind-shop.example;
+	dmarc=pass header.from=northwind-shop.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=northwind-shop.example;
+	s=s4; t=1792100151; h=from:to:subject:date:message-id:mime-version;
+	bh=uanol1QPqcN5yGD7GO5g9T1NabQR3E6M2ekhDe9UtSy=;
+	b=NZbaeArQnPFRQtEZbSuWERktHKPBOGhhGTbtigP3DyIs1sInEYb8tS4FJf8E0ZpQ
+	 A4cF2sajoGGwcpZZ7tRvl3AJQTv2oxyhpLTzH7uiwkhA1dL03KYErH4DndXOR4Qh
+	 2GS1CkYaXIzvdZBkr6jAsiHLGZmfSSy5H2DvZz4iwz9v==
+From: "Northwind Shop" <account@northwind-shop.example>
+To: bargain.h4x@tmp.example
+Subject: Your Northwind sign-in code
+Date: Thu, 22 Oct 2026 13:30:00 -0700
+Message-ID: <d520e047dd13cb14.2pgQ9l1Y44@northwind-shop.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="--==_mimepart_6577451e2bea4806d90a0dfe"
+
+----==_mimepart_6577451e2bea4806d90a0dfe
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Northwind Shop
+
+Your one-time sign-in code is 8352.
+It expires in 10 minutes.
+
+Don't recognize this activity? Call us at 1-555-0142 (Mon-Fri, 8-20).
+
+Fall Sale: up to 30% off outerwear through Nov 2.
+
+Northwind Shop, 410 Terry Ave N, Seattle, WA 98109
+=C2=A9 2026 Northwind Shop LLC
+
+----==_mimepart_6577451e2bea4806d90a0dfe
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Your sign-in code</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Your one-time sign-in code is 8352&#84=
+7;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&=
+zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://img.northwind-shop.example/brand/nw-logo.png" width=3D"=
+120" height=3D"32" alt=3D"Northwind Shop" style=3D"display:block;width:120p=
+x;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"font-size:18px;margin:0 0 12px 0;color:#111;">Your one-time sig=
+n-in code is</p>
+<div style=3D"font-size:44px;line-height:52px;font-weight:800;color:#111111=
+;letter-spacing:10px;margin:8px 0 16px 0;">8352</div>
+<p style=3D"margin:0 0 20px 0;">It expires in 10&nbsp;minutes.</p>
+<p style=3D"margin:0 0 28px 0;color:#555;">Don&rsquo;t recognize this activ=
+ity? Call us at <a href=3D"tel:+15550142" style=3D"color:#555;">1-555-0142<=
+/a> (Mon&ndash;Fri, 8&ndash;20).</p>
+<table role=3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=
+=3D"0"><tr><td style=3D"background:#fff4e5;padding:16px;border-radius:6px;t=
+ext-align:center;">
+<a href=3D"https://www.northwind-shop.example/sale/fall?utm_source=3Dtransa=
+ctional&amp;utm_medium=3Demail&amp;utm_campaign=3Dotp_banner" style=3D"colo=
+r:#b35c00;font-weight:bold;text-decoration:none;">Fall Sale: up to 30% off =
+outerwear through Nov&nbsp;2 &rarr;</a></td></tr></table>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Northwind Shop, 410 Terry Ave N, Seattle, WA 98109<br/>&copy; 2026 Northwin=
+d Shop LLC<br/><a href=3D"https://www.northwind-shop.example/privacy" style=
+=3D"color:#8c8c8c;text-decoration:underline;">Privacy</a> &nbsp;&middot;&nb=
+sp; <a href=3D"https://www.northwind-shop.example/help" style=3D"color:#8c8=
+c8c;text-decoration:underline;">Help</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://www.northwind-shop.example/gp/r.html?C=3DK4UGMXDAZ3WZ4U=
+&amp;K=3DGQSYHWDTQ1RLU3&amp;M=3Durn:rtn:msg:47ce468917d74461106780919d1d880=
+0&amp;R=3DK6Z7DXF1W5EEO&amp;T=3DO&amp;U=3Dhttps%3A%2F%2Fimages.northwind-sh=
+op.example%2Fimages%2FG%2F01%2Fnav%2Ftransp.gif&amp;H=3DROzg17Nv3t482PTz7J6=
+n2gWsrqsukx&amp;ref_=3Dpe_228b8a20" width=3D"1" height=3D"1" border=3D"0" a=
+lt=3D"" style=3D"height:1px !important;width:1px !important;border-width:0 =
+!important;margin-top:0 !important;margin-bottom:0 !important;padding:0 !im=
+portant;">
+</body>
+</html>
+
+----==_mimepart_6577451e2bea4806d90a0dfe--

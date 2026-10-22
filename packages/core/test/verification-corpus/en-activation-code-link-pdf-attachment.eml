@@ -1,0 +1,115 @@
+Return-Path: <bounces+d3peqcrf0aur@mail.solarnest.example>
+Received: from mx-10.mail.solarnest.example (mx-10.mail.solarnest.example [198.51.100.195])
+	by inbound-smtp.mx.tmp.example with SMTP id bfb60d0f14a232cce5a2e15fa7621d03
+	for <roof.power.g3@tmp.example>; Thu, 22 Oct 2026 11:58:27 +0100
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.solarnest.example (Postfix) with ESMTP id 8B06V9JOOCW
+	for <roof.power.g3@tmp.example>; Thu, 22 Oct 2026 11:58:27 +0100
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.solarnest.example;
+	dkim=pass header.d=solarnest.example;
+	dmarc=pass header.from=solarnest.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=solarnest.example;
+	s=s9; t=1792100087; h=from:to:subject:date:message-id:mime-version;
+	bh=PEzrHq4kBYPATB0WZW4l2NLrX3pt7lYpx7nj0Taz950=;
+	b=1r8u2TionIZ6re52oaMch0qolohBKKEPdz6EMQdTTjuDr4GS90MvbI2WKbeCT4MJ
+	 lxZsuebh7QSrKTuUJH7MVAQVFpruDOfhpuK5sslWuU4G2GNlWgADtVrIFIAflGst
+	 OUzvjHSPmOWq5KawkXvibTRt99tF0LiT9JpE72LYsm0p==
+From: "SolarNest" <welcome@solarnest.example>
+To: roof.power.g3@tmp.example
+Subject: Activate your SolarNest monitoring account
+Date: Thu, 22 Oct 2026 11:58:27 +0100
+Message-ID: <232f621a391c5606.8lnxeeeZPG@solarnest.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-525acf38daf45f5f95eb"
+
+--mixed-525acf38daf45f5f95eb
+Content-Type: multipart/alternative; boundary="alt-99f7a854a587202a956b"
+
+--alt-99f7a854a587202a956b
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Welcome to SolarNest!
+
+Your 6.4 kWp system (12 panels, contract SN-77120) is now connected.
+
+To activate your monitoring account, open the link below and enter your
+activation PIN when asked:
+
+Activation PIN: 5174
+Activate account: https://my.solarnest.example/activate?account=3DSN-77120&=
+key=3Do6e8pQpvWZ7wYgcvtIjZQr5dTUmyky84
+
+Your welcome guide is attached as a PDF.
+
+Hotline: +44 20 0000 0000
+
+--alt-99f7a854a587202a956b
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html lang=3D"en">
+<head>
+<meta charset=3D"utf-8">
+<title>Activate your account</title>
+</head>
+<body style=3D"margin:0;padding:0;background:#eceff1;font-family:Arial,Helv=
+etica,sans-serif;">
+
+<center>
+<table width=3D"640" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#f9a825;padding:18px 24px;color:#ffffff;font-si=
+ze:20px;font-weight:bold;letter-spacing:0.5px;">SolarNest</td></tr>
+<tr><td style=3D"padding:28px 24px 12px 24px;font-size:14px;line-height:21p=
+x;color:#263238;">
+<p>Welcome to SolarNest!</p>
+<p>Your 6.4&nbsp;kWp system (12 panels, contract SN-77120) is now connected=
+.</p>
+<p>To activate your monitoring account, click the button below and enter yo=
+ur activation PIN when asked:</p>
+<p style=3D"font-size:14px;">Activation PIN: <span style=3D"font-size:26px;=
+font-weight:bold;letter-spacing:6px;">5174</span></p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#f9a825" style=3D"border-radius:6px;">
+<a href=3D"https://my.solarnest.example/activate?account=3DSN-77120&amp;key=
+=3Do6e8pQpvWZ7wYgcvtIjZQr5dTUmyky84" target=3D"_blank" style=3D"display:inl=
+ine-block;padding:14px 32px;font-family:Helvetica,Arial,sans-serif;font-siz=
+e:16px;font-weight:bold;color:#212121;text-decoration:none;border-radius:6p=
+x;border:1px solid #f9a825;">Activate account</a>
+</td>
+</tr>
+</table>
+<p>Your welcome guide is attached as a PDF.</p>
+</td></tr>
+<tr><td style=3D"padding:16px 24px 24px 24px;border-top:1px solid #cfd8dc;f=
+ont-size:11px;line-height:16px;color:#78909c;">
+Hotline: +44 20 0000 0000 &middot; SolarNest Ltd, 9 Example Row, Bristol BS=
+1 4ND &middot; <a href=3D"https://solarnest.example/privacy" style=3D"color=
+:#78909c;">Privacy</a>
+</td></tr>
+</table>
+</center>
+
+</body>
+</html>
+
+--alt-99f7a854a587202a956b--
+
+--mixed-525acf38daf45f5f95eb
+Content-Type: application/pdf; name="SolarNest-Welcome-Guide.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="SolarNest-Welcome-Guide.pdf"
+
+JVBERi0xLjQKMSAwIG9iaiA8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4gZW5kb2Jq
+CjIgMCBvYmogPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4gZW5kb2Jq
+CjMgMCBvYmogPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA1OTUg
+ODQyXSAvQ29udGVudHMgNCAwIFIgPj4gZW5kb2JqCjQgMCBvYmogPDwgL0xlbmd0aCA0NCA+PiBz
+dHJlYW0KQlQgL0YxIDE4IFRmIDcyIDc2MCBUZCAoU29sYXJOZXN0IFdlbGNvbWUgR3VpZGUpIFRq
+IEVUCmVuZHN0cmVhbSBlbmRvYmoKdHJhaWxlciA8PCAvUm9vdCAxIDAgUiA+PgolJUVPRgpFNnhW
+UEJYSHFDMG03R2wyZ3BRZjFhRFpPNENhQk9tajA1RDVPUTBoSlMzbnRoRmphTVZqUlZQRzFJSVVa
+UmQx
+--mixed-525acf38daf45f5f95eb--

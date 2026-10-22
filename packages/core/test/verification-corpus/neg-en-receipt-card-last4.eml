@@ -1,0 +1,73 @@
+Return-Path: <bounces+ariyxs5e8552@mail.brewbean-cafe.example>
+Received: from mx-29.mail.brewbean-cafe.example (mx-29.mail.brewbean-cafe.example [198.51.100.125])
+	by inbound-smtp.mx.tmp.example with SMTP id 81054398828835f5666ce46d47d89ffb
+	for <coffee.j7k1@tmp.example>; Thu, 22 Oct 2026 08:17:33 -0700
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.brewbean-cafe.example (Postfix) with ESMTP id VRO88CFFGTV
+	for <coffee.j7k1@tmp.example>; Thu, 22 Oct 2026 08:17:33 -0700
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.brewbean-cafe.example;
+	dkim=pass header.d=brewbean-cafe.example;
+	dmarc=pass header.from=brewbean-cafe.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=brewbean-cafe.example;
+	s=s2; t=1792100101; h=from:to:subject:date:message-id:mime-version;
+	bh=PmUqpdmjV5t8BJP7uOOFFtmum8WRYomHNGR5RENCbDE=;
+	b=aNvijskXzXQ1UIyjCaaxhPB8SAvxX0M4lpK8vook252Eoi6MNFLYBF9gYG1CgFy1
+	 AZ0IJFnMHEaygo6wfo66CJDD7QBul74xD7pL6bxr1BokEDLA9KNfn1mdCbBkb4Wi
+	 kN2XGSL5Zi4CNXAGZwBFd4DnyfxTRgo7ov9EM3P0i0FF==
+From: =?UTF-8?B?QnJld0JlYW4gQ2Fmw6k=?= <receipts@brewbean-cafe.example>
+To: coffee.j7k1@tmp.example
+Subject: =?UTF-8?B?WW91ciByZWNlaXB0IGZyb20gQnJld0JlYW4gQ2Fmw6kgIzE4NDktMjI3MQ==?=
+Date: Thu, 22 Oct 2026 08:17:33 -0700
+Message-ID: <4b5404bb9294fbd1.hTHHanoiT5@brewbean-cafe.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html><head><meta charset=3D"utf-8"></head>
+<body style=3D"background:#f6f9fc;margin:0;font-family:-apple-system,'Segoe=
+ UI',Roboto,sans-serif;color:#32325d;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Receipt #1849-2271 =E2=80=94 $18.40 pa=
+id&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&=
+#847;&zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center" style=3D"padding:40px 0;">
+<table width=3D"480" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgroun=
+d:#ffffff;border-radius:6px;">
+<tr><td align=3D"center" style=3D"padding:32px 32px 0 32px;"><img src=3D"ht=
+tps://brewbean-cafe.example/logo-round.png" width=3D"56" height=3D"56" alt=
+=3D""><p style=3D"font-size:20px;margin:12px 0 4px 0;">Receipt from BrewBea=
+n Caf=C3=A9</p><p style=3D"font-size:14px;color:#8898aa;margin:0;">Receipt =
+#1849-2271</p></td></tr>
+<tr><td style=3D"padding:24px 32px;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" style=3D"font-siz=
+e:12px;color:#8898aa;text-transform:uppercase;"><tr>
+<td>Amount paid<br><span style=3D"font-size:15px;color:#32325d;text-transfo=
+rm:none;">$18.40</span></td>
+<td>Date paid<br><span style=3D"font-size:15px;color:#32325d;text-transform=
+:none;">Oct 22, 2026, 8:17 AM</span></td>
+<td>Payment method<br><span style=3D"font-size:15px;color:#32325d;text-tran=
+sform:none;">Visa &bull;&bull;&bull;&bull; 4242</span></td>
+</tr></table></td></tr>
+<tr><td style=3D"padding:0 32px;">
+<table width=3D"100%" cellpadding=3D"8" cellspacing=3D"0" style=3D"backgrou=
+nd:#f6f9fc;border-radius:4px;font-size:14px;">
+<tr><td>2 &times; Oat Flat White</td><td align=3D"right">$11.00</td></tr>
+<tr><td>1 &times; Cardamom Bun</td><td align=3D"right">$4.90</td></tr>
+<tr><td>Tip (15%)</td><td align=3D"right">$2.50</td></tr>
+<tr><td style=3D"border-top:1px solid #e6ebf1;"><b>Amount paid</b></td><td =
+align=3D"right" style=3D"border-top:1px solid #e6ebf1;"><b>$18.40</b></td><=
+/tr>
+</table></td></tr>
+<tr><td style=3D"padding:24px 32px;font-size:12px;color:#8898aa;">Transacti=
+on ID: 8F31-2026-55102 &middot; Auth code: 004417<br>Questions? Contact Bre=
+wBean Caf=C3=A9 at <a href=3D"mailto:hello@brewbean-cafe.example" style=3D"=
+color:#635bff;">hello@brewbean-cafe.example</a> or call +1 555-0163.</td></=
+tr>
+</table>
+<p style=3D"font-size:12px;color:#8898aa;">Powered by Paystripe &middot; <a=
+ href=3D"https://paystripe.example/privacy" style=3D"color:#8898aa;">Privac=
+y</a></p>
+</td></tr></table></body></html>

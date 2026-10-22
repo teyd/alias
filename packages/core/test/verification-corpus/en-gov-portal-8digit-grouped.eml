@@ -1,0 +1,72 @@
+Return-Path: <bounces+zfyospv2d0bj@mail.services.gov.example>
+Received: from mx-14.mail.services.gov.example (mx-14.mail.services.gov.example [198.51.100.14])
+	by inbound-smtp.mx.tmp.example with SMTP id 90657aa1c453ce4899429c827decde64
+	for <applicant.5tz9@tmp.example>; Thu, 22 Oct 2026 08:02:31 +0100
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.services.gov.example (Postfix) with ESMTP id YYI7RKYANSY
+	for <applicant.5tz9@tmp.example>; Thu, 22 Oct 2026 08:02:31 +0100
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.services.gov.example;
+	dkim=pass header.d=services.gov.example;
+	dmarc=pass header.from=services.gov.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=services.gov.example;
+	s=s9; t=1792100147; h=from:to:subject:date:message-id:mime-version;
+	bh=91lVcdSrB9RTXZkiqZnkhQn4xf6TL3mtapzd8peNa6r=;
+	b=G6B7yfpme5iPFp6lcuA7dZpEGgKBtngRfLeuWfRDN2HD5cOQmFxVG1iEVGBO5MXp
+	 DlkHLctmpIbFHcA7BHoRWiUC1LlFiJFArXwXuNHABVVfIy6hWMyTrXIYiZub0mLU
+	 QOikVz6eK0kz1BeVtQ26CZhNGQfMwOExVphLO8HgVJl5==
+From: "Citizen Services Portal" <noreply@services.gov.example>
+To: applicant.5tz9@tmp.example
+Subject: Your one-time passcode
+Date: Thu, 22 Oct 2026 08:02:31 +0100
+Message-ID: <6f0ceebac1c2ef98.SzhCBcvLOb@services.gov.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="gov_cd331ffe4055435d57dc"
+
+--gov_cd331ffe4055435d57dc
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+
+Citizen Services Portal
+
+Your one-time passcode is:
+
+4071 3392
+
+Enter this passcode to continue your application. It is valid for
+20 minutes.
+
+Case reference: CSP-2026-004417
+
+If you need help, call the helpline on 0300 000 0000 (Monday to Friday,
+8am to 6pm). Do not reply to this email.
+
+--gov_cd331ffe4055435d57dc
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html lang=3D"en"><head><meta charset=3D"utf-8"><title>Your one-time passco=
+de</title></head>
+<body style=3D"font-family:Arial,sans-serif;font-size:19px;line-height:1.31=
+5789474;color:#0b0c0c;margin:0;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" border=3D"0"><tr>=
+<td bgcolor=3D"#0b0c0c" style=3D"padding:12px 20px;">
+<span style=3D"font-family:Arial,sans-serif;font-weight:700;color:#ffffff;f=
+ont-size:28px;">CITIZEN&nbsp;SERVICES</span></td></tr></table>
+<table width=3D"580" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" b=
+order=3D"0" style=3D"max-width:580px;">
+<tr><td style=3D"padding:30px 10px;">
+<p style=3D"margin:0 0 20px 0;">Your one-time passcode is:</p>
+<p style=3D"margin:0 0 20px 0;font-size:36px;font-weight:700;">4071 3392</p=
+>
+<p style=3D"margin:0 0 20px 0;">Enter this passcode to continue your applic=
+ation. It is valid for 20 minutes.</p>
+<p style=3D"margin:0 0 20px 0;border-left:10px solid #b1b4b6;padding:15px 0=
+ 15px 15px;">Case reference: CSP-2026-004417</p>
+<p style=3D"margin:0 0 20px 0;">If you need help, call the helpline on 0300=
+ 000 0000 (Monday to Friday, 8am to 6pm). Do not reply to this email.</p>
+</td></tr></table>
+</body></html>
+
+--gov_cd331ffe4055435d57dc--

@@ -1,0 +1,73 @@
+Return-Path: <bounces+mwkkufehczny@mail.fietsdeel.example>
+Received: from mx-2.mail.fietsdeel.example (mx-2.mail.fietsdeel.example [198.51.100.203])
+	by inbound-smtp.mx.tmp.example with SMTP id bb301dd682ba2bb94f98618ba9bbcc5a
+	for <trapper.j9k5@tmp.example>; Thu, 22 Oct 2026 08:14:26 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.fietsdeel.example (Postfix) with ESMTP id TBD4FKRBXDN
+	for <trapper.j9k5@tmp.example>; Thu, 22 Oct 2026 08:14:26 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.fietsdeel.example;
+	dkim=pass header.d=fietsdeel.example;
+	dmarc=pass header.from=fietsdeel.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=fietsdeel.example;
+	s=s2; t=1792100110; h=from:to:subject:date:message-id:mime-version;
+	bh=fLxObK2HtwBTP7DtoCUGt9lRDo2AzNC16uqIsrVuct9=;
+	b=gVljfrdNtC9yXP0vxvjEFfSXxep7L4jyEHFLGMnH0FSnAAR8yflkNEBYtyhztlJw
+	 eVm5HxaQGRaEBCe0ANGGdxPVqN0LMTJloE3X665A028XfP8pIsjACc4De78CFzai
+	 fP0zV3pcURubA0C8CWuVCQpv28xOu3hIAFcZ4zEhc4IC==
+From: "FietsDeel" <service@fietsdeel.example>
+To: trapper.j9k5@tmp.example
+Subject: Je verificatiecode voor FietsDeel
+Date: Thu, 22 Oct 2026 08:14:26 +0200
+Message-ID: <41d64b955e7318e5.LmODx5BgKB@fietsdeel.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="fd19aeacaf4e9e5146943ca8d9e6df"
+
+--fd19aeacaf4e9e5146943ca8d9e6df
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hoi Sanne,
+
+Je verificatiecode is 563018.
+
+Vul deze code in de app in om je e-mailadres te bevestigen. De code is
+30 minuten geldig.
+
+Groetjes,
+Team FietsDeel
+
+FietsDeel B.V. =C2=B7 Damrak 1 =C2=B7 1012 AB Amsterdam
+KvK-nummer 12345678 =C2=B7 BTW NL000000000B01
+
+--fd19aeacaf4e9e5146943ca8d9e6df
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"margin:0;background:#f0f7f4;">
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center">
+<table width=3D"580" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgroun=
+d:#fff;margin:24px 0;border-radius:10px;font-family:Arial,sans-serif;color:=
+#1f2d3d;">
+<tr><td style=3D"padding:28px 32px 0 32px;"><img src=3D"https://fietsdeel.e=
+xample/img/mail/logo-groen.png" width=3D"140" alt=3D"FietsDeel"></td></tr>
+<tr><td style=3D"padding:24px 32px;">
+<p style=3D"font-size:16px;">Hoi Sanne,</p>
+<p style=3D"font-size:16px;">Je verificatiecode is</p>
+<table cellpadding=3D"0" cellspacing=3D"0"><tr><td style=3D"background:#e6f=
+4ea;color:#0b6b3a;font-size:32px;font-weight:bold;letter-spacing:8px;paddin=
+g:12px 20px;border-radius:8px;">563018</td></tr></table>
+<p style=3D"font-size:15px;">Vul deze code in de app in om je e-mailadres t=
+e bevestigen. De code is 30&nbsp;minuten geldig.</p>
+<p style=3D"font-size:15px;">Groetjes,<br>Team FietsDeel</p>
+</td></tr>
+<tr><td style=3D"padding:16px 32px 28px 32px;font-size:11px;color:#8492a6;"=
+>FietsDeel B.V. &middot; Damrak 1 &middot; 1012 AB Amsterdam<br>KvK-nummer =
+12345678 &middot; BTW NL000000000B01<br><a href=3D"https://fietsdeel.exampl=
+e/privacy" style=3D"color:#8492a6;">Privacy</a> &middot; <a href=3D"https:/=
+/fietsdeel.example/afmelden?t=3D5l6oIAwaJGHRRE8wCP85pZ" style=3D"color:#849=
+2a6;">Afmelden</a></td></tr>
+</table></td></tr></table></body></html>
+
+--fd19aeacaf4e9e5146943ca8d9e6df--

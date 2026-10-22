@@ -1,0 +1,82 @@
+Return-Path: <bounces+eedlmwahklle@mail.urbanthreads.example>
+Received: from mx-36.mail.urbanthreads.example (mx-36.mail.urbanthreads.example [198.51.100.159])
+	by inbound-smtp.mx.tmp.example with SMTP id d2b1e6b5287323b1cefbe90284685f12
+	for <style.m2n6@tmp.example>; Fri, 23 Oct 2026 09:00:00 -0400
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.urbanthreads.example (Postfix) with ESMTP id JPPKIIFHMXK
+	for <style.m2n6@tmp.example>; Fri, 23 Oct 2026 09:00:00 -0400
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.urbanthreads.example;
+	dkim=pass header.d=urbanthreads.example;
+	dmarc=pass header.from=urbanthreads.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=urbanthreads.example;
+	s=s5; t=1792100215; h=from:to:subject:date:message-id:mime-version;
+	bh=XoMB9nbxfJ6W8HDPJX85DlCe4gC0DrQUAKlaC3yYq9c=;
+	b=zUoQrXoCaHTBS3IkhRITlsAPxKnNSbbjYkRsbhQw8A2gIhJvjYjSSyQKYpxKdiqY
+	 oXPcGXQHqPmfEke4iK739GwBABcDaayKQehwcW7eIcZBUKhADxRAr8JnyBoMksWh
+	 OsELGliaOAEOUtZIrDeU4d4FJCw5a7uMigAV1Io71DpA==
+From: "Urban Threads" <deals@urbanthreads.example>
+To: style.m2n6@tmp.example
+Subject: =?UTF-8?B?MjAlIG9mZiBldmVyeXRoaW5nIOKAlCB0aGlzIHdlZWtlbmQgb25seQ==?=
+Date: Fri, 23 Oct 2026 09:00:00 -0400
+Message-ID: <2c9e91e646a84a25.SNe61tT6lc@urbanthreads.example>
+MIME-Version: 1.0
+List-Unsubscribe: <https://urbanthreads.example/u/lw36s0GFaZuFyMArdDxAYq7oscztUN>
+Content-Type: multipart/alternative; boundary="ut_5b37c64a4ec241ad69362767"
+
+--ut_5b37c64a4ec241ad69362767
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+20% OFF EVERYTHING
+
+Use code SAVE20 at checkout.
+Valid through 10/31/2026. Exclusions apply. Minimum order $50.
+
+Shop now: https://urbanthreads.example/sale?utm_campaign=3Dsave20
+
+Unsubscribe: https://urbanthreads.example/u/lw36s0GFaZuFyMArdDxAYq7oscztUN
+Urban Threads, 1200 Example Blvd, Los Angeles, CA 90015
+
+--ut_5b37c64a4ec241ad69362767
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"margin:0;background:#111;font-family:Futura,'Trebuchet=
+ MS',Arial,sans-serif;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Use code SAVE20 at checkout. Ends Satu=
+rday.&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbs=
+p;&#847;&zwnj;&nbsp;</span>
+<table width=3D"600" align=3D"center" cellpadding=3D"0" cellspacing=3D"0" s=
+tyle=3D"background:#ffffff;">
+<tr><td><img src=3D"https://urbanthreads.example/mail/2026/hero-fall.jpg" w=
+idth=3D"600" height=3D"320" alt=3D"20% off everything" style=3D"display:blo=
+ck;"></td></tr>
+<tr><td align=3D"center" style=3D"padding:32px;">
+<h1 style=3D"font-size:40px;margin:0;letter-spacing:2px;">20% OFF EVERYTHIN=
+G</h1>
+<p style=3D"font-size:16px;margin:16px 0;">Use code</p>
+<div style=3D"display:inline-block;border:3px dashed #111;padding:14px 32px=
+;font-size:34px;font-weight:bold;letter-spacing:4px;">SAVE20</div>
+<p style=3D"font-size:16px;margin:16px 0;">at checkout.</p>
+<a href=3D"https://urbanthreads.example/sale?utm_campaign=3Dsave20" style=
+=3D"display:inline-block;background:#111;color:#fff;padding:14px 40px;text-=
+decoration:none;font-weight:bold;">SHOP NOW</a>
+<p style=3D"font-size:11px;color:#777;margin-top:24px;">Valid through 10/31=
+/2026. Exclusions apply. Minimum order $50.</p>
+</td></tr>
+<tr><td align=3D"center" style=3D"padding:20px;font-size:11px;color:#999;ba=
+ckground:#f5f5f5;"><a href=3D"https://urbanthreads.example/u/lw36s0GFaZuFyM=
+ArdDxAYq7oscztUN" style=3D"color:#999;">Unsubscribe</a> &middot; Urban Thre=
+ads, 1200 Example Blvd, Los Angeles, CA 90015</td></tr>
+</table>
+<img src=3D"https://click.urbanthreads.example/open.aspx?f1f0353476792cc3d0=
+d2536d5392fd46c820d3b601c019e42bfbfe096347" width=3D"1" height=3D"1" border=
+=3D"0" alt=3D"" style=3D"height:1px !important;width:1px !important;border-=
+width:0 !important;margin-top:0 !important;margin-bottom:0 !important;paddi=
+ng:0 !important;">
+</body></html>
+
+--ut_5b37c64a4ec241ad69362767--

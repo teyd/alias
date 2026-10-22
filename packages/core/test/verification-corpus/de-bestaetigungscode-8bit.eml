@@ -1,0 +1,61 @@
+Return-Path: <bounces+ivsfwezofnn8@mail.kleinanzeigen-markt.example>
+Received: from mx-40.mail.kleinanzeigen-markt.example (mx-40.mail.kleinanzeigen-markt.example [198.51.100.12])
+	by inbound-smtp.mx.tmp.example with SMTP id 56404b8942928b5ec4e5cf45a5a76a35
+	for <fl0hmarkt.k2@tmp.example>; Thu, 22 Oct 2026 17:03:44 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.kleinanzeigen-markt.example (Postfix) with ESMTP id 8O2WVQIZTQO
+	for <fl0hmarkt.k2@tmp.example>; Thu, 22 Oct 2026 17:03:44 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.kleinanzeigen-markt.example;
+	dkim=pass header.d=kleinanzeigen-markt.example;
+	dmarc=pass header.from=kleinanzeigen-markt.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=kleinanzeigen-markt.example;
+	s=s3; t=1792100170; h=from:to:subject:date:message-id:mime-version;
+	bh=fDInFhvXCd6CRLhsQh4tA09rgMDZaFYz4rsvGziegzI=;
+	b=eRIKjPxWNOT4qNvIrbEhoGp8dMsKAMxJkCTPRMdLg2xUkwHY4bANP6YQXps0nNHy
+	 sWCfwrlWEHUcghKl1jQR3LyX2vnbI0Ryp57nyh9AhwEeycOiSUD53gL4nzHxyGDj
+	 bYEhkx3ZnWiocQxpzE7bKgoC9HQQTCNrNzRy8LKlcwRe==
+From: "Kleinanzeigen-Markt" <konto@kleinanzeigen-markt.example>
+To: fl0hmarkt.k2@tmp.example
+Subject: =?UTF-8?Q?Dein_Best=C3=A4tigungscode_f=C3=BCr_Kleinanzeigen-Markt?=
+Date: Thu, 22 Oct 2026 17:03:44 +0200
+Message-ID: <b936da4c0513d59d.uueUWNIus0@kleinanzeigen-markt.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----=_NextPart_2fead166357fe04132a8"
+
+------=_NextPart_2fead166357fe04132a8
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Hallo Max,
+
+Ihr Bestätigungscode lautet: 347920
+
+Gültig für 15 Minuten. Bitte gib den Code in der App ein, um deine
+Telefonnummer zu bestätigen.
+
+Viel Erfolg beim Verkaufen!
+Dein Kleinanzeigen-Markt-Team
+
+Kleinanzeigen-Markt GmbH · Musterstraße 12 · 80331 München
+Registergericht München HRB 123456 · USt-IdNr. DE000000000
+
+------=_NextPart_2fead166357fe04132a8
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Bestätigungscode</title></head>
+<body style="margin:0;background:#f2f4f5;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:20px 0;">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+<tr><td style="padding:20px 30px;border-bottom:4px solid #86b817;"><img src="https://static.kleinanzeigen-markt.example/mail/logo.png" alt="Kleinanzeigen-Markt" width="190" height="30"></td></tr>
+<tr><td style="padding:30px;font-size:15px;line-height:22px;color:#333333;">
+<p>Hallo Max,</p>
+<p>Ihr Bestätigungscode lautet: <b style="font-size:22px;color:#326916;">347920</b></p>
+<p>Gültig für 15&nbsp;Minuten. Bitte gib den Code in der App ein, um deine Telefonnummer zu bestätigen.</p>
+<p>Viel Erfolg beim Verkaufen!<br>Dein Kleinanzeigen-Markt-Team</p>
+</td></tr>
+<tr><td style="padding:20px 30px;background:#f9f9f9;font-size:11px;color:#888888;line-height:16px;">Kleinanzeigen-Markt GmbH · Musterstraße 12 · 80331 München<br>Registergericht München HRB 123456 · USt-IdNr. DE000000000<br><a href="https://www.kleinanzeigen-markt.example/datenschutz" style="color:#888;">Datenschutz</a> · <a href="https://www.kleinanzeigen-markt.example/impressum" style="color:#888;">Impressum</a> · <a href="https://www.kleinanzeigen-markt.example/hilfe" style="color:#888;">Hilfe</a></td></tr>
+</table></td></tr></table></body></html>
+
+------=_NextPart_2fead166357fe04132a8--

@@ -1,0 +1,97 @@
+Return-Path: <bounces+awnffubearib@mail.parcelgo.example>
+Received: from mx-37.mail.parcelgo.example (mx-37.mail.parcelgo.example [198.51.100.16])
+	by inbound-smtp.mx.tmp.example with SMTP id 157b9b4982e97d3ad328266114ede94e
+	for <bargain.h4x@tmp.example>; Sat, 24 Oct 2026 06:12:00 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.parcelgo.example (Postfix) with ESMTP id 7ALCI3NBGYN
+	for <bargain.h4x@tmp.example>; Sat, 24 Oct 2026 06:12:00 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.parcelgo.example;
+	dkim=pass header.d=parcelgo.example;
+	dmarc=pass header.from=parcelgo.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=parcelgo.example;
+	s=s3; t=1792100080; h=from:to:subject:date:message-id:mime-version;
+	bh=1v1T9SROv3VD57C4LtGB585DvTHBUUL3R5QYqQ5fRua=;
+	b=pe4ehrURfTJBkoPu3FwoLj5vkZFag15o7vQKRCDNDDZ15oeO6PCK0uZMoEtCVdUG
+	 HjlX3GQy4Fmu1vTt4XEcOXoyHmIcmMaKp3pgsYfnJxjjghTFsvyi8Jbs9LwfJjgC
+	 SR9rCrKbAqwUsAeUyX2777OvfCYA4upCPZtomrZkZXEy==
+From: "ParcelGo" <updates@parcelgo.example>
+To: bargain.h4x@tmp.example
+Subject: Your parcel is on its way
+Date: Sat, 24 Oct 2026 06:12:00 +0200
+Message-ID: <252b7afbdb161cd4.En0Ynx0nKI@parcelgo.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="pg_6c4047395072c60cdd8c"
+
+--pg_6c4047395072c60cdd8c
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Your parcel from Northwind Shop is on its way!
+
+Tracking number: PG482913706DE
+Expected delivery: Mon, 26 Oct 2026, between 10:00 and 14:00
+
+Track package: https://track.parcelgo.example/en/PG482913706DE?ref=3Demail&=
+lang=3Den
+
+Not home? Change delivery: https://track.parcelgo.example/en/PG482913706DE/=
+redirect
+
+--pg_6c4047395072c60cdd8c
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html lang=3D"en">
+<head>
+<meta charset=3D"utf-8">
+<title>Your parcel is on its way</title>
+</head>
+<body style=3D"margin:0;padding:0;background:#eceff1;font-family:Arial,Helv=
+etica,sans-serif;">
+
+<center>
+<table width=3D"640" cellpadding=3D"0" cellspacing=3D"0" border=3D"0" style=
+=3D"background:#ffffff;margin:20px auto;">
+<tr><td style=3D"background:#ffcc00;padding:18px 24px;color:#ffffff;font-si=
+ze:20px;font-weight:bold;letter-spacing:0.5px;">ParcelGo</td></tr>
+<tr><td style=3D"padding:28px 24px 12px 24px;font-size:14px;line-height:21p=
+x;color:#263238;">
+<p style=3D"font-size:18px;"><b>Your parcel from Northwind Shop is on its w=
+ay!</b></p>
+<table cellpadding=3D"6" cellspacing=3D"0" style=3D"font-size:14px;">
+<tr><td style=3D"color:#607d8b;">Tracking number</td><td><b>PG482913706DE</=
+b></td></tr>
+<tr><td style=3D"color:#607d8b;">Expected delivery</td><td>Mon, 26 Oct 2026=
+, 10:00&ndash;14:00</td></tr>
+</table>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#d40511" style=3D"border-radius:6px;">
+<a href=3D"https://track.parcelgo.example/en/PG482913706DE?ref=3Demail&amp;=
+lang=3Den" target=3D"_blank" style=3D"display:inline-block;padding:14px 32p=
+x;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:bold;co=
+lor:#ffffff;text-decoration:none;border-radius:6px;border:1px solid #d40511=
+;">Track package</a>
+</td>
+</tr>
+</table>
+<p>Not home? <a href=3D"https://track.parcelgo.example/en/PG482913706DE/red=
+irect" style=3D"color:#d40511;">Change delivery</a></p>
+</td></tr>
+<tr><td style=3D"padding:16px 24px 24px 24px;border-top:1px solid #cfd8dc;f=
+ont-size:11px;line-height:16px;color:#78909c;">
+ParcelGo GmbH &middot; Paketweg 1 &middot; 53113 Bonn &middot; <a href=3D"h=
+ttps://parcelgo.example/privacy" style=3D"color:#78909c;">Privacy</a>
+</td></tr>
+</table>
+</center>
+<img src=3D"https://t.parcelgo.example/o?c=3Db0902a0953116a2d712b50a63e3f92=
+ad" width=3D"1" height=3D"1" border=3D"0" alt=3D"" style=3D"height:1px !imp=
+ortant;width:1px !important;border-width:0 !important;margin-top:0 !importa=
+nt;margin-bottom:0 !important;padding:0 !important;">
+</body>
+</html>
+
+--pg_6c4047395072c60cdd8c--

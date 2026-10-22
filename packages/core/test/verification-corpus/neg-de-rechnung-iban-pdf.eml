@@ -1,0 +1,61 @@
+Return-Path: <bounces+fkbceeyidynz@mail.stadtwerke-beispiel.example>
+Received: from mx-1.mail.stadtwerke-beispiel.example (mx-1.mail.stadtwerke-beispiel.example [198.51.100.60])
+	by inbound-smtp.mx.tmp.example with SMTP id 63bb867cb56dff19b645aa8a32db9917
+	for <hem.s5d1@tmp.example>; Thu, 22 Oct 2026 05:00:00 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.stadtwerke-beispiel.example (Postfix) with ESMTP id UJ77WOHR0DQ
+	for <hem.s5d1@tmp.example>; Thu, 22 Oct 2026 05:00:00 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.stadtwerke-beispiel.example;
+	dkim=pass header.d=stadtwerke-beispiel.example;
+	dmarc=pass header.from=stadtwerke-beispiel.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=stadtwerke-beispiel.example;
+	s=s4; t=1792100238; h=from:to:subject:date:message-id:mime-version;
+	bh=kweK4R6Js26Xk6tqDNfgFMRu0mwx6G8q8GcW3Yl8bEm=;
+	b=iBLfRT4weLbYW4HhrqVFjjBxkyX3P0ySU8tu1MSNSt53BUyNfkEOk9VWEYI6TVH0
+	 kY5jAcKQe3CwM79ZsBD44TkBCbgiPtHPUipLlFx0ZEKxU7aKbufMeEp4BmfJgyhr
+	 yGOIFGcyD3xJJH5mBNorQuI36h5xf3l3trm6qDjptwqH==
+From: "Stadtwerke Beispielstadt" <rechnung@stadtwerke-beispiel.example>
+To: hem.s5d1@tmp.example
+Subject: =?UTF-8?Q?Ihre_Rechnung_RE-2026-104471?=
+Date: Thu, 22 Oct 2026 05:00:00 +0200
+Message-ID: <e498cd1d416a7a5d.Vyu6H7OAGE@stadtwerke-beispiel.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="------------202e868a109e4bc24af56a57"
+
+--------------202e868a109e4bc24af56a57
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Sehr geehrte Kundin, sehr geehrter Kunde,
+
+anbei erhalten Sie Ihre Rechnung für Oktober 2026.
+
+Kundennummer:     482913
+Rechnungsnummer:  RE-2026-104471
+Rechnungsbetrag:  89,90 EUR
+Fällig am:        05.11.2026
+
+Der Betrag wird per SEPA-Lastschrift von Ihrem Konto
+DE02 1203 0000 0000 2020 51 eingezogen. Gläubiger-ID: DE98ZZZ09999999999,
+Mandatsreferenz: MR-0048291.
+
+Mit freundlichen Grüßen
+Ihre Stadtwerke Beispielstadt
+
+Stadtwerke Beispielstadt GmbH · Werkstraße 1 · 12345 Beispielstadt
+
+--------------202e868a109e4bc24af56a57
+Content-Type: application/pdf; name="Rechnung_RE-2026-104471.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Rechnung_RE-2026-104471.pdf"
+
+JVBERi0xLjQKMSAwIG9iaiA8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4gZW5kb2Jq
+CjIgMCBvYmogPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4gZW5kb2Jq
+CjMgMCBvYmogPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA1OTUg
+ODQyXSAvQ29udGVudHMgNCAwIFIgPj4gZW5kb2JqCjQgMCBvYmogPDwgL0xlbmd0aCA0NCA+PiBz
+dHJlYW0KQlQgL0YxIDE4IFRmIDcyIDc2MCBUZCAoUmVjaG51bmcgUkUtMjAyNi0xMDQ0NzEpIFRq
+IEVUCmVuZHN0cmVhbSBlbmRvYmoKdHJhaWxlciA8PCAvUm9vdCAxIDAgUiA+PgolJUVPRgpPN210
+SWRMR0ZneHo4Rm5Pa1VyWkhDOVdzeU14QXBRRE1ZaFVQZGdwU0p5aHZHZ1kzOUVyT0p0dGZweVcx
+N0Rj
+--------------202e868a109e4bc24af56a57--

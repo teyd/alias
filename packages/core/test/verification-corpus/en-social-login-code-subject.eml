@@ -1,0 +1,135 @@
+Return-Path: <bounces+xczsvkbce31i@mail.chirpbook.example>
+Received: from mx-28.mail.chirpbook.example (mx-28.mail.chirpbook.example [198.51.100.14])
+	by inbound-smtp.mx.tmp.example with SMTP id d58d4e8585b376e7e7678d88c1f9fd93
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:41:07 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.chirpbook.example (Postfix) with ESMTP id CXKODSCQHC4
+	for <k7m2qx9pzr@tmp.example>; Thu, 22 Oct 2026 09:41:07 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.chirpbook.example;
+	dkim=pass header.d=chirpbook.example;
+	dmarc=pass header.from=chirpbook.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=chirpbook.example;
+	s=s1; t=1792100041; h=from:to:subject:date:message-id:mime-version;
+	bh=ubOSlQUgpKJrGG12ICPLVMYPF7gLREOTs6OTjcgAejw=;
+	b=XyznPL3ejXZCZz0JByrmSbXDw946SE1UUqvC1bUWDnkAnbdsOmPzav3oiqTBte1W
+	 2iqecdQYngW5CPb83NADbQuGBbq6tCn0MYCRBsfnbtJJMPD4B23CVK1RYyNYc65f
+	 FUsslqELKEg5gcZR57YvGM96JTxMNvF0QoElW6bx3YeM==
+From: "Chirpbook" <security@chirpbook.example>
+To: k7m2qx9pzr@tmp.example
+Subject: 482913 is your Chirpbook code
+Date: Thu, 22 Oct 2026 09:41:07 +0000
+Message-ID: <918aedc0523769a5.okLhGkcLqC@chirpbook.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----=_Part_88213_1427113045.1792662067811"
+
+------=_Part_88213_1427113045.1792662067811
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hi there,
+
+Someone tried to log in to your Chirpbook account. If this was you, enter
+this code to finish logging in:
+
+482913
+
+If this wasn't you, you can ignore this email. Your account is still safe.
+
+Thanks,
+The Chirpbook Security Team
+
+--
+Chirpbook, Inc., 1 Hacker Lane, Menlo Park, CA 94025
+=C2=A9 2026 Chirpbook. Unsubscribe: https://www.chirpbook.example/settings/=
+email?u=3D7712093&t=3DHYlG6wvvfbnHyE4ba6SfsGNb
+
+------=_Part_88213_1427113045.1792662067811
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"en">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Chirpbook</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f4f4f7;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">482913 is your Chirpbook code&#847;&zw=
+nj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;=
+&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f4f4f7">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://static.chirpbook.example/email/logo@2x.png" width=3D"12=
+0" height=3D"32" alt=3D"Chirpbook" style=3D"display:block;width:120px;heigh=
+t:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<p style=3D"margin:0 0 16px 0;">Hi there,</p>
+<p style=3D"margin:0 0 16px 0;">Someone tried to log in to your Chirpbook a=
+ccount. If this was you, enter this code to finish logging in:</p>
+<p style=3D"margin:24px 0;text-align:center;"><span style=3D"display:inline=
+-block;padding:12px 24px;background:#e8f0fe;border-radius:6px;font-size:32p=
+x;font-weight:700;letter-spacing:6px;color:#1a73e8;">482913</span></p>
+<p style=3D"margin:0 0 16px 0;">If this wasn&#39;t you, you can ignore this=
+ email. Your account is still safe.</p>
+<p style=3D"margin:0;">Thanks,<br />The Chirpbook Security Team</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Chirpbook, Inc., 1 Hacker Lane, Menlo Park, CA 94025<br />&copy; 2026 Chirp=
+book<br /><br /><a href=3D"https://www.chirpbook.example/settings/email?u=
+=3D7712093&amp;t=3DHYlG6wvvfbnHyE4ba6SfsGNb" style=3D"color:#8c8c8c;text-de=
+coration:underline;">Unsubscribe</a> &nbsp;&middot;&nbsp; <a href=3D"https:=
+//www.chirpbook.example/privacy" style=3D"color:#8c8c8c;text-decoration:und=
+erline;">Privacy</a> &nbsp;&middot;&nbsp; <a href=3D"https://help.chirpbook=
+.example/" style=3D"color:#8c8c8c;text-decoration:underline;">Help Center</=
+a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<img src=3D"https://t.chirpbook.example/o/FiHJkQhN8pr-FLtIXkSS66WZoMrzCZlIG=
+_VnUEpuRu-MBW3qgzU_Ct019ZR_xiLRjO27m9fGHdH69tpoVXbV2fuNtcwGl1PLWbR9-mn_r23s=
+tvK-9bDBQwZZ" width=3D"1" height=3D"1" border=3D"0" alt=3D"" style=3D"heigh=
+t:1px !important;width:1px !important;border-width:0 !important;margin-top:=
+0 !important;margin-bottom:0 !important;padding:0 !important;">
+</body>
+</html>
+
+------=_Part_88213_1427113045.1792662067811--

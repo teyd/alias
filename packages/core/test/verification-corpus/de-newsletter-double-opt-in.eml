@@ -1,0 +1,141 @@
+Return-Path: <bounces+7rrrgg83f0ix@mail.gartenfreunde.example>
+Received: from mx-24.mail.gartenfreunde.example (mx-24.mail.gartenfreunde.example [198.51.100.125])
+	by inbound-smtp.mx.tmp.example with SMTP id f80b453cf0e418bc39e17b88e881f131
+	for <gruenzeug.w4@tmp.example>; Thu, 22 Oct 2026 18:00:12 +0200
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.gartenfreunde.example (Postfix) with ESMTP id IWJ2YJQFNIK
+	for <gruenzeug.w4@tmp.example>; Thu, 22 Oct 2026 18:00:12 +0200
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.gartenfreunde.example;
+	dkim=pass header.d=gartenfreunde.example;
+	dmarc=pass header.from=gartenfreunde.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gartenfreunde.example;
+	s=s4; t=1792100056; h=from:to:subject:date:message-id:mime-version;
+	bh=u9bLnQHgirhLgMp2tAHTtTeBZSHvzElXXTtQ3iBFw5I=;
+	b=Pr1iZs9DKBhJswapb9xxjQkM3WdsaPD5oadejZQdFfQ84frNbVRxK1WgtUGv9mQ0
+	 8zEWTUnor5bUZza4NIe19pHN1lLlABXY4btpkgvXRwlDUHuF37Czg9wAPtTp1w7B
+	 ugizXDByRu9DAoaE2HUrzCsWbj3AHQMbY6ge7TCtncAx==
+From: "Gartenfreunde Versand" <newsletter@gartenfreunde.example>
+To: gruenzeug.w4@tmp.example
+Subject: =?UTF-8?Q?Bitte_best=C3=A4tigen_Sie_Ihre_Newsletter-Anmeldung?=
+Date: Thu, 22 Oct 2026 18:00:12 +0200
+Message-ID: <2355a3175c27801c.3TP8XuyFxb@gartenfreunde.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----=_Part_37082a209321"
+
+------=_Part_37082a209321
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Fast geschafft!
+
+Bitte best=C3=A4tigen Sie Ihre Anmeldung zu unserem Newsletter, indem Sie a=
+uf den
+folgenden Link klicken:
+
+https://newsletter.gartenfreunde.example/optin/confirm?l=3D7&s=3D574de74471=
+7cb3353291fb5f7e3501a7344933b5&h=3DiUiBvPoC9BAP
+
+Als Dankesch=C3=B6n erhalten Sie nach der Best=C3=A4tigung 10 % Rabatt auf =
+Ihre
+n=C3=A4chste Bestellung.
+
+Falls Sie sich nicht angemeldet haben, ignorieren Sie diese E-Mail einfach.
+
+Gartenfreunde Versand GmbH =C2=B7 Am Beet 3 =C2=B7 49074 Osnabr=C3=BCck
+Datenschutz: https://www.gartenfreunde.example/datenschutz
+
+------=_Part_37082a209321
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.=
+w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns=3D"http://www.w3.org/1999/xhtml" lang=3D"de">
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DUTF-8" />
+<meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D1.=
+0" />
+<meta name=3D"x-apple-disable-message-reformatting" />
+<title>Anmeldung best=C3=A4tigen</title>
+<style type=3D"text/css">
+body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:=
+100%;}
+table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt=
+;}
+img{border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicub=
+ic;}
+@media only screen and (max-width:620px){.container{width:100% !important;}=
+.px{padding-left:20px !important;padding-right:20px !important;}}
+</style>
+</head>
+<body style=3D"margin:0;padding:0;background-color:#f1f8e9;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Nur noch ein Klick bis zu Ihrem Gutsch=
+ein&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;=
+&#847;&zwnj;&nbsp;</span>
+<table role=3D"presentation" width=3D"100%" border=3D"0" cellpadding=3D"0" =
+cellspacing=3D"0" bgcolor=3D"#f1f8e9">
+<tr>
+<td align=3D"center" style=3D"padding:32px 12px;">
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;b=
+ackground-color:#ffffff;border-radius:8px;">
+<tr>
+<td align=3D"left" class=3D"px" style=3D"padding:32px 48px 8px 48px;">
+<img src=3D"https://www.gartenfreunde.example/media/mail/logo.png" width=3D=
+"120" height=3D"32" alt=3D"Gartenfreunde" style=3D"display:block;width:120p=
+x;height:32px;" />
+</td>
+</tr>
+<tr>
+<td class=3D"px" style=3D"padding:16px 48px 32px 48px;font-family:-apple-sy=
+stem,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15p=
+x;line-height:24px;color:#3c4043;">
+<h1 style=3D"font-size:24px;color:#2e7d32;margin:0 0 16px 0;">Fast geschaff=
+t!</h1>
+<p style=3D"margin:0 0 8px 0;">Bitte best&auml;tigen Sie Ihre Anmeldung zu =
+unserem Newsletter, indem Sie auf den folgenden Button klicken:</p>
+<table role=3D"presentation" border=3D"0" cellpadding=3D"0" cellspacing=3D"=
+0" style=3D"margin:28px auto;">
+<tr>
+<td align=3D"center" bgcolor=3D"#4caf50" style=3D"border-radius:6px;">
+<a href=3D"https://newsletter.gartenfreunde.example/optin/confirm?l=3D7&amp=
+;s=3D574de744717cb3353291fb5f7e3501a7344933b5&amp;h=3DiUiBvPoC9BAP" target=
+=3D"_blank" style=3D"display:inline-block;padding:14px 32px;font-family:Hel=
+vetica,Arial,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-=
+decoration:none;border-radius:6px;border:1px solid #4caf50;">Anmeldung best=
+=C3=A4tigen</a>
+</td>
+</tr>
+</table>
+<p style=3D"margin:0 0 16px 0;">Als Dankesch&ouml;n erhalten Sie nach der B=
+est&auml;tigung 10&nbsp;% Rabatt auf Ihre n&auml;chste Bestellung.</p>
+<p style=3D"margin:0;font-size:13px;color:#777;">Falls Sie sich nicht angem=
+eldet haben, ignorieren Sie diese E-Mail einfach.</p>
+</td>
+</tr>
+</table>
+<table role=3D"presentation" class=3D"container" width=3D"600" border=3D"0"=
+ cellpadding=3D"0" cellspacing=3D"0" style=3D"width:600px;max-width:600px;"=
+>
+<tr>
+<td align=3D"center" style=3D"padding:24px 48px;font-family:Helvetica,Arial=
+,sans-serif;font-size:12px;line-height:18px;color:#8c8c8c;">
+Gartenfreunde Versand GmbH &middot; Am Beet 3 &middot; 49074 Osnabr&uuml;ck=
+<br><a href=3D"https://www.gartenfreunde.example/datenschutz" style=3D"colo=
+r:#8c8c8c;text-decoration:underline;">Datenschutz</a> &nbsp;&middot;&nbsp; =
+<a href=3D"https://www.gartenfreunde.example/impressum" style=3D"color:#8c8=
+c8c;text-decoration:underline;">Impressum</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+
+</body>
+</html>
+
+------=_Part_37082a209321--

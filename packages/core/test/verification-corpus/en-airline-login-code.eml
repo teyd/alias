@@ -1,0 +1,89 @@
+Return-Path: <bounces+tubfwcwwpidv@mail.skyward-air.example>
+Received: from mx-33.mail.skyward-air.example (mx-33.mail.skyward-air.example [198.51.100.94])
+	by inbound-smtp.mx.tmp.example with SMTP id 027e1dc3062aafeaf411380588ab1b29
+	for <traveller.88q@tmp.example>; Thu, 22 Oct 2026 05:55:40 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.skyward-air.example (Postfix) with ESMTP id 5RUKXCHHQ4E
+	for <traveller.88q@tmp.example>; Thu, 22 Oct 2026 05:55:40 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.skyward-air.example;
+	dkim=pass header.d=skyward-air.example;
+	dmarc=pass header.from=skyward-air.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=skyward-air.example;
+	s=s6; t=1792100081; h=from:to:subject:date:message-id:mime-version;
+	bh=nmsgvkEyYdtLbLx0zkXxfw5zAPsKMTmg8VSYLnXRC2X=;
+	b=FcE3ArULEWxwyyXkkL3yuBUDmP5mvQghF3yAVH5TDyTt6vvMjTixrf1sSytVCXU6
+	 wATU0cLEhdUfsdPiJ6qpdolsgOiQtTrRhF8F4SVLxczNND3LPxtmHHgpE8izl9hC
+	 4JdUti3M8pxCZSoptkBZGfojEFIsBXr6ahxCEjSb1aB4==
+From: "Skyward Air SkyClub" <skyclub@skyward-air.example>
+To: traveller.88q@tmp.example
+Subject: Your SkyClub login code
+Date: Thu, 22 Oct 2026 05:55:40 +0000
+Message-ID: <3cac147edd59c4aa.wAmA4aiDcu@skyward-air.example>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="=_sky_48e18d594e"
+
+--=_sky_48e18d594e
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+SKYWARD AIR =C2=B7 SKYCLUB
+
+Hello Jordan,
+
+Use the code below to log in to your SkyClub account (member no. ****7781).
+
+Login code: 662041
+
+The code is valid for 15 minutes.
+
+Your next trip: SA 2291 Frankfurt (FRA) - Lisbon (LIS), 29 Oct 2026, 07:35.
+Check in opens 30 hours before departure.
+
+Skyward Air, Airport Road 12, 60549 Frankfurt am Main
+
+--=_sky_48e18d594e
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta charset=3D"utf-8"></head><body style=3D"margin:0;backgrou=
+nd:#e9eef5;">
+<table width=3D"100%" bgcolor=3D"#e9eef5" cellpadding=3D"0" cellspacing=3D"=
+0"><tr><td align=3D"center" style=3D"padding:24px 0;">
+<table width=3D"600" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgroun=
+d:#ffffff;font-family:'Trebuchet MS',Arial,sans-serif;color:#0a2240;">
+<tr><td style=3D"background:#0a2240;padding:20px 30px;"><img src=3D"https:/=
+/media.skyward-air.example/mail/skyclub-logo.png" alt=3D"Skyward Air SkyClu=
+b" width=3D"200" height=3D"36" style=3D"display:block;"></td></tr>
+<tr><td style=3D"padding:30px;">
+<p style=3D"font-size:16px;margin:0 0 16px 0;">Hello Jordan,</p>
+<p style=3D"font-size:16px;margin:0 0 16px 0;">Use the code below to log in=
+ to your SkyClub account (member no. ****7781).</p>
+<table cellpadding=3D"0" cellspacing=3D"0" style=3D"margin:0 auto 16px auto=
+;"><tr><td style=3D"border:2px dashed #0a2240;padding:14px 30px;">
+<span style=3D"font-size:13px;text-transform:uppercase;color:#5a6b80;">Logi=
+n code</span><br>
+<h1 style=3D"margin:4px 0 0 0;font-size:34px;letter-spacing:5px;">662041</h=
+1></td></tr></table>
+<p style=3D"font-size:14px;color:#5a6b80;text-align:center;margin:0 0 30px =
+0;">The code is valid for 15 minutes.</p>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgrou=
+nd:#f3f6fa;"><tr><td style=3D"padding:16px;font-size:14px;">
+<b>Your next trip</b><br>SA&nbsp;2291 &middot; Frankfurt (FRA) &rarr; Lisbo=
+n (LIS)<br>29 Oct 2026, 07:35<br>
+<a href=3D"https://www.skyward-air.example/manage-booking?src=3Dotp_mail" s=
+tyle=3D"color:#c8102e;">Manage booking</a></td></tr></table>
+</td></tr>
+<tr><td style=3D"padding:20px 30px;font-size:11px;color:#7d8b9c;">Skyward A=
+ir, Airport Road 12, 60549 Frankfurt am Main &middot; <a href=3D"https://ww=
+w.skyward-air.example/privacy" style=3D"color:#7d8b9c;">Privacy</a> &middot=
+; <a href=3D"https://www.skyward-air.example/imprint" style=3D"color:#7d8b9=
+c;">Imprint</a></td></tr>
+</table></td></tr></table>
+<img src=3D"https://e.skyward-air.example/open.aspx?ffcb10-e271d97d698767a4=
+7a-c837d1dc-45d56062" width=3D"1" height=3D"1" border=3D"0" alt=3D"" style=
+=3D"height:1px !important;width:1px !important;border-width:0 !important;ma=
+rgin-top:0 !important;margin-bottom:0 !important;padding:0 !important;">
+</body></html>
+
+--=_sky_48e18d594e--

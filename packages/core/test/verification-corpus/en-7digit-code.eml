@@ -1,0 +1,72 @@
+Return-Path: <bounces+vb85r9ni5srn@mail.rides.zoomcab.example>
+Received: from mx-24.mail.rides.zoomcab.example (mx-24.mail.rides.zoomcab.example [198.51.100.44])
+	by inbound-smtp.mx.tmp.example with SMTP id 16e00eeae656d3fdfb0aaa98a1f5db2c
+	for <rider.q9z3@tmp.example>; Thu, 22 Oct 2026 19:58:12 +0000
+Received: from localhost (localhost [127.0.0.1])
+	by mx-out.mail.rides.zoomcab.example (Postfix) with ESMTP id FGNCWSNZAGJ
+	for <rider.q9z3@tmp.example>; Thu, 22 Oct 2026 19:58:12 +0000
+Authentication-Results: mx.tmp.example;
+	spf=pass smtp.mailfrom=mail.rides.zoomcab.example;
+	dkim=pass header.d=rides.zoomcab.example;
+	dmarc=pass header.from=rides.zoomcab.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=rides.zoomcab.example;
+	s=s9; t=1792100176; h=from:to:subject:date:message-id:mime-version;
+	bh=63kjtFRBPYP8OiAxW7xAniehw7Zwgeb0JVeyPaoS2cy=;
+	b=114YnBg2ZuzCfh0USWAiu0jLzn423wQVRTaP8LuW39DRRVPjqsaWdfNTglsyXVt6
+	 3zFtGVyOldnxRBVstQKw8ng9yYgxbOfawqB80qJqjUGWggiKg3ui6yLNAdEyB6id
+	 HSZB0eexBxgR44cQKPMGzaYUSfzzJHQeAc3YySpmsWaY==
+From: "Zoomcab" <noreply@rides.zoomcab.example>
+To: rider.q9z3@tmp.example
+Subject: Your Zoomcab verification code
+Date: Thu, 22 Oct 2026 19:58:12 +0000
+Message-ID: <391a1f96a9477dc6.dMrLJFeGCg@rides.zoomcab.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><meta name=3D"viewport" content=3D"width=3Ddevice-width,initial=
+-scale=3D1"></head>
+<body style=3D"background:#f6f6f6;margin:0;">
+<span class=3D"preheader" style=3D"display:none !important;visibility:hidde=
+n;mso-hide:all;font-size:1px;line-height:1px;color:#ffffff;max-height:0;max=
+-width:0;opacity:0;overflow:hidden;">Your verification code is 6038417.&#84=
+7;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&=
+zwnj;&nbsp;</span>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center" style=3D"padding:24px 8px;">
+<table width=3D"560" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgroun=
+d:#000000;color:#ffffff;font-family:'Helvetica Neue',Helvetica,Arial,sans-s=
+erif;">
+<tr><td style=3D"padding:28px 32px;font-size:28px;font-weight:500;">Zoomcab=
+</td></tr></table>
+<table width=3D"560" cellpadding=3D"0" cellspacing=3D"0" style=3D"backgroun=
+d:#ffffff;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#00=
+0000;">
+<tr><td style=3D"padding:32px;">
+<p style=3D"font-size:24px;line-height:32px;margin:0 0 24px 0;">Your verifi=
+cation code</p>
+<p style=3D"font-size:16px;margin:0 0 8px 0;">Enter this code in the Zoomca=
+b app to verify your email address:</p>
+<p style=3D"font-size:40px;line-height:48px;font-weight:bold;margin:0 0 24p=
+x 0;font-family:'Courier New',monospace;">6038417</p>
+<p style=3D"font-size:14px;color:#545454;margin:0 0 24px 0;">For your safet=
+y, never share this code with your driver. Drivers will only ever ask for y=
+our trip PIN.</p>
+<table cellpadding=3D"0" cellspacing=3D"0" style=3D"background:#eeeeee;widt=
+h:100%;"><tr><td style=3D"padding:16px;font-size:14px;">Get $5 off your nex=
+t 3 rides with Zoomcab One. <a href=3D"https://rides.zoomcab.example/one?re=
+f=3Demail_otp" style=3D"color:#000000;">Learn more</a></td></tr></table>
+</td></tr>
+<tr><td style=3D"padding:16px 32px 32px 32px;font-size:12px;color:#757575;"=
+>Zoomcab B.V., Vijzelstraat 68, 1017 HL Amsterdam &middot; <a href=3D"https=
+://rides.zoomcab.example/legal/privacy" style=3D"color:#757575;">Privacy</a=
+> &middot; <a href=3D"https://help.zoomcab.example/" style=3D"color:#757575=
+;">Help</a></td></tr>
+</table></td></tr></table>
+<img src=3D"https://email.zoomcab.example/o/eJwIDb9A_Jum47nB__eyXpQQWRucBNZ=
+m02mHHUwWtEkX_L4IZ_6rD9euMbomjNvF1TIjB_dywQKwzHmf3r4cQWvGR_9GBq1JCFhs4bsFZP=
+451aTeovGQmcB3Q2xE_hwABVfc5MIyfPADi91KPCBO5N79Yh_Ox7EEvDR" width=3D"1" heig=
+ht=3D"1" border=3D"0" alt=3D"" style=3D"height:1px !important;width:1px !im=
+portant;border-width:0 !important;margin-top:0 !important;margin-bottom:0 !=
+important;padding:0 !important;">
+</body></html>

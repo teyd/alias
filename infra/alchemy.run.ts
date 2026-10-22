@@ -37,7 +37,37 @@ const receiptRuleName = "all-verified";
 const webhookQueueName = `alias-webhooks-${stage}`;
 /** Fixed names, so the alarms and the topic policy can name each other as plain strings. */
 const alertTopicName = `alias-alerts-${stage}`;
-const alarmPrefix = `alias-${stage}-ses-`;
+const alarmPrefix = `alias-${stage}-`;
+/**
+ * Async invocations (SES → inbound, SNS → feedback) that Lambda gave up on, after their retries
+ * or after `maximumEventAge` of throttling (PLAN.md §20.29). Kept 14 days for a redrive.
+ */
+const asyncFailuresQueueName = `alias-async-failures-${stage}`;
+
+/**
+ * Reserved concurrency per function (PLAN.md §20.29). Each number both guarantees the function
+ * that many concurrent executions and caps it there, so a flood on a public URL (the API, the
+ * image proxy) can't take the executions SES-invoked mail processing needs, and SES's events are
+ * never throttled by someone else's traffic. Reserving costs nothing; only use is billed.
+ *
+ * Together 352. Lambda keeps at least 100 unreserved, so the account's concurrency quota must be
+ * at least 452: ask for 1,000 (Service Quotas, Lambda "Concurrent executions", L-B99A9384) before
+ * the first deploy, since new accounts may start with as few as 10.
+ */
+const reservedConcurrency = {
+  /** SES mail: ~1 s each, so 100 handle bursts of ~100 messages a second. */
+  inbound: 100,
+  /** One SNS notification per bounce or complaint. */
+  feedback: 10,
+  /** Webhook deliveries; the event source mapping scales up to this. */
+  webhookDelivery: 20,
+  /** Uncached image fetches; budgets per owner and host share them (`Proxy.Budgets`). */
+  imageProxy: 20,
+  /** Every request of the web app, CLI, SDK and MCP clients; a cap more than a reservation. */
+  api: 200,
+  /** One run every ten minutes. */
+  verifyDomains: 2,
+} as const;
 /**
  * Who gets the SES reputation alarms (PLAN.md §20.13). Optional: without it the topic and alarms
  * still exist (alarm state and history show in CloudWatch), but nobody is mailed. SNS sends a
@@ -204,7 +234,9 @@ export default Alchemy.Stack(
           ID: "expire-inbound",
           Status: "Enabled",
           Filter: { Prefix: spoolPrefix },
-          Expiration: { Days: 1 },
+          // Lambda may retry an event for 6 hours, and one it gave up on waits in the async
+          // failures queue for a redrive (PLAN.md §20.29), which needs the message still here.
+          Expiration: { Days: 3 },
         },
       ],
       policy: [
@@ -298,6 +330,29 @@ export default Alchemy.Stack(
       Resource: webhookQueueArn,
     };
 
+    // Where Lambda puts async events (SES mail, SNS feedback) it gave up on, so they aren't lost
+    // silently (PLAN.md §20.29). An alarm fires on the first one.
+    const asyncFailures = yield* AWS.SQS.Queue("AsyncFailures", {
+      queueName: asyncFailuresQueueName,
+      messageRetentionPeriod: Duration.days(14),
+      sqsManagedSseEnabled: true,
+    });
+    /** Lambda sends an on-failure record with the function's own role. */
+    const sendAsyncFailures = {
+      Effect: "Allow" as const,
+      Action: ["sqs:SendMessage"],
+      Resource: `arn:aws:sqs:eu-west-1:${accountId}:${asyncFailuresQueueName}`,
+    };
+    /**
+     * Lambda's async retries: two after a function error, and throttled events kept for the
+     * longest age it allows (6 hours), then recorded in the async failures queue.
+     */
+    const asyncInvokes = {
+      maximumRetryAttempts: 2,
+      maximumEventAge: "6 hours",
+      destinationConfig: { OnFailure: { Destination: asyncFailures.queueArn } },
+    } as const;
+
     const api = yield* AWS.Lambda.Function("Api", {
       main: new URL("../apps/api/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -307,6 +362,7 @@ export default Alchemy.Stack(
       // is resumable, but each retry costs the user a passkey prompt.
       timeout: Duration.seconds(30),
       logging,
+      reservedConcurrentExecutions: reservedConcurrency.api,
       functionUrl: true,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
@@ -412,10 +468,10 @@ export default Alchemy.Stack(
     });
 
     // The image proxy (`apps/image-proxy`, PLAN.md §20.19): its own function and role, because it
-    // fetches URLs that come from mail. The role can read its keys and nothing else: no table, no
-    // spool, no SES. Reserved concurrency caps what a flood of uncached proxy URLs can cost.
-    // The function URL takes only CloudFront's signed requests (OAC with `AWS_IAM`), so every
-    // request goes through the cache.
+    // fetches URLs that come from mail. The role can read its keys and its own fetch budgets
+    // (§20.29) and nothing else: no other item of the table, no spool, no SES. Reserved
+    // concurrency caps what a flood of uncached proxy URLs can cost. The function URL takes only
+    // CloudFront's signed requests (OAC with `AWS_IAM`), so every request goes through the cache.
     const imageProxy = yield* AWS.Lambda.Function("ImageProxy", {
       main: new URL("../apps/image-proxy/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -424,13 +480,28 @@ export default Alchemy.Stack(
       logging,
       // The fetch has a 5 s deadline (`Proxy.limits`).
       timeout: Duration.seconds(10),
-      reservedConcurrentExecutions: 10,
+      reservedConcurrentExecutions: reservedConcurrency.imageProxy,
       functionUrl: { authType: "AWS_IAM" },
-      env: { ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter },
+      env: {
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
+        ALIAS_TABLE_NAME: table.tableName,
+      },
     });
     yield* imageProxy.bind("ImageProxyKeys", {
       policyStatements: [
         { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: imageProxyKeysParameterArn },
+      ],
+    });
+    // Budgets and down origins (`ProxyRepo`): single-item reads and writes, and only of items
+    // whose partition key starts with `PROXY#` (the DynamoDB IAM docs' fine-grained access).
+    yield* imageProxy.bind("ProxyBudgets", {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+          Resource: [tableArn],
+          Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["PROXY#*"] } },
+        },
       ],
     });
     const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxy", {
@@ -493,8 +564,10 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(60),
       logging,
       functionUrl: false,
-      // Lambda's defaults, spelled out: the pipeline's claims make retries safe (PLAN.md §20.6).
-      eventInvokeConfig: { maximumRetryAttempts: 2, maximumEventAge: "6 hours" },
+      reservedConcurrentExecutions: reservedConcurrency.inbound,
+      // The pipeline's claims make retries safe (PLAN.md §20.6); what Lambda gives up on is
+      // recorded, not dropped (§20.29).
+      eventInvokeConfig: asyncInvokes,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_SPOOL_BUCKET: spool.bucketName,
@@ -550,6 +623,7 @@ export default Alchemy.Stack(
       policyStatements: [sendFromAliasDomains, ...denySendFromTempDomains],
     });
     yield* inbound.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
+    yield* inbound.bind("AsyncFailures", { policyStatements: [sendAsyncFailures] });
     // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
     // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of
     // this account use it through Parameter Store, and which takes no access policies of ours
@@ -612,8 +686,12 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(30),
       logging,
       functionUrl: false,
+      reservedConcurrentExecutions: reservedConcurrency.feedback,
+      // SNS invokes it asynchronously; marking a recipient twice is harmless.
+      eventInvokeConfig: asyncInvokes,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
     });
+    yield* feedback.bind("AsyncFailures", { policyStatements: [sendAsyncFailures] });
     // Marks recipients (one UpdateItem each), suppresses addresses, and tells the user's webhooks
     // (one Query for their endpoints, then SendMessage), nothing else.
     yield* feedback.bind("Feedback", {
@@ -648,6 +726,7 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(120),
+      reservedConcurrentExecutions: reservedConcurrency.verifyDomains,
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_DOH_URL: dohUrl },
     });
@@ -699,7 +778,7 @@ export default Alchemy.Stack(
           Version: "2012-10-17",
           Statement: [
             {
-              Sid: "AllowReputationAlarms",
+              Sid: "AllowStackAlarms",
               Effect: "Allow",
               Principal: { Service: "cloudwatch.amazonaws.com" },
               Action: "SNS:Publish",
@@ -730,7 +809,7 @@ export default Alchemy.Stack(
     ] as const;
     yield* Effect.forEach(reputationAlarms, (alarm) =>
       AWS.CloudWatch.Alarm(`Ses-${alarm.name}`, {
-        name: `${alarmPrefix}${alarm.name}`,
+        name: `${alarmPrefix}ses-${alarm.name}`,
         AlarmDescription: `SES ${alarm.metric} >= ${alarm.threshold * 100}%. Runbook: PLAN.md §20.13.`,
         Namespace: "AWS/SES",
         MetricName: alarm.metric,
@@ -760,6 +839,7 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(30),
+      reservedConcurrentExecutions: reservedConcurrency.webhookDelivery,
       functionUrl: false,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
@@ -794,7 +874,84 @@ export default Alchemy.Stack(
       eventSourceArn: webhookQueue.queueArn,
       batchSize: 10,
       functionResponseTypes: ["ReportBatchItemFailures"],
+      // No more pollers than the function may run, so batches aren't throttled and returned.
+      scalingConfig: { MaximumConcurrency: reservedConcurrency.webhookDelivery },
     });
+
+    // Capacity alarms (PLAN.md §20.29), on the same topic as the SES alarms. Inbound and feedback
+    // must never be throttled: their events wait, and are lost to the failures queue after six
+    // hours. A throttled API or image proxy means a flood reached its cap, which is the cap
+    // working, so those alarm only on a sustained count.
+    const capacityAlarms = [
+      {
+        name: "inbound-throttled",
+        what: "The inbound Lambda was throttled: SES mail is waiting.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: inbound.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 1,
+      },
+      {
+        name: "inbound-backlog",
+        what: "Mail waited more than 10 minutes for the inbound Lambda.",
+        Namespace: "AWS/Lambda",
+        MetricName: "AsyncEventAge",
+        Dimensions: [{ Name: "FunctionName", Value: inbound.functionName }],
+        Statistic: "Maximum" as const,
+        Threshold: 600_000,
+      },
+      {
+        name: "feedback-throttled",
+        what: "The feedback Lambda was throttled: bounces and complaints are waiting.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: feedback.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 1,
+      },
+      {
+        name: "async-failures",
+        what: "Lambda gave up on an SES or SNS event; it is in the async failures queue.",
+        Namespace: "AWS/SQS",
+        MetricName: "ApproximateNumberOfMessagesVisible",
+        Dimensions: [{ Name: "QueueName", Value: asyncFailuresQueueName }],
+        Statistic: "Maximum" as const,
+        Threshold: 1,
+      },
+      {
+        name: "api-throttled",
+        what: "The API reached its reserved concurrency for 5 minutes.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: api.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 100,
+      },
+      {
+        name: "image-proxy-throttled",
+        what: "The image proxy reached its reserved concurrency for 5 minutes.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: imageProxy.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 100,
+      },
+    ];
+    yield* Effect.forEach(capacityAlarms, ({ name, what, ...metric }) =>
+      AWS.CloudWatch.Alarm(`Capacity-${name}`, {
+        ...metric,
+        name: `${alarmPrefix}${name}`,
+        AlarmDescription: `${what} Runbook: PLAN.md §20.29.`,
+        Period: 300,
+        EvaluationPeriods: 1,
+        ComparisonOperator: "GreaterThanOrEqualToThreshold",
+        // No invocations, no datapoint: nothing is wrong.
+        TreatMissingData: "notBreaching",
+        AlarmActions: [alertTopic.topicArn],
+        OKActions: [alertTopic.topicArn],
+      }),
+    );
 
     return {
       apiUrl: api.functionUrl,
@@ -806,6 +963,7 @@ export default Alchemy.Stack(
       webhookDeliveryFunction: delivery.functionName,
       imageProxyUrl: Output.interpolate`https://${images.domainName}`,
       verifyDomainsFunction: verifyDomains.functionName,
+      asyncFailuresQueue: asyncFailures.queueUrl,
     };
   }),
 );

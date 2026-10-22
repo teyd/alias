@@ -185,6 +185,9 @@ catalogs:
     '@mpsuesser/oxlint-plugin-effect':
       specifier: 0.6.0
       version: 0.6.0
+    '@seriousme/openapi-schema-validator':
+      specifier: 2.11.0
+      version: 2.11.0
     '@simplewebauthn/browser':
       specifier: 14.0.0
       version: 14.0.0
@@ -345,6 +348,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.5)
+      '@seriousme/openapi-schema-validator':
+        specifier: 'catalog:'
+        version: 2.11.0
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
@@ -777,6 +783,31 @@ importers:
         specifier: 'catalog:'
         version: 4.0.5
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(vitest@5.0.5)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.3.0(@types/node@24.19.2)(@vitest/ui@5.0.5)(jiti@2.7.0)(playwright@1.64.1)(typescript@7.0.2)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@24.19.2)(@vitest/browser-preview@5.0.5)(@vitest/ui@5.0.5)(@voidzero-dev/vite-plus-core@1.3.0(@types/node@24.19.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)
+
+  packages/sdk:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.5
+    devDependencies:
+      '@alias/api':
+        specifier: workspace:*
+        version: link:../../apps/api
+      '@alias/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.5)
@@ -2493,6 +2524,10 @@ packages:
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
 
+  '@seriousme/openapi-schema-validator@2.11.0':
+    resolution: {integrity: sha512-DL8TjmjkUS76OaK/TinoRtf6PrirsWfMZiv62ifP9eq3UOpoLqSGZKpCErxMzz0i1pjECSPYY+qZ1SRYEgiEvg==}
+    hasBin: true
+
   '@shadcn/registry@0.2.0':
     resolution: {integrity: sha512-m3TeqU/+av2kgOLfESHkWzsmhuQuY4NXZd5Y1Rd4lzy4IX3JJ5+k2mYfkq6OT8oMuk2W4GQPAkO7+CC7KlpSbw==}
     engines: {node: '>=20.18.1'}
@@ -3107,6 +3142,14 @@ packages:
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
+
+  ajv-draft-04@1.0.0:
+    resolution: {integrity: sha512-mv00Te6nmYbRp5DCwclxtt7yV/joXJPGS7nM+97GdxvuttCOfgI3K4U25zboyeX0O+myI8ERluxQe5wljMmVIw==}
+    peerDependencies:
+      ajv: ^8.5.0
+    peerDependenciesMeta:
+      ajv:
+        optional: true
 
   ajv-formats@2.1.1:
     resolution: {integrity: sha512-Wx0Kx52hxE7C18hkMEggYlEifqWZtYaRgouJor+WMdPnQyEK13vgEWyVNup7SoeeoLMsr4kf5h6dOW11I15MUA==}
@@ -6294,6 +6337,13 @@ snapshots:
 
   '@sec-ant/readable-stream@0.4.1': {}
 
+  '@seriousme/openapi-schema-validator@2.11.0':
+    dependencies:
+      ajv: 8.20.0
+      ajv-draft-04: 1.0.0(ajv@8.20.0)
+      ajv-formats: 3.0.1
+      yaml: 2.9.1
+
   '@shadcn/registry@0.2.0':
     dependencies:
       '@babel/core': 7.29.7
@@ -6856,6 +6906,10 @@ snapshots:
     dependencies:
       mime-types: 3.0.2
       negotiator: 1.1.0
+
+  ajv-draft-04@1.0.0(ajv@8.20.0):
+    optionalDependencies:
+      ajv: 8.20.0
 
   ajv-formats@2.1.1:
     dependencies:

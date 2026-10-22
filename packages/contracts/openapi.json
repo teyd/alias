@@ -1,0 +1,5649 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Alias API",
+    "version": "1",
+    "description": "Open-source email aliases. Authenticate with the browser session cookie or a personal API token (`Authorization: Bearer alias_pat_…`) that holds the scope an operation names.",
+    "license": {
+      "name": "AGPL-3.0-only",
+      "url": "https://www.gnu.org/licenses/agpl-3.0.html"
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "system.health",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "summary": "Health check"
+      }
+    },
+    "/v1/auth/register/options": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth.registerOptions",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "challengeId": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "type": "object",
+                      "properties": {
+                        "rp": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "displayName"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "challenge": {
+                          "type": "string"
+                        },
+                        "pubKeyCredParams": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "alg": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "Infinity",
+                                      "-Infinity",
+                                      "NaN"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "public-key"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "alg",
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "timeout": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "Infinity",
+                                "-Infinity",
+                                "NaN"
+                              ]
+                            }
+                          ]
+                        },
+                        "excludeCredentials": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "transports": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "authenticatorSelection": {
+                          "type": "object",
+                          "properties": {
+                            "authenticatorAttachment": {
+                              "type": "string",
+                              "enum": [
+                                "platform",
+                                "cross-platform"
+                              ]
+                            },
+                            "residentKey": {
+                              "type": "string",
+                              "enum": [
+                                "required",
+                                "preferred",
+                                "discouraged"
+                              ]
+                            },
+                            "requireResidentKey": {
+                              "type": "boolean"
+                            },
+                            "userVerification": {
+                              "type": "string",
+                              "enum": [
+                                "required",
+                                "preferred",
+                                "discouraged"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "attestation": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "indirect",
+                            "direct",
+                            "enterprise"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "rp",
+                        "user",
+                        "challenge",
+                        "pubKeyCredParams"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "challengeId",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidUsername",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidUsernameEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "UsernameTaken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsernameTakenEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "username"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Start a passkey sign-up"
+      }
+    },
+    "/v1/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth.register",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "userId",
+                    "username"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PasskeyRejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyRejectedEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "UsernameTaken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsernameTakenEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challengeId": {
+                    "type": "string"
+                  },
+                  "credential": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "rawId": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "public-key"
+                        ]
+                      },
+                      "authenticatorAttachment": {
+                        "type": "string",
+                        "enum": [
+                          "platform",
+                          "cross-platform"
+                        ]
+                      },
+                      "clientExtensionResults": {
+                        "not": {
+                          "type": "null"
+                        }
+                      },
+                      "response": {
+                        "type": "object",
+                        "properties": {
+                          "clientDataJSON": {
+                            "type": "string"
+                          },
+                          "attestationObject": {
+                            "type": "string"
+                          },
+                          "authenticatorData": {
+                            "type": "string"
+                          },
+                          "transports": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "publicKeyAlgorithm": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "Infinity",
+                                  "-Infinity",
+                                  "NaN"
+                                ]
+                              }
+                            ]
+                          },
+                          "publicKey": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "clientDataJSON",
+                          "attestationObject"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "rawId",
+                      "type",
+                      "clientExtensionResults",
+                      "response"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "challengeId",
+                  "credential"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Finish a passkey sign-up and start a session"
+      }
+    },
+    "/v1/auth/login/options": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth.loginOptions",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "challengeId": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "type": "object",
+                      "properties": {
+                        "challenge": {
+                          "type": "string"
+                        },
+                        "timeout": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "Infinity",
+                                "-Infinity",
+                                "NaN"
+                              ]
+                            }
+                          ]
+                        },
+                        "rpId": {
+                          "type": "string"
+                        },
+                        "allowCredentials": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "transports": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "userVerification": {
+                          "type": "string",
+                          "enum": [
+                            "required",
+                            "preferred",
+                            "discouraged"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "challenge"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "challengeId",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "summary": "Start a passkey login"
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth.login",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "userId",
+                    "username"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "PasskeyRejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyRejectedEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challengeId": {
+                    "type": "string"
+                  },
+                  "credential": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "rawId": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "public-key"
+                        ]
+                      },
+                      "authenticatorAttachment": {
+                        "type": "string",
+                        "enum": [
+                          "platform",
+                          "cross-platform"
+                        ]
+                      },
+                      "clientExtensionResults": {
+                        "not": {
+                          "type": "null"
+                        }
+                      },
+                      "response": {
+                        "type": "object",
+                        "properties": {
+                          "clientDataJSON": {
+                            "type": "string"
+                          },
+                          "authenticatorData": {
+                            "type": "string"
+                          },
+                          "signature": {
+                            "type": "string"
+                          },
+                          "userHandle": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "clientDataJSON",
+                          "authenticatorData",
+                          "signature"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "rawId",
+                      "type",
+                      "clientExtensionResults",
+                      "response"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "challengeId",
+                  "credential"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Finish a passkey login and start a session"
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth.logout",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          }
+        },
+        "summary": "End the session"
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "operationId": "account.me",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "userId",
+                    "username"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Who is calling",
+        "description": "Any API token may call it."
+      }
+    },
+    "/v1/me/erase/options": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "operationId": "account.eraseOptions",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "challengeId": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "type": "object",
+                      "properties": {
+                        "challenge": {
+                          "type": "string"
+                        },
+                        "timeout": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "Infinity",
+                                "-Infinity",
+                                "NaN"
+                              ]
+                            }
+                          ]
+                        },
+                        "rpId": {
+                          "type": "string"
+                        },
+                        "allowCredentials": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "transports": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "userVerification": {
+                          "type": "string",
+                          "enum": [
+                            "required",
+                            "preferred",
+                            "discouraged"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "challenge"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "challengeId",
+                    "options"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Start erasing the account",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/me/erase": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "operationId": "account.erase",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "PasskeyRejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyRejectedEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challengeId": {
+                    "type": "string"
+                  },
+                  "credential": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "rawId": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "public-key"
+                        ]
+                      },
+                      "authenticatorAttachment": {
+                        "type": "string",
+                        "enum": [
+                          "platform",
+                          "cross-platform"
+                        ]
+                      },
+                      "clientExtensionResults": {
+                        "not": {
+                          "type": "null"
+                        }
+                      },
+                      "response": {
+                        "type": "object",
+                        "properties": {
+                          "clientDataJSON": {
+                            "type": "string"
+                          },
+                          "authenticatorData": {
+                            "type": "string"
+                          },
+                          "signature": {
+                            "type": "string"
+                          },
+                          "userHandle": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "clientDataJSON",
+                          "authenticatorData",
+                          "signature"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "rawId",
+                      "type",
+                      "clientExtensionResults",
+                      "response"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "challengeId",
+                  "credential"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Erase the account, confirmed with a fresh passkey assertion",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/aliases": {
+      "get": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "address": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "forward",
+                          "inbox",
+                          "both"
+                        ]
+                      },
+                      "isActive": {
+                        "type": "boolean"
+                      },
+                      "forwardedCount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "blockedCount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "address",
+                      "mode",
+                      "isActive",
+                      "forwardedCount",
+                      "blockedCount"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List your aliases",
+        "description": "API tokens need the `aliases:read` scope."
+      },
+      "post": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.create",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:write"
+            ]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "forward",
+                        "inbox",
+                        "both"
+                      ]
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "forwardedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "blockedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "mode",
+                    "isActive",
+                    "forwardedCount",
+                    "blockedCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidAlias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidAliasEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "AliasTaken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasTakenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "Random"
+                        ]
+                      },
+                      "domain": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "forward",
+                          "inbox",
+                          "both"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "domain",
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "_tag": {
+                        "type": "string",
+                        "enum": [
+                          "Address"
+                        ]
+                      },
+                      "address": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "forward",
+                          "inbox",
+                          "both"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "address",
+                      "mode"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Create an alias",
+        "description": "API tokens need the `aliases:write` scope."
+      }
+    },
+    "/v1/aliases/domains": {
+      "get": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.domains",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shared": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "subdomains": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "custom": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "shared",
+                    "subdomains",
+                    "custom"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Domains you may create aliases on",
+        "description": "API tokens need the `aliases:read` scope."
+      }
+    },
+    "/v1/aliases/{domain}/{local}": {
+      "get": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.lookup",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "forward",
+                        "inbox",
+                        "both"
+                      ]
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "forwardedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "blockedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "mode",
+                    "isActive",
+                    "forwardedCount",
+                    "blockedCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get one alias",
+        "description": "API tokens need the `aliases:read` scope."
+      },
+      "patch": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.update",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "forward",
+                        "inbox",
+                        "both"
+                      ]
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "forwardedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "blockedCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "mode",
+                    "isActive",
+                    "forwardedCount",
+                    "blockedCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "forward",
+                      "inbox",
+                      "both"
+                    ]
+                  },
+                  "isActive": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Enable, disable or change an alias",
+        "description": "API tokens need the `aliases:write` scope."
+      },
+      "delete": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.remove",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete an alias for good",
+        "description": "API tokens need the `aliases:write` scope."
+      }
+    },
+    "/v1/aliases/{domain}/{local}/contacts": {
+      "get": {
+        "tags": [
+          "contacts"
+        ],
+        "operationId": "contacts.list",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "contacts:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "address": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "isBlocked": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "address",
+                      "isBlocked",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List an alias's contacts",
+        "description": "API tokens need the `contacts:read` scope."
+      }
+    },
+    "/v1/aliases/{domain}/{local}/contacts/{contactId}": {
+      "patch": {
+        "tags": [
+          "contacts"
+        ],
+        "operationId": "contacts.update",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "contacts:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "isBlocked": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "isBlocked",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound | ContactNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ContactNotFoundEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isBlocked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "isBlocked"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Block or unblock a contact",
+        "description": "API tokens need the `contacts:write` scope."
+      },
+      "delete": {
+        "tags": [
+          "contacts"
+        ],
+        "operationId": "contacts.remove",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "contacts:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound | ContactNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ContactNotFoundEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a contact and revoke its reverse alias",
+        "description": "API tokens need the `contacts:write` scope."
+      }
+    },
+    "/v1/recipients": {
+      "get": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "address": {
+                        "type": "string"
+                      },
+                      "isVerified": {
+                        "type": "boolean"
+                      },
+                      "isDefault": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "bouncedAt": {
+                        "type": "string"
+                      },
+                      "complainedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "address",
+                      "isVerified",
+                      "isDefault",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List your forwarding addresses",
+        "description": "API tokens need the `recipients:read` scope."
+      },
+      "post": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.add",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "isVerified": {
+                      "type": "boolean"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "bouncedAt": {
+                      "type": "string"
+                    },
+                    "complainedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "isVerified",
+                    "isDefault",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRecipientAddress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRecipientAddressEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RecipientExists | TooManyPendingRecipients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RecipientExistsEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TooManyPendingRecipientsEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ConfirmationUndeliverable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationUndeliverableEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "ConfirmationRateLimited | TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfirmationRateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MailUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailUnavailableEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Add a forwarding address and mail it a confirmation link",
+        "description": "API tokens need the `recipients:write` scope."
+      }
+    },
+    "/v1/recipients/{recipientId}/confirm": {
+      "post": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.confirm",
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "isVerified": {
+                      "type": "boolean"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "bouncedAt": {
+                      "type": "string"
+                    },
+                    "complainedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "isVerified",
+                    "isDefault",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ConfirmationRejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationRejectedEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Confirm a forwarding address with the token from its link",
+        "description": "API tokens need the `recipients:write` scope."
+      }
+    },
+    "/v1/recipients/{recipientId}/resend": {
+      "post": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.resend",
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RecipientAlreadyVerified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientAlreadyVerifiedEncoded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ConfirmationUndeliverable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationUndeliverableEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "ConfirmationRateLimited | TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfirmationRateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MailUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailUnavailableEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Mail the confirmation link again",
+        "description": "API tokens need the `recipients:write` scope."
+      }
+    },
+    "/v1/recipients/{recipientId}/default": {
+      "post": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.makeDefault",
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RecipientNotVerified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotVerifiedEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Make a verified address the default",
+        "description": "API tokens need the `recipients:write` scope."
+      }
+    },
+    "/v1/recipients/{recipientId}": {
+      "delete": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.remove",
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Remove a forwarding address",
+        "description": "API tokens need the `recipients:write` scope."
+      }
+    },
+    "/v1/domains": {
+      "get": {
+        "tags": [
+          "domains"
+        ],
+        "operationId": "domains.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "domains:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "verified",
+                          "failed"
+                        ]
+                      },
+                      "isCatchAllEnabled": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "verifiedAt": {
+                        "type": "string"
+                      },
+                      "checkedAt": {
+                        "type": "string"
+                      },
+                      "expiresAt": {
+                        "type": "string"
+                      },
+                      "records": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "purpose": {
+                              "type": "string",
+                              "enum": [
+                                "ownership",
+                                "receiving",
+                                "dkim",
+                                "mail-from",
+                                "dmarc"
+                              ]
+                            },
+                            "isRequired": {
+                              "type": "boolean"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "TXT",
+                                "MX",
+                                "CNAME"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "priority": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "missing",
+                                "wrong",
+                                "unknown",
+                                "unchecked"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "purpose",
+                            "isRequired",
+                            "type",
+                            "name",
+                            "value",
+                            "state"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "domain",
+                      "status",
+                      "isCatchAllEnabled",
+                      "createdAt",
+                      "records"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `domains:read` scope."
+      },
+      "post": {
+        "tags": [
+          "domains"
+        ],
+        "operationId": "domains.add",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "domains:write"
+            ]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "isCatchAllEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "ownership",
+                              "receiving",
+                              "dkim",
+                              "mail-from",
+                              "dmarc"
+                            ]
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "TXT",
+                              "MX",
+                              "CNAME"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "missing",
+                              "wrong",
+                              "unknown",
+                              "unchecked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "purpose",
+                          "isRequired",
+                          "type",
+                          "name",
+                          "value",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "status",
+                    "isCatchAllEnabled",
+                    "createdAt",
+                    "records"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidDomain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidDomainEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "DomainTaken | TooManyDomains",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DomainTakenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TooManyDomainsEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DomainUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainUnavailableEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "domain"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `domains:write` scope."
+      }
+    },
+    "/v1/domains/{domain}": {
+      "get": {
+        "tags": [
+          "domains"
+        ],
+        "operationId": "domains.get",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "domains:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "isCatchAllEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "ownership",
+                              "receiving",
+                              "dkim",
+                              "mail-from",
+                              "dmarc"
+                            ]
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "TXT",
+                              "MX",
+                              "CNAME"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "missing",
+                              "wrong",
+                              "unknown",
+                              "unchecked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "purpose",
+                          "isRequired",
+                          "type",
+                          "name",
+                          "value",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "status",
+                    "isCatchAllEnabled",
+                    "createdAt",
+                    "records"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DomainNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `domains:read` scope."
+      },
+      "patch": {
+        "tags": [
+          "domains"
+        ],
+        "operationId": "domains.update",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "domains:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "isCatchAllEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "ownership",
+                              "receiving",
+                              "dkim",
+                              "mail-from",
+                              "dmarc"
+                            ]
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "TXT",
+                              "MX",
+                              "CNAME"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "missing",
+                              "wrong",
+                              "unknown",
+                              "unchecked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "purpose",
+                          "isRequired",
+                          "type",
+                          "name",
+                          "value",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "status",
+                    "isCatchAllEnabled",
+                    "createdAt",
+                    "records"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DomainNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isCatchAllEnabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "isCatchAllEnabled"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `domains:write` scope."
+      },
+      "delete": {
+        "tags": [
+          "domains"
+        ],
+        "operationId": "domains.remove",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "domains:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DomainNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DomainUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainUnavailableEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `domains:write` scope."
+      }
+    },
+    "/v1/domains/{domain}/check": {
+      "post": {
+        "tags": [
+          "domains"
+        ],
+        "operationId": "domains.check",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "domains:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "verified",
+                        "failed"
+                      ]
+                    },
+                    "isCatchAllEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "verifiedAt": {
+                      "type": "string"
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "ownership",
+                              "receiving",
+                              "dkim",
+                              "mail-from",
+                              "dmarc"
+                            ]
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "TXT",
+                              "MX",
+                              "CNAME"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "ok",
+                              "missing",
+                              "wrong",
+                              "unknown",
+                              "unchecked"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "purpose",
+                          "isRequired",
+                          "type",
+                          "name",
+                          "value",
+                          "state"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "domain",
+                    "status",
+                    "isCatchAllEnabled",
+                    "createdAt",
+                    "records"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DomainNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DomainUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainUnavailableEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `domains:write` scope."
+      }
+    },
+    "/v1/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "operationId": "settings.get",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "settings:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "isOnTheFlyEnabled": {
+                      "type": "boolean"
+                    },
+                    "imageProtection": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "block-trackers",
+                        "proxy-images"
+                      ]
+                    },
+                    "isLinkCleaningEnabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "isOnTheFlyEnabled",
+                    "imageProtection",
+                    "isLinkCleaningEnabled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get your settings",
+        "description": "API tokens need the `settings:read` scope."
+      },
+      "patch": {
+        "tags": [
+          "settings"
+        ],
+        "operationId": "settings.update",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "settings:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "isOnTheFlyEnabled": {
+                      "type": "boolean"
+                    },
+                    "imageProtection": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "block-trackers",
+                        "proxy-images"
+                      ]
+                    },
+                    "isLinkCleaningEnabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "isOnTheFlyEnabled",
+                    "imageProtection",
+                    "isLinkCleaningEnabled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isOnTheFlyEnabled": {
+                    "type": "boolean"
+                  },
+                  "imageProtection": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "block-trackers",
+                      "proxy-images"
+                    ]
+                  },
+                  "isLinkCleaningEnabled": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Change your settings",
+        "description": "API tokens need the `settings:write` scope."
+      }
+    },
+    "/v1/tokens": {
+      "get": {
+        "tags": [
+          "tokens"
+        ],
+        "operationId": "tokens.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "aliases:read",
+                            "aliases:write",
+                            "contacts:read",
+                            "contacts:write",
+                            "domains:read",
+                            "domains:write",
+                            "recipients:read",
+                            "recipients:write",
+                            "settings:read",
+                            "settings:write"
+                          ]
+                        }
+                      },
+                      "hint": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "expiresAt": {
+                        "type": "string"
+                      },
+                      "lastUsedAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "scopes",
+                      "hint",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List your API tokens",
+        "description": "Session only: API tokens are refused."
+      },
+      "post": {
+        "tags": [
+          "tokens"
+        ],
+        "operationId": "tokens.create",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "aliases:read",
+                          "aliases:write",
+                          "contacts:read",
+                          "contacts:write",
+                          "domains:read",
+                          "domains:write",
+                          "recipients:read",
+                          "recipients:write",
+                          "settings:read",
+                          "settings:write"
+                        ]
+                      }
+                    },
+                    "hint": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "lastUsedAt": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "scopes",
+                    "hint",
+                    "createdAt",
+                    "token"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "aliases:read",
+                          "aliases:write",
+                          "contacts:read",
+                          "contacts:write",
+                          "domains:read",
+                          "domains:write",
+                          "recipients:read",
+                          "recipients:write",
+                          "settings:read",
+                          "settings:write"
+                        ]
+                      }
+                    ],
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "aliases:read",
+                        "aliases:write",
+                        "contacts:read",
+                        "contacts:write",
+                        "domains:read",
+                        "domains:write",
+                        "recipients:read",
+                        "recipients:write",
+                        "settings:read",
+                        "settings:write"
+                      ]
+                    }
+                  },
+                  "expiresInDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 366
+                  }
+                },
+                "required": [
+                  "name",
+                  "scopes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Create an API token (the secret is shown once)",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/tokens/{tokenId}": {
+      "delete": {
+        "tags": [
+          "tokens"
+        ],
+        "operationId": "tokens.revoke",
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "TokenNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Revoke an API token",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/webhooks": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "operationId": "webhooks.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "eventTypes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "alias.created",
+                            "alias.deleted",
+                            "mail.forwarded",
+                            "mail.blocked",
+                            "recipient.bounced"
+                          ]
+                        }
+                      },
+                      "isEnabled": {
+                        "type": "boolean"
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "url",
+                      "eventTypes",
+                      "isEnabled",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List your webhook endpoints",
+        "description": "Session only: API tokens are refused."
+      },
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "operationId": "webhooks.create",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "eventTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "alias.created",
+                          "alias.deleted",
+                          "mail.forwarded",
+                          "mail.blocked",
+                          "recipient.bounced"
+                        ]
+                      }
+                    },
+                    "isEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "secret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "eventTypes",
+                    "isEnabled",
+                    "createdAt",
+                    "secret"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidWebhookUrl",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidWebhookUrlEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "TooManyWebhooks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyWebhooksEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "eventTypes": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "alias.created",
+                          "alias.deleted",
+                          "mail.forwarded",
+                          "mail.blocked",
+                          "recipient.bounced"
+                        ]
+                      }
+                    ],
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "alias.created",
+                        "alias.deleted",
+                        "mail.forwarded",
+                        "mail.blocked",
+                        "recipient.bounced"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "url",
+                  "eventTypes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Register a webhook endpoint (the secret is shown once)",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/webhooks/{webhookId}": {
+      "patch": {
+        "tags": [
+          "webhooks"
+        ],
+        "operationId": "webhooks.update",
+        "parameters": [
+          {
+            "name": "webhookId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "eventTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "alias.created",
+                          "alias.deleted",
+                          "mail.forwarded",
+                          "mail.blocked",
+                          "recipient.bounced"
+                        ]
+                      }
+                    },
+                    "isEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "eventTypes",
+                    "isEnabled",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WebhookNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "eventTypes": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "alias.created",
+                          "alias.deleted",
+                          "mail.forwarded",
+                          "mail.blocked",
+                          "recipient.bounced"
+                        ]
+                      }
+                    ],
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "alias.created",
+                        "alias.deleted",
+                        "mail.forwarded",
+                        "mail.blocked",
+                        "recipient.bounced"
+                      ]
+                    }
+                  },
+                  "isEnabled": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Pause, resume or resubscribe a webhook endpoint",
+        "description": "Session only: API tokens are refused."
+      },
+      "delete": {
+        "tags": [
+          "webhooks"
+        ],
+        "operationId": "webhooks.remove",
+        "parameters": [
+          {
+            "name": "webhookId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WebhookNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a webhook endpoint",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/webhooks/{webhookId}/secret": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "operationId": "webhooks.rotateSecret",
+        "parameters": [
+          {
+            "name": "webhookId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "eventTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "alias.created",
+                          "alias.deleted",
+                          "mail.forwarded",
+                          "mail.blocked",
+                          "recipient.bounced"
+                        ]
+                      }
+                    },
+                    "isEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "secret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "eventTypes",
+                    "isEnabled",
+                    "createdAt",
+                    "secret"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WebhookNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Rotate a webhook signing secret",
+        "description": "Session only: API tokens are refused."
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TooManyAttemptsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyAttempts"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "ForbiddenEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "Forbidden"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "aliases:read",
+              "aliases:write",
+              "contacts:read",
+              "contacts:write",
+              "domains:read",
+              "domains:write",
+              "recipients:read",
+              "recipients:write",
+              "settings:read",
+              "settings:write"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "UnauthenticatedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "Unauthenticated"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "WebhookNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "WebhookNotFound"
+            ]
+          },
+          "webhookId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "webhookId"
+        ],
+        "additionalProperties": false
+      },
+      "TooManyWebhooksEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyWebhooks"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidWebhookUrlEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidWebhookUrl"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid-url",
+              "not-https",
+              "has-credentials",
+              "not-public-host",
+              "too-long"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "TokenNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TokenNotFound"
+            ]
+          },
+          "tokenId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "tokenId"
+        ],
+        "additionalProperties": false
+      },
+      "DomainUnavailableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "DomainUnavailable"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "DomainNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "DomainNotFound"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "domain"
+        ],
+        "additionalProperties": false
+      },
+      "TooManyDomainsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyDomains"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "DomainTakenEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "DomainTaken"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "domain"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidDomainEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidDomain"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid",
+              "shared-domain"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "domain",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "RecipientNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RecipientNotFound"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "RecipientNotVerifiedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RecipientNotVerified"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "MailUnavailableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "MailUnavailable"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "ConfirmationUndeliverableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ConfirmationUndeliverable"
+            ]
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "address"
+        ],
+        "additionalProperties": false
+      },
+      "ConfirmationRateLimitedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ConfirmationRateLimited"
+            ]
+          },
+          "retryAfterSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "retryAfterSeconds"
+        ],
+        "additionalProperties": false
+      },
+      "RecipientAlreadyVerifiedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RecipientAlreadyVerified"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "ConfirmationRejectedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ConfirmationRejected"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "TooManyPendingRecipientsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyPendingRecipients"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "RecipientExistsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RecipientExists"
+            ]
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "address"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidRecipientAddressEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidRecipientAddress"
+            ]
+          },
+          "address": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid",
+              "alias-domain"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "address",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "ContactNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ContactNotFound"
+            ]
+          },
+          "contactId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "contactId"
+        ],
+        "additionalProperties": false
+      },
+      "AliasNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "AliasNotFound"
+            ]
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "address"
+        ],
+        "additionalProperties": false
+      },
+      "AliasTakenEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "AliasTaken"
+            ]
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "address"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidAliasEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidAlias"
+            ]
+          },
+          "address": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid-address",
+              "unknown-domain",
+              "not-your-subdomain",
+              "domain-not-verified",
+              "random-only-on-shared-domain",
+              "reserved-local-part"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "address",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "PasskeyRejectedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "PasskeyRejected"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "challenge-expired",
+              "unknown-credential",
+              "credential-taken",
+              "verification-failed"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "UsernameTakenEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "UsernameTaken"
+            ]
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "username"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidUsernameEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidUsername"
+            ]
+          },
+          "username": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "too-short",
+              "too-long",
+              "invalid-characters",
+              "must-start-with-letter",
+              "hyphen-placement",
+              "reserved"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "username",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "name": "__Host-alias_session",
+        "in": "cookie",
+        "description": "The web app's session cookie, set by a passkey login."
+      },
+      "token": {
+        "type": "http",
+        "scheme": "Bearer",
+        "description": "A personal API token (`alias_pat_…`). Each operation names the scope it needs."
+      }
+    }
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "system",
+      "description": "Liveness."
+    },
+    {
+      "name": "auth",
+      "description": "Passkey sign-up and login (browser only). Each ceremony is an options call and a verify call."
+    },
+    {
+      "name": "account",
+      "description": "The signed-in account: who it is, and erasing it (GDPR Art. 17)."
+    },
+    {
+      "name": "aliases",
+      "description": "Aliases, addressed by their address. Other users' aliases answer `AliasNotFound`, so lookups reveal nothing."
+    },
+    {
+      "name": "contacts",
+      "description": "The people who wrote to an alias. Blocking one drops its mail and replies to it; deleting one revokes its reverse alias."
+    },
+    {
+      "name": "recipients",
+      "description": "Forwarding addresses (destinations). Adding one mails a confirmation link; mail is forwarded only to verified ones."
+    },
+    {
+      "name": "domains"
+    },
+    {
+      "name": "settings",
+      "description": "Account settings."
+    },
+    {
+      "name": "tokens",
+      "description": "Personal API tokens (`alias_pat_…`). Session-only: a token can't mint, list or revoke tokens."
+    },
+    {
+      "name": "webhooks",
+      "description": "Webhook endpoints, signed per Standard Webhooks. Session-only: an endpoint is a standing data sink."
+    }
+  ]
+}

@@ -38,6 +38,7 @@ jobs:
           - "@alias/aws-emulators"
           - "@alias/lambda-emulator"
           - "@alias/doh-emulator"
+          - "@alias/sdk"
           - "@alias/e2e"
           - "@alias/browser"
     steps:
@@ -73,3 +74,5 @@ jobs:
       - uses: jdx/mise-action@v5
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @alias/web build
+      # The publishable SDK bundle: JS plus inlined declarations, only `effect` left external.
+      - run: pnpm --filter @alias/sdk build

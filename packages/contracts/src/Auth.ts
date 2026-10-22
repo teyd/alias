@@ -1,4 +1,5 @@
-import { Username } from "@alias/core";
+// The one module, not the index: the SDK bundles the contracts and nothing else of core.
+import * as Username from "@alias/core/Username";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";

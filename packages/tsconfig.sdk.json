@@ -1,0 +1,15 @@
+{
+  // Declarations for the published @alias/sdk bundle (`pnpm --filter @alias/sdk build`). It sits
+  // here because the bundler emits from the config's directory, and the SDK inlines the types of
+  // two unpublished packages next to it: the contracts and the one core module they use.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": [],
+    "paths": {
+      "@alias/contracts": ["./contracts/src/index.ts"],
+      "@alias/core/Username": ["./core/src/Username.ts"]
+    }
+  },
+  "include": ["sdk/src"]
+}

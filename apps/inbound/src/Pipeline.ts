@@ -78,13 +78,24 @@ type Record = SesEvent.SesEvent["Records"][number];
 interface Send {
   readonly kind: "forward" | "reply";
   readonly alias: AliasRepo.Alias;
-  /** Who wrote, for a forward: named in the `mail.forwarded` webhook event. */
-  readonly contactId: Option.Option<string>;
   /**
    * The checks that need the message's header block (loops, auto-replies, bounces) or spend an
-   * allowance, run once it is read. None means send it.
+   * allowance, run once it is read, then what goes out. Anything written for the message (a new
+   * contact) is written only once it is admitted.
    */
-  readonly admit: (signals: Mail.Signals) => Effect.Effect<Option.Option<Refusal>, DatabaseError>;
+  readonly admit: (
+    signals: Mail.Signals,
+  ) => Effect.Effect<
+    Result.Result<Outgoing, Refusal>,
+    DatabaseError,
+    ContactRepo.ContactRepo | Crypto.Crypto
+  >;
+}
+
+/** An admitted message: how it is rewritten and where it goes. */
+interface Outgoing {
+  /** Who wrote, for a forward: named in the `mail.forwarded` webhook event. */
+  readonly contactId: Option.Option<string>;
   /** Header rewrite, scrubbing, and for a recipient with a key, encryption last. */
   readonly rewrite: (
     raw: Uint8Array,
@@ -118,17 +129,15 @@ const aliasAddress = (alias: AliasRepo.Alias): Address.MailAddress => ({
 });
 
 /**
- * The alias's contact for `sender`, created on its first message. A concurrent first message
- * creates it only once; both then use the stored one. Fails with `NoSuchAlias` when the alias was
- * deleted since it was read, so its purge can't miss the new contact.
+ * Creates the alias's contact for `sender`, on its first admitted message. A concurrent first
+ * message creates it only once; both then use the stored one. Fails with `NoSuchAlias` when the
+ * alias was deleted since it was read, so its purge can't miss the new contact.
  */
-const contactFor = Effect.fn("Pipeline.contactFor")(function* (
+const createContact = Effect.fn("Pipeline.createContact")(function* (
   alias: AliasRepo.Alias,
   sender: Mail.Sender,
 ) {
   const contacts = yield* ContactRepo.ContactRepo;
-  const found = yield* contacts.findByAddress(alias.id, sender.address);
-  if (Option.isSome(found)) return found.value;
   const created: ContactRepo.Contact = {
     id: yield* Effect.orDie(ReverseToken.newContactId()),
     aliasId: alias.id,
@@ -176,20 +185,17 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   if (!Policy.isStorableAddress(sender.value.address)) {
     return Plan.Drop({ reason: "unencodable-sender" });
   }
-  const found = yield* contactFor(alias, sender.value).pipe(
-    Effect.map(Option.some),
-    Effect.catchTag("NoSuchAlias", () => Effect.succeedNone),
+  // Only read here. A new sender's contact is written once the message is admitted, after the
+  // hourly cap, so a rate-limited flood from changing addresses writes nothing (PLAN.md §20.25).
+  const known = yield* (yield* ContactRepo.ContactRepo).findByAddress(
+    alias.id,
+    sender.value.address,
   );
-  if (Option.isNone(found)) return Plan.Drop({ reason: "unknown-alias" });
-  const contact = found.value;
-  if (contact.isBlocked) return Plan.Block({ alias, reason: "blocked-contact" });
+  if (Option.exists(known, (contact) => contact.isBlocked)) {
+    return Plan.Block({ alias, reason: "blocked-contact" });
+  }
   const address = aliasAddress(alias);
-  // The token names the contact, not the sender: short whatever the address, and revoked with
-  // the contact.
-  const token = yield* ReverseToken.mint(yield* ReverseKeys, address, contact.id).pipe(
-    Effect.option,
-  );
-  if (Option.isNone(token)) return Plan.Drop({ reason: "unencodable-sender" });
+  const reverseKeys = yield* ReverseKeys;
   const settings = yield* (yield* UserRepo.UserRepo).settings(alias.userId);
   const protection: Mail.Protection = {
     images: settings.imageProtection,
@@ -215,37 +221,53 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     });
   const admit = Effect.fn("Pipeline.admitForward")(function* (signals: Mail.Signals) {
     const loop = Policy.forwardLoop(signals, address, record.ses.mail, recipients);
-    if (Option.isSome(loop)) return Option.some(Plan.Block({ alias, reason: loop.value }));
+    if (Option.isSome(loop)) return Result.fail<Refusal>(Plan.Block({ alias, reason: loop.value }));
     const isReserved = yield* aliases.reserveForward(
       alias.domain,
       alias.localPart,
       yield* DateTime.now,
       forwardsPerHour,
     );
-    return isReserved
-      ? Option.none<Refusal>()
-      : Option.some(Plan.Block({ alias, reason: "rate-limited" }));
+    if (!isReserved) return Result.fail<Refusal>(Plan.Block({ alias, reason: "rate-limited" }));
+    const found = yield* Option.match(known, {
+      onSome: (contact) => Effect.succeedSome(contact),
+      onNone: () =>
+        createContact(alias, sender.value).pipe(
+          Effect.map(Option.some),
+          Effect.catchTag("NoSuchAlias", () => Effect.succeedNone),
+        ),
+    });
+    if (Option.isNone(found)) return Result.fail<Refusal>(Plan.Drop({ reason: "unknown-alias" }));
+    const contact = found.value;
+    // A concurrent first message may have stored it, and the owner blocked it since.
+    if (contact.isBlocked) {
+      return Result.fail<Refusal>(Plan.Block({ alias, reason: "blocked-contact" }));
+    }
+    // The token names the contact, not the sender: short whatever the address, and revoked with
+    // the contact.
+    const token = yield* ReverseToken.mint(reverseKeys, address, contact.id).pipe(Effect.option);
+    if (Option.isNone(token)) {
+      return Result.fail<Refusal>(Plan.Drop({ reason: "unencodable-sender" }));
+    }
+    return Result.succeed<Outgoing>({
+      contactId: Option.some(contact.id),
+      rewrite: (raw) =>
+        Mail.forward(raw, {
+          alias: address,
+          sender: sender.value,
+          token: token.value,
+          protection,
+          imageProxy,
+          // Signing image URLs needs a working SHA-256; without one nothing can run.
+        }).pipe(Effect.catchTag("PlatformError", Effect.die), Effect.flatMap(encrypt)),
+      envelope: {
+        from: Address.format(Address.reverseAddress(address, token.value)),
+        to: [target.value.address],
+        tags: SendingEvent.tags(alias.userId, "forward"),
+      },
+    });
   });
-  return Plan.Send({
-    kind: "forward",
-    alias,
-    contactId: Option.some(contact.id),
-    admit,
-    rewrite: (raw) =>
-      Mail.forward(raw, {
-        alias: address,
-        sender: sender.value,
-        token: token.value,
-        protection,
-        imageProxy,
-        // Signing image URLs needs a working SHA-256; without one nothing can run.
-      }).pipe(Effect.catchTag("PlatformError", Effect.die), Effect.flatMap(encrypt)),
-    envelope: {
-      from: Address.format(Address.reverseAddress(address, token.value)),
-      to: [target.value.address],
-      tags: SendingEvent.tags(alias.userId, "forward"),
-    },
-  });
+  return Plan.Send({ kind: "forward", alias, admit });
 });
 
 const planReply = Effect.fn("Pipeline.planReply")(function* (
@@ -271,24 +293,31 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
     name: Option.flatMap(sender, (found) => found.name),
   };
   const messageId = yield* Effect.orDie((yield* Crypto.Crypto).randomUUIDv4());
-  return Plan.Send({
-    kind: "reply",
-    alias,
+  const outgoing: Outgoing = {
     contactId: Option.none(),
-    admit: (signals) =>
-      Effect.succeed(
-        Policy.automatedReply(signals, record.ses.mail).pipe(
-          Option.orElse(() => Policy.rejectReply(record.ses.receipt, from, recipients)),
-          Option.orElse(() => Policy.rejectAmbiguousSender(signals, from)),
-          Option.map((reason): Refusal => Plan.Drop({ reason })),
-        ),
-      ),
     rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId, owner }),
     envelope: {
       from: Address.format(address),
       to: [contact],
       tags: SendingEvent.tags(alias.userId, "reply"),
     },
+  };
+  return Plan.Send({
+    kind: "reply",
+    alias,
+    admit: (signals) =>
+      Effect.succeed(
+        Option.match(
+          Policy.automatedReply(signals, record.ses.mail).pipe(
+            Option.orElse(() => Policy.rejectReply(record.ses.receipt, from, recipients)),
+            Option.orElse(() => Policy.rejectAmbiguousSender(signals, from)),
+          ),
+          {
+            onNone: () => Result.succeed(outgoing),
+            onSome: (reason) => Result.fail<Refusal>(Plan.Drop({ reason })),
+          },
+        ),
+      ),
   });
 });
 
@@ -501,16 +530,17 @@ const send = Effect.fn("Pipeline.send")(function* (
     return yield* refuse(delivery, Plan.Block({ alias: planned.alias, reason: "too-large" }));
   }
   const raw = yield* message.raw;
-  const refused = yield* planned.admit(yield* Mail.signals(raw));
-  if (Option.isSome(refused)) return yield* refuse(delivery, refused.value);
-  const rewritten = yield* planned.rewrite(raw);
-  yield* (yield* Transport.Transport).send(rewritten, planned.envelope);
+  const admitted = yield* planned.admit(yield* Mail.signals(raw));
+  if (Result.isFailure(admitted)) return yield* refuse(delivery, admitted.failure);
+  const outgoing = admitted.success;
+  const rewritten = yield* outgoing.rewrite(raw);
+  yield* (yield* Transport.Transport).send(rewritten, outgoing.envelope);
   if (planned.kind === "reply") return replied;
   yield* count(planned.alias, "forwarded");
-  if (Option.isSome(planned.contactId)) {
+  if (Option.isSome(outgoing.contactId)) {
     yield* announce(delivery, planned.alias, {
       type: "mail.forwarded",
-      contactId: planned.contactId.value,
+      contactId: outgoing.contactId.value,
     });
   }
   return forwarded;

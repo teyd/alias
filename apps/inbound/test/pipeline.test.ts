@@ -590,6 +590,29 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
+  it.effect("writes no contacts for senders whose mail the hourly cap refused", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const outcomes = yield* Effect.forEach(
+          ["a@flood.example", "b@flood.example", "c@flood.example", "a@flood.example"],
+          (from) => Effect.map(forwardFrom(from), (forward) => forward.outcomes),
+          { concurrency: 1 },
+        );
+
+        expect(Arr.flatten(outcomes)).toEqual([
+          { _tag: "Forwarded" },
+          { _tag: "Dropped", reason: "rate-limited" },
+          { _tag: "Dropped", reason: "rate-limited" },
+          { _tag: "Dropped", reason: "rate-limited" },
+        ]);
+        expect(Arr.map(yield* contacts, (contact) => contact.address)).toEqual(["a@flood.example"]);
+      }),
+      { ...Limits.defaults, forwardsPerHour: 1 },
+    ),
+  );
+
   it.effect("drops oversized mail before reading it, and counts it as blocked", () =>
     withPipeline(
       Effect.gen(function* () {

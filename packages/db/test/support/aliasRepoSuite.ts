@@ -399,5 +399,48 @@ export const aliasRepoSuite = (
           }),
         ),
       );
+
+      it.effect("releasing a custom domain deletes its aliases and tombstones, nothing else", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const on = (domain: string, localPart: string, id: string) =>
+              repo.insert(alias({ id, domain, localPart }));
+            yield* on("custom.example", "shop", "al_live");
+            yield* on("custom.example", "old", "al_old");
+            yield* on("other.example", "keep", "al_other");
+            yield* on("alias.test", "keep", "al_shared");
+            yield* repo.delete({ userId: "usr_1", domain: "custom.example", localPart: "old" });
+            yield* repo.delete({ userId: "usr_1", domain: "alias.test", localPart: "keep" });
+
+            yield* repo.releaseDomain("usr_1", "Custom.Example");
+            yield* repo.releaseDomain("usr_1", "custom.example");
+
+            expect(Arr.map(yield* repo.listByUser("usr_1"), (found) => found.id)).toEqual([
+              "al_other",
+            ]);
+            expect(yield* repo.isDeleted("custom.example", "old")).toBe(false);
+            expect(yield* repo.isDeleted("alias.test", "keep")).toBe(true);
+            // The domain's next owner may use every address on it.
+            yield* on("custom.example", "shop", "al_next");
+            yield* repo.insert(
+              alias({
+                id: "al_next2",
+                userId: "usr_2",
+                domain: "custom.example",
+                localPart: "old",
+              }),
+            );
+            yield* repo.insert(
+              alias({
+                id: "al_next3",
+                userId: "usr_2",
+                domain: "custom.example",
+                localPart: "new",
+              }),
+            );
+          }),
+        ),
+      );
     });
   });

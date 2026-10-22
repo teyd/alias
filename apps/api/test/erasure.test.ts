@@ -229,3 +229,25 @@ describe("data lifecycle over the API (fakecloud)", () => {
     }).pipe(Effect.scoped),
   );
 });
+
+describe("erasing an account with a custom domain (fakecloud SES identities)", () => {
+  it.effect("deletes the domain's SES identity, claim and aliases, so it can be added again", () =>
+    Effect.gen(function* () {
+      const handler = yield* api;
+      const { browser: open, context } = handler;
+      const ada = yield* signedIn(open, "ada");
+      const grace = yield* signedIn(open, "grace");
+      expect((yield* ada.browser.post("/v1/domains", { domain: "ada.example" })).status).toBe(201);
+
+      expect((yield* erase(ada.browser, ada.authenticator)).status).toBe(204);
+
+      const identity = yield* Effect.flip(
+        SESV2.getEmailIdentity({ EmailIdentity: "ada.example" }).pipe(Effect.provide(context)),
+      );
+      expect(identity._tag).toBe("NotFoundException");
+      expect((yield* grace.browser.post("/v1/domains", { domain: "ada.example" })).status).toBe(
+        201,
+      );
+    }),
+  );
+});

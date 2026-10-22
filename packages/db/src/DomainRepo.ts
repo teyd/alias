@@ -131,7 +131,11 @@ export class DomainRepo extends Context.Service<
   }
 >()("@alias/db/DomainRepo") {}
 
-const domainKey = (domain: string) => ({ pk: { S: `DOMAIN#${domain}` }, sk: { S: "DOMAIN" } });
+/** The claim; account erasure deletes it too (`AccountRepo`). */
+export const domainKey = (domain: string) => ({
+  pk: { S: `DOMAIN#${domain}` },
+  sk: { S: "DOMAIN" },
+});
 
 /** The user's pointer to a domain they claimed, so listing them is one Query. */
 const pointerKey = (userId: string, domain: string) => ({

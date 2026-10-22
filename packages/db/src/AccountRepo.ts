@@ -11,6 +11,7 @@ import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { Hex } from "effect/encoding";
 import * as AliasRepo from "./AliasRepo.ts";
+import * as DomainRepo from "./DomainRepo.ts";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
@@ -30,6 +31,12 @@ export interface Account {
    * the username's tombstone already keeps the whole subdomain from anyone else.
    */
   readonly subdomains: ReadonlyArray<string>;
+  /**
+   * The user's custom domains (PLAN.md §20.18). Their aliases leave no tombstone either (whoever
+   * owns a domain next controls its mail anyway), and their claims are deleted, so the domains
+   * can be added again. The caller deletes their SES identities first.
+   */
+  readonly customDomains: ReadonlyArray<string>;
   /** The session asking for erasure. It goes last, so a failed erasure can be retried from it. */
   readonly sessionId: string;
 }
@@ -38,8 +45,8 @@ export class AccountRepo extends Context.Service<
   AccountRepo,
   {
     /**
-     * Erases everything stored about the account (GDPR Art. 17) except two kinds of tombstone:
-     * the username's, and one per alias on a shared domain, each holding only the key and
+     * Erases everything stored about the account (GDPR Art. 17), custom-domain claims included,
+     * except two kinds of tombstone: the username's, and one per alias on a shared domain, each holding only the key and
      * `deletedAt`. A resumable sweep, since a user's items don't fit one transaction (100 items):
      * every step is idempotent, and the user item, passkeys and the asking session go last, in
      * one transaction, so a failure anywhere before leaves the account able to sign in and retry.
@@ -93,9 +100,11 @@ const make = Effect.fn("AccountRepo.make")(function* () {
    * `deletedAt`, so nobody can ever claim the address again.
    */
   const forget = (account: Account, key: Purge.Key) => {
-    const isOwnSubdomain = Arr.contains(account.subdomains, domainOf(key.pk.S));
+    const domain = domainOf(key.pk.S);
+    const isOwnDomain =
+      Arr.contains(account.subdomains, domain) || Arr.contains(account.customDomains, domain);
     return ignoreConditionFailure(
-      isOwnSubdomain
+      isOwnDomain
         ? DynamoDB.deleteItem({
             TableName,
             Key: key,
@@ -184,7 +193,23 @@ const make = Effect.fn("AccountRepo.make")(function* () {
     // 3. Aliases, their contacts and counters.
     yield* sweepAliases(account);
 
-    // 4. The rest of the user's partition: recipients, settings, quotas.
+    // 3b. Custom-domain claims, only while still the user's. Their pointers and counter live in
+    //     the user's partition and go with it below, so a retry after this still finds them.
+    yield* Effect.forEach(
+      account.customDomains,
+      (domain) =>
+        ignoreConditionFailure(
+          DynamoDB.deleteItem({
+            TableName,
+            Key: DomainRepo.domainKey(domain),
+            ConditionExpression: "userId = :userId",
+            ExpressionAttributeValues: { ":userId": { S: account.userId } },
+          }),
+        ).pipe(Effect.mapError(databaseError("DeleteItem"))),
+      { concurrency: 4, discard: true },
+    );
+
+    // 4. The rest of the user's partition: recipients, settings, quotas, domain pointers.
     const user = userKey(account.userId);
     const owned = yield* Purge.partitionKeys(table, user.pk.S, Option.none());
     yield* Purge.deleteAll(

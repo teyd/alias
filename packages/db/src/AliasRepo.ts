@@ -97,6 +97,13 @@ export class AliasRepo extends Context.Service<
      * deletion that failed halfway finishes it; on a finished one it fails with `NoSuchAlias`.
      */
     readonly delete: (address: OwnedAddress) => Effect.Effect<void, NoSuchAlias | DatabaseError>;
+    /**
+     * Deletes every alias the user has on `domain`, and their tombstones too, so nothing is left
+     * of them. For a custom domain its owner removes (PLAN.md §20.18.1): whoever owns the domain
+     * next controls its mail anyway, so a tombstone would protect nobody and only keep the next
+     * owner from those addresses. Safe to run again.
+     */
+    readonly releaseDomain: (userId: string, domain: string) => Effect.Effect<void, DatabaseError>;
     /** Atomically adds one to a counter. Never recreates a deleted alias. */
     readonly increment: (
       domain: string,
@@ -428,6 +435,52 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         ),
         Effect.provide(client),
       ),
+
+    releaseDomain: Effect.fn("AliasRepo.releaseDomain")(function* (userId, domain) {
+      const name = domain.toLowerCase();
+      const onDomain = `ALIAS#${name}#`;
+      const live = yield* Purge.indexItems(table, userPartition(userId)).pipe(
+        Effect.provide(client),
+      );
+      yield* Effect.forEach(
+        live,
+        Effect.fnUntraced(function* (item) {
+          const alias = yield* decodeAlias(item);
+          if (alias.domain !== name) return;
+          const key = aliasKey(alias.domain, alias.localPart);
+          yield* retire(table, { userId, domain: alias.domain, localPart: alias.localPart }).pipe(
+            Effect.flatMap((aliasId) => purge(table, key, aliasId)),
+            Effect.catchTag("NoSuchAlias", () => Effect.void),
+          );
+        }),
+        { concurrency: 4, discard: true },
+      ).pipe(Effect.provide(client));
+      const retired = yield* Purge.indexItems(table, deletedKey(userId)).pipe(
+        Effect.provide(client),
+      );
+      yield* Effect.forEach(
+        retired,
+        Effect.fnUntraced(function* (item) {
+          const key = yield* Purge.keyOf(item);
+          if (!key.pk.S.startsWith(onDomain)) return;
+          const tombstone = yield* TombstoneItem.decode(item);
+          if (Option.isSome(tombstone.id)) yield* purge(table, key, tombstone.id.value);
+          yield* DynamoDB.deleteItem({
+            TableName: table.name,
+            Key: key,
+            ConditionExpression: "attribute_exists(deletedAt) AND userId = :userId",
+            ExpressionAttributeValues: { ":userId": { S: userId } },
+          }).pipe(
+            Effect.catchIf(
+              (error) => P.isTagged(error, "ConditionalCheckFailedException"),
+              () => Effect.void,
+            ),
+            Effect.mapError(databaseError("DeleteItem")),
+          );
+        }),
+        { concurrency: 4, discard: true },
+      ).pipe(Effect.provide(client));
+    }),
 
     increment: (domain, localPart, counter) =>
       DynamoDB.updateItem({

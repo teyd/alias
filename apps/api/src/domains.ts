@@ -138,25 +138,17 @@ const add = Effect.fn("domains.add")(function* (requested: string) {
   return view(stored);
 });
 
-/** Deletes the SES identity, the caller's aliases on the domain, then the claim. */
+/**
+ * Deletes the SES identity, the caller's aliases on the domain (tombstones included: the
+ * domain's next owner controls its mail anyway), then the claim.
+ */
 const remove = Effect.fn("domains.remove")(function* (requested: string) {
   const domain = yield* owned(requested);
   const identities = yield* Identities.Identities;
   const aliases = yield* AliasRepo.AliasRepo;
   const repo = yield* DomainRepo.DomainRepo;
   yield* identities.delete(domain.domain).pipe(Effect.catchTag("IdentityUnavailable", unavailable));
-  const onDomain = Arr.filter(
-    yield* Effect.orDie(aliases.listByUser(domain.userId)),
-    (alias) => alias.domain === domain.domain,
-  );
-  yield* Effect.forEach(
-    onDomain,
-    (alias) =>
-      aliases
-        .delete({ userId: alias.userId, domain: alias.domain, localPart: alias.localPart })
-        .pipe(Effect.catchTag("NoSuchAlias", () => Effect.void)),
-    { concurrency: 1, discard: true },
-  ).pipe(Effect.orDie);
+  yield* Effect.orDie(aliases.releaseDomain(domain.userId, domain.domain));
   yield* repo.remove(domain.userId, domain.domain).pipe(
     Effect.catchTags({
       NoSuchDomain: () => Effect.fail(notFound(requested)),

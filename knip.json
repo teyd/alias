@@ -9,6 +9,9 @@
     "apps/api": {
       "entry": ["src/handler.ts!", "bin/*.ts"]
     },
+    "apps/image-proxy": {
+      "entry": ["src/handler.ts!", "bin/*.ts"]
+    },
     "apps/inbound": {
       "entry": ["src/handler.ts!", "src/feedbackHandler.ts!", "bin/*.ts"]
     },

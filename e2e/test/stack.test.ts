@@ -2,8 +2,10 @@ import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
 import {
   AwsClient,
+  FunctionUrl,
   Inbound,
   type MessageQueue,
+  Parameters,
   SesEvent,
   SnsEvent,
   SqsEvent,
@@ -13,7 +15,9 @@ import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, Username, Webhook } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
-import { Feedback, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
+import { Proxy } from "@alias/image-proxy";
+import * as ImageProxyTesting from "@alias/image-proxy/testing";
+import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
 import { Delivery, Egress, UrlPolicy } from "@alias/webhooks";
 import { Receiver, TestQueue, freshQueue } from "@alias/webhooks/testing";
@@ -37,7 +41,9 @@ import { createTransport } from "nodemailer";
  * The whole emulated stack, every listener on port 0:
  * - SMTP → SES emulator (receipt rules, verdicts) → S3 spool on fakecloud → SES Lambda event →
  *   the real inbound pipeline → SES sending on fakecloud;
- * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud.
+ * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud;
+ * - a proxied image in forwarded mail → function URL emulator → the image proxy Lambda → the
+ *   sender's image host.
  * One fakecloud process serves S3, DynamoDB, SES, SNS and SSM, as one AWS account would, and both
  * Lambdas share one table.
  */
@@ -112,6 +118,35 @@ const reverseKeys = Layer.unwrap(
   }).pipe(Effect.as(ReverseKeys.fromParameter(reverseKeysParameter))),
 ).pipe(Layer.provide(aws));
 
+/**
+ * The image proxy Lambda behind its own function URL (PLAN.md §20.19), keys from Parameter Store
+ * like the inbound Lambda's signer, which points at it. Its egress reaches only 127.0.0.1, where
+ * a test runs the sender's image host; production's policy is tested in `apps/image-proxy`.
+ */
+const imageProxyParameter = "/alias/e2e/image-proxy-keys";
+const imageProxy = Layer.unwrap(
+  Effect.gen(function* () {
+    yield* SSM.putParameter({
+      Name: imageProxyParameter,
+      Type: "SecureString",
+      Value: `1:${Buffer.alloc(32, 11).toString("base64url")}`,
+    });
+    const keys = yield* Parameters.keyring(imageProxyParameter);
+    const services = Layer.mergeAll(
+      Layer.succeed(Proxy.ProxyKeys, keys),
+      ImageProxyTesting.onlyLoopback,
+      NodeCrypto.layer,
+    );
+    const { url } = yield* FunctionUrlServer.make({
+      handler: (event) =>
+        Effect.runPromise(
+          FunctionUrl.decode(event).pipe(Effect.flatMap(Proxy.handle), Effect.provide(services)),
+        ),
+    });
+    return Layer.succeed(ImageProxySigner.ImageProxySigner, { base: url, keys });
+  }),
+).pipe(Layer.provide(aws));
+
 /** The real inbound pipeline on the same table, spool, SES and keys. */
 const inbound = Pipeline.layer(
   Layer.mergeAll(
@@ -121,6 +156,7 @@ const inbound = Pipeline.layer(
     Spool.layer(spoolBucket).pipe(Layer.provide(aws)),
     sharedDomains,
     reverseKeys,
+    imageProxy,
   ),
 );
 
@@ -728,6 +764,61 @@ describe("emulated stack", () => {
           expect(field(blocked, name)).toEqual(field(newsletter, name)),
         );
       }),
+    );
+
+    it.effect("loads a forwarded newsletter's images through the image proxy when asked", () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* Transport.ensureIdentity("alias.test");
+          const ines = yield* owner("ines");
+          const host = yield* ImageProxyTesting.origin;
+          const changed = yield* call("/v1/settings", {
+            cookie: ines.cookie,
+            method: "PATCH",
+            body: { imageProtection: "proxy-images" },
+          });
+          expect(changed).toMatchObject({ status: 200, body: { imageProtection: "proxy-images" } });
+          const newsletter = [
+            "From: Shop <news@shop.example>",
+            `To: ${ines.alias}`,
+            "Subject: New arrivals",
+            "MIME-Version: 1.0",
+            "Content-Type: text/html; charset=utf-8",
+            "",
+            `<p>New in!</p><img src="${host.url}/pixel.png" width="600" height="300" alt="Hero">`,
+            '<img src="https://shop.us1.list-manage.com/track/open.php?u=1" width="1" height="1">',
+            "",
+          ].join("\r\n");
+          const event = yield* smtpRaw({
+            from: "news@shop.example",
+            to: ines.alias,
+            raw: newsletter,
+          });
+          expect(yield* invoke(event)).toEqual([{ _tag: "Forwarded" }]);
+          const forwarded = (yield* sentTo(ines.mailbox)).at(-1)?.text ?? "";
+          expect(field(forwarded, "x-alias-images-proxied")).toEqual(Option.some("1"));
+          expect(field(forwarded, "x-alias-trackers-removed")).toEqual(Option.some("1"));
+          expect(forwarded).not.toContain(host.url);
+          expect(forwarded).not.toContain("list-manage.com");
+
+          // The mailbox opens the mail: the image comes from the proxy, and the sender's host
+          // sees the proxy's request, with nothing of the reader's.
+          const src = /<img src="([^"]+)" width="600"/.exec(forwarded)?.[1] ?? "";
+          const image = yield* Effect.promise(() =>
+            fetch(src, {
+              headers: { cookie: "webmail=session", referer: "https://mail.example/" },
+            }),
+          );
+          expect(image.status).toBe(200);
+          expect(image.headers.get("content-type")).toBe("image/png");
+          expect(new Uint8Array(yield* Effect.promise(() => image.arrayBuffer()))).toEqual(
+            ImageProxyTesting.PNG,
+          );
+          expect(host.requests).toHaveLength(1);
+          expect(host.requests[0]?.headers.cookie).toBeUndefined();
+          expect(host.requests[0]?.headers.referer).toBeUndefined();
+        }),
+      ),
     );
 
     it.effect("forwards the first mail to a new address on my subdomain once I opt in", () =>

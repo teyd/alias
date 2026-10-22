@@ -177,8 +177,8 @@ export const authRepoSuite = (
                 isOnTheFlyEnabled: true,
               });
               expect(
-                yield* users.updateSettings("usr_1", { imageProtection: "block-trackers" }),
-              ).toEqual({ ...changed, isOnTheFlyEnabled: true, imageProtection: "block-trackers" });
+                yield* users.updateSettings("usr_1", { imageProtection: "proxy-images" }),
+              ).toEqual({ ...changed, isOnTheFlyEnabled: true, imageProtection: "proxy-images" });
               expect(yield* users.settings("usr_2")).toEqual(defaults);
             }),
           ),

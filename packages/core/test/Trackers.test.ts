@@ -1,4 +1,4 @@
-import { NodeServices } from "@effect/platform-node";
+import { NodeCrypto, NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
@@ -6,7 +6,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { rules } from "../src/internal/lists/easyprivacy.ts";
 import { isTrackerUrl } from "../src/internal/filters.ts";
-import { Mail } from "../src/index.ts";
+import { ImageProxy, Mail } from "../src/index.ts";
+import { signer } from "./support/imageProxy.ts";
 import { binary, bytes, split, textParts, values } from "./support/mime.ts";
 
 /** Tracker protection on forwarded mail (PLAN.md §20.19), through `Mail.forward`. */
@@ -21,7 +22,8 @@ const forward = (raw: Uint8Array, protection: Mail.Protection) =>
     sender: { name: Option.none(), address: "news@store.example" },
     token: "t0k3n",
     protection,
-  });
+    imageProxy: signer,
+  }).pipe(Effect.provide(NodeCrypto.layer));
 
 const message = (type: string, body: string, ...fields: ReadonlyArray<string>) =>
   bytes(
@@ -283,6 +285,12 @@ describe("Mail.forward on the golden corpus", () => {
     { name: "forward-related-attachment", protection: block, gone: ["9f8e7d.gif"] },
     { name: "forward-latin1-qp", protection: blockAndClean, gone: ["emailtracking.", "o.gif"] },
     { name: "forward-nothing-to-protect", protection: blockAndClean, gone: [] },
+    {
+      name: "forward-mailchimp-proxied",
+      input: "forward-mailchimp",
+      protection: { images: "proxy-images", isLinkCleaningEnabled: true } satisfies Mail.Protection,
+      gone: ["list-manage.com/track/", "mcusercontent.com", "utm_"],
+    },
   ];
 
   const read = (file: string) =>
@@ -300,28 +308,31 @@ describe("Mail.forward on the golden corpus", () => {
       sender: { name: Option.some("Store"), address: "news@store.example" },
       token: "ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc",
       protection,
-    });
+      imageProxy: signer,
+    }).pipe(Effect.provide(NodeCrypto.layer));
 
-  it.effect.each(cases)(
-    "$name: matches the reviewed output byte for byte",
-    ({ name, protection }) =>
-      Effect.gen(function* () {
-        const out = yield* relay(yield* read(`${name}.eml`), protection);
-        expect(binary(out)).toBe(binary(yield* read(`${name}.expected.eml`)));
-        // Forwarding the output again changes no body byte.
-        expect(split(yield* relay(out, protection)).rest).toEqual(split(out).rest);
-      }),
+  /** The input file; a case may reuse another case's message with other settings. */
+  const input = (found: (typeof cases)[number]) =>
+    read(`${"input" in found ? found.input : found.name}.eml`);
+
+  it.effect.each(cases)("$name: matches the reviewed output byte for byte", (found) =>
+    Effect.gen(function* () {
+      const { name, protection } = found;
+      const out = yield* relay(yield* input(found), protection);
+      expect(binary(out)).toBe(binary(yield* read(`${name}.expected.eml`)));
+      // Forwarding the output again changes no body byte.
+      expect(split(yield* relay(out, protection)).rest).toEqual(split(out).rest);
+    }),
   );
 
-  it.effect.each(cases)(
-    "$name: leaves no tracker in any inline text part",
-    ({ name, protection, gone }) =>
-      Effect.gen(function* () {
-        const out = yield* relay(yield* read(`${name}.eml`), protection);
-        const inline = Arr.filter(textParts(out), (part) => !part.isAttachment);
-        expect(inline.length).toBeGreaterThan(0);
-        Arr.map(inline, (part) => Arr.map(gone, (text) => expect(part.text).not.toContain(text)));
-      }),
+  it.effect.each(cases)("$name: leaves no tracker in any inline text part", (found) =>
+    Effect.gen(function* () {
+      const { protection, gone } = found;
+      const out = yield* relay(yield* input(found), protection);
+      const inline = Arr.filter(textParts(out), (part) => !part.isAttachment);
+      expect(inline.length).toBeGreaterThan(0);
+      Arr.map(inline, (part) => Arr.map(gone, (text) => expect(part.text).not.toContain(text)));
+    }),
   );
 
   it.effect("keeps attachments and inline images byte for byte", () =>
@@ -335,6 +346,84 @@ describe("Mail.forward on the golden corpus", () => {
       );
       // The attached HTML file keeps its pixel: attachments aren't touched.
       expect(binary(out)).toContain("wf/open?upn=attached");
+    }),
+  );
+});
+
+describe("proxy-images", () => {
+  const proxy: Mail.Protection = { images: "proxy-images", isLinkCleaningEnabled: false };
+  const proxied = (out: Uint8Array) => values(out, "X-Alias-Images-Proxied");
+
+  /** Every proxy URL in the text, decoded back to what it stands for. */
+  const targets = (text: string) =>
+    Effect.forEach(
+      text.match(/https:\/\/img\.alias\.test\/img\/[\w/-]+/g) ?? [],
+      (url) =>
+        Effect.map(
+          ImageProxy.verify(signer.keys, url.slice(signer.base.length)),
+          (found) => found.href,
+        ),
+      { concurrency: 1 },
+    ).pipe(Effect.provide(NodeCrypto.layer));
+
+  it.effect("points every remote image at the proxy and still removes trackers", () =>
+    Effect.gen(function* () {
+      const raw = html(
+        [
+          "<style>.hero { background: url('https://img.shop.example/bg.png') }</style>",
+          '<img src="https://img.shop.example/hero.jpg?w=600&amp;h=300" width="600" alt="Hero">',
+          '<img srcset="https://img.shop.example/a.jpg 1x, https://img.shop.example/a@2x.jpg 2x" src="cid:a@shop">',
+          '<td background="http://img.shop.example/tile.gif" style="background-image:url(https://img.shop.example/td.png)">',
+          '<video poster="https://img.shop.example/poster.jpg"></video>',
+          '<img src="data:image/gif;base64,R0lGOD" alt="">',
+          '<img src="https://u1.ct.sendgrid.net/wf/open?upn=x">',
+          '<a href="https://img.shop.example/link.jpg">a link, not an image</a>',
+        ].join("\r\n"),
+      );
+      const out = yield* forward(raw, proxy);
+      const text = textOf(out);
+      expect(proxied(out)).toEqual(["7"]);
+      expect(removed(out)).toEqual(["1"]);
+      expect(text).not.toMatch(/(?:src|srcset|poster|background)="https?:\/\/img\.shop/);
+      expect(text).not.toContain("url('https://img.shop");
+      expect(text).not.toContain("sendgrid");
+      expect(text).toContain('src="cid:a@shop"');
+      expect(text).toContain('src="data:image/gif;base64,R0lGOD"');
+      expect(text).toContain('<a href="https://img.shop.example/link.jpg">');
+      expect(text).toMatch(
+        /srcset="https:\/\/img\.alias\.test\/img\/\S+ 1x, https:\/\/img\.alias\.test\/img\/\S+ 2x"/,
+      );
+      expect(yield* targets(text)).toEqual([
+        "https://img.shop.example/bg.png",
+        "https://img.shop.example/hero.jpg?w=600&h=300",
+        "https://img.shop.example/a.jpg",
+        "https://img.shop.example/a@2x.jpg",
+        "http://img.shop.example/tile.gif",
+        "https://img.shop.example/td.png",
+        "https://img.shop.example/poster.jpg",
+      ]);
+    }),
+  );
+
+  it.effect("leaves proxy URLs alone, so forwarding a forwarded copy changes nothing", () =>
+    Effect.gen(function* () {
+      const once = yield* forward(
+        html('<img src="https://img.shop.example/hero.jpg" width="600">'),
+        proxy,
+      );
+      const twice = yield* forward(once, proxy);
+      expect(split(twice).rest).toEqual(split(once).rest);
+      expect(proxied(twice)).toEqual([]);
+    }),
+  );
+
+  it.effect("signs a URL used twice once, and proxies it in both places", () =>
+    Effect.gen(function* () {
+      const tag = '<img src="https://img.shop.example/logo.png" width="90">';
+      const out = yield* forward(html(`${tag}${tag}`), proxy);
+      expect(proxied(out)).toEqual(["2"]);
+      const [first, second] = textOf(out).match(/https:\/\/img\.alias\.test\/img\/[\w/-]+/g) ?? [];
+      expect(first).toBe(second);
     }),
   );
 });

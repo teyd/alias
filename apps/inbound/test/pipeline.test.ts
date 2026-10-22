@@ -15,7 +15,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Redacted from "effect/Redacted";
-import { Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
+import { ImageProxySigner, Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
 /**
  * The pipeline as the Lambda runs it, on one fakecloud: the real repositories on a fresh table,
@@ -42,6 +42,7 @@ const pipeline = (limits?: Limits.Limits["Service"]) =>
           Spool.layer(bucket).pipe(Layer.provide(aws)),
           SharedDomains.layer("alias.test"),
           ReverseKeys.layer(keys),
+          ImageProxySigner.layer("https://img.alias.test", keys),
         ),
         limits,
       ).pipe(Layer.provideMerge(queue));
@@ -973,45 +974,69 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
-  it.effect("removes tracking pixels by default and follows the owner's tracker settings", () =>
-    withPipeline(
-      Effect.gen(function* () {
-        yield* alias();
-        yield* recipient("ada@mail.example");
-        const newsletter = new TextEncoder().encode(
-          [
-            'From: "Shop" <shop@store.example>',
-            "To: shop@alias.test",
-            "Subject: Fall sale",
-            "MIME-Version: 1.0",
-            "Content-Type: text/html; charset=utf-8",
-            "",
-            '<a href="https://store.example/sale?utm_source=mail&amp;id=7">Sale</a>',
-            '<img src="https://store.us1.list-manage.com/track/open.php?u=1" width="1" height="1">',
-            "",
-          ].join("\r\n"),
-        );
-        const forwarded = Effect.fn("forwarded")(function* () {
-          const { event } = yield* receive({ recipients: ["shop@alias.test"], raw: newsletter });
+  it.effect(
+    "removes tracking pixels by default and follows the owner's tracker settings, proxy included",
+    () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* alias();
+          yield* recipient("ada@mail.example");
+          const newsletter = new TextEncoder().encode(
+            [
+              'From: "Shop" <shop@store.example>',
+              "To: shop@alias.test",
+              "Subject: Fall sale",
+              "MIME-Version: 1.0",
+              "Content-Type: text/html; charset=utf-8",
+              "",
+              '<a href="https://store.example/sale?utm_source=mail&amp;id=7">Sale</a>',
+              '<img src="https://store.us1.list-manage.com/track/open.php?u=1" width="1" height="1">',
+              "",
+            ].join("\r\n"),
+          );
+          const forwarded = Effect.fn("forwarded")(function* () {
+            const { event } = yield* receive({ recipients: ["shop@alias.test"], raw: newsletter });
+            expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+            return text(Arr.last(yield* sent).pipe(Option.flatMap((email) => email.raw)));
+          });
+
+          const blocked = yield* forwarded();
+          expect(blocked).not.toContain("list-manage.com");
+          expect(blocked).toContain("utm_source=mail");
+          expect(header(blocked, "X-Alias-Trackers-Removed")).toEqual(Option.some("1"));
+
+          yield* UserRepo.UserRepo.use((users) =>
+            users.updateSettings("usr_1", { imageProtection: "off", isLinkCleaningEnabled: true }),
+          );
+          const cleaned = yield* forwarded();
+          expect(cleaned).toContain("list-manage.com/track/open.php");
+          expect(cleaned).toContain('<a href="https://store.example/sale?id=7">');
+          expect(header(cleaned, "X-Alias-Trackers-Removed")).toEqual(Option.none());
+          expect(header(cleaned, "X-Alias-Links-Cleaned")).toEqual(Option.some("1"));
+
+          // Proxy mode: the pixel goes, and the newsletter's own images load through the proxy.
+          yield* UserRepo.UserRepo.use((users) =>
+            users.updateSettings("usr_1", { imageProtection: "proxy-images" }),
+          );
+          const withHero = new TextEncoder().encode(
+            new TextDecoder()
+              .decode(newsletter)
+              .replace(
+                "<a href",
+                '<img src="https://img.store.example/hero.jpg" width="600"><a href',
+              ),
+          );
+          const { event } = yield* receive({ recipients: ["shop@alias.test"], raw: withHero });
           expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
-          return text(Arr.last(yield* sent).pipe(Option.flatMap((email) => email.raw)));
-        });
-
-        const blocked = yield* forwarded();
-        expect(blocked).not.toContain("list-manage.com");
-        expect(blocked).toContain("utm_source=mail");
-        expect(header(blocked, "X-Alias-Trackers-Removed")).toEqual(Option.some("1"));
-
-        yield* UserRepo.UserRepo.use((users) =>
-          users.updateSettings("usr_1", { imageProtection: "off", isLinkCleaningEnabled: true }),
-        );
-        const cleaned = yield* forwarded();
-        expect(cleaned).toContain("list-manage.com/track/open.php");
-        expect(cleaned).toContain('<a href="https://store.example/sale?id=7">');
-        expect(header(cleaned, "X-Alias-Trackers-Removed")).toEqual(Option.none());
-        expect(header(cleaned, "X-Alias-Links-Cleaned")).toEqual(Option.some("1"));
-      }),
-    ),
+          const proxied = text(Arr.last(yield* sent).pipe(Option.flatMap((email) => email.raw)));
+          expect(proxied).toMatch(
+            /<img src="https:\/\/img\.alias\.test\/img\/1\/[\w-]{22}\/[\w-]+" width="600">/,
+          );
+          expect(proxied).not.toContain("img.store.example");
+          expect(proxied).not.toContain("list-manage.com");
+          expect(header(proxied, "X-Alias-Images-Proxied")).toEqual(Option.some("1"));
+        }),
+      ),
   );
 
   it.effect("stops forwarding to a recipient SES reported as hard-bouncing", () =>

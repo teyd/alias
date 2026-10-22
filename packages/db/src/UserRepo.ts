@@ -37,14 +37,15 @@ export interface UserSettings {
   readonly isOnTheFlyEnabled: boolean;
   /**
    * What forwarding does with remote images (PLAN.md §20.19): `block-trackers` removes tracking
-   * pixels and images from known trackers, the default; `off` leaves every image alone.
+   * pixels and images from known trackers, the default; `proxy-images` does that and loads every
+   * other remote image through the image proxy; `off` leaves every image alone.
    */
   readonly imageProtection: ImageProtection;
   /** Forwarding strips click-tracking parameters from links. Off by default: it may break some. */
   readonly isLinkCleaningEnabled: boolean;
 }
 
-const ImageProtection = Schema.Literals(["off", "block-trackers"]);
+const ImageProtection = Schema.Literals(["off", "block-trackers", "proxy-images"]);
 type ImageProtection = typeof ImageProtection.Type;
 
 const defaultSettings: UserSettings = {

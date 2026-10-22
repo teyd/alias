@@ -14,6 +14,7 @@
     "@alias/aws-emulators": "workspace:*",
     "@alias/core": "workspace:*",
     "@alias/db": "workspace:*",
+    "@alias/image-proxy": "workspace:*",
     "@alias/inbound": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
     "@alias/ses-emulator": "workspace:*",

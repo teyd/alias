@@ -9,6 +9,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { Address, Keyring, Mail, ReverseToken } from "../src/index.ts";
 import { newsletter, newsletterBody, newsletterHeaders, ownerReply } from "./support/fixtures.ts";
+import { signer } from "./support/imageProxy.ts";
 import { binary, bytes, mailbox, split, textParts, values } from "./support/mime.ts";
 
 const alias: Address.MailAddress = { local: "k7m2qx9p", domain: "alias.test" };
@@ -22,7 +23,9 @@ const owner: Mail.Owner = { addresses: ["jane.doe@gmail.example"], name: Option.
 const unprotected: Mail.Protection = { images: "off", isLinkCleaningEnabled: false };
 
 const forwardWith = (raw: Uint8Array, sender: Mail.Sender = cafe) =>
-  Mail.forward(raw, { alias, sender, token, protection: unprotected });
+  Mail.forward(raw, { alias, sender, token, protection: unprotected, imageProxy: signer }).pipe(
+    Effect.provide(NodeCrypto.layer),
+  );
 
 /** Right-to-left override and pop directional formatting, written out so they stay visible. */
 const RLO = String.fromCodePoint(0x202e);
@@ -423,6 +426,7 @@ layer(NodeCrypto.layer)((it) => {
         sender: cafe,
         token: minted,
         protection: unprotected,
+        imageProxy: signer,
       });
 
       // The owner's client replies to the Reply-To address; the inbound side parses it back.

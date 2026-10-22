@@ -2,6 +2,7 @@ import * as Arr from "effect/Array";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as R from "effect/Record";
+import * as Result from "effect/Result";
 import * as Str from "effect/String";
 import type { TextPart } from "./mime.ts";
 import { isTrackerUrl, isTrackingParameter as isTrackingParameterNamed } from "./filters.ts";
@@ -20,13 +21,16 @@ import { isTrackerUrl, isTrackingParameter as isTrackingParameterNamed } from ".
  *   (`filters.ts`).
  * - CSS `url(…)` in `style` attributes and `<style>` elements, and legacy `background`
  *   attributes, that point at a known tracker become `none` or are dropped.
+ * - With `proxy-images`, every other remote image URL (`src`, `srcset`, `poster`, `background`,
+ *   CSS `url(…)`) is replaced with its signed image proxy URL (`ImageProxy`), so the sender sees
+ *   the proxy instead of the reader's address, client and cookies.
  * - With link cleaning on, click-tracking query parameters are removed from `href`s.
  *
  * In plain text, only link cleaning applies.
  */
 
-/** What to do with remote images. */
-type ImageProtection = "off" | "block-trackers";
+/** What to do with remote images. `proxy-images` blocks trackers too. */
+type ImageProtection = "off" | "block-trackers" | "proxy-images";
 
 export interface Protection {
   readonly images: ImageProtection;
@@ -40,16 +44,82 @@ export interface Changes {
   readonly trackers: number;
   /** Links that lost tracking parameters. */
   readonly links: number;
+  /** Remote image URLs replaced with proxy URLs. */
+  readonly proxied: number;
 }
 
-export const noChanges: Changes = { trackers: 0, links: 0 };
+export const noChanges: Changes = { trackers: 0, links: 0, proxied: 0 };
 
 export const addChanges = (a: Changes, b: Changes): Changes => ({
   trackers: a.trackers + b.trackers,
   links: a.links + b.links,
+  proxied: a.proxied + b.proxied,
 });
 
-const isChanged = (changes: Changes) => changes.trackers > 0 || changes.links > 0;
+const isChanged = (changes: Changes) =>
+  changes.trackers > 0 || changes.links > 0 || changes.proxied > 0;
+
+const tracker: Changes = { ...noChanges, trackers: 1 };
+const link: Changes = { ...noChanges, links: 1 };
+const proxiedOne: Changes = { ...noChanges, proxied: 1 };
+
+/**
+ * The proxy URL for a remote image URL (`URL.href`), if it is signed yet. Signing is an Effect,
+ * so {@link protect} runs twice: once to learn which URLs need signing (`unsigned`), once with
+ * them signed.
+ */
+export type ProxyUrls = (href: string) => Option.Option<string>;
+
+/** What one rewrite step produced: its text, what it changed, and URLs it still needs signed. */
+interface Step {
+  readonly text: string;
+  readonly changes: Changes;
+  readonly unsigned: ReadonlyArray<string>;
+}
+
+const combine = (steps: ReadonlyArray<Step>, join = ""): Step => ({
+  text: Arr.map(steps, (step) => step.text).join(join),
+  changes: Arr.reduce(steps, noChanges, (total, step) => addChanges(total, step.changes)),
+  unsigned: Arr.flatMap(steps, (step) => step.unsigned),
+});
+
+const unchanged = (text: string): Step => ({ text, changes: noChanges, unsigned: [] });
+
+/** What happens to one remote image URL: removed as a tracker, proxied, or kept. */
+interface Verdict {
+  readonly kind: "tracker" | "proxy" | "keep";
+  /** The URL as `URL.href` writes it, for `proxy`. */
+  readonly href: string;
+}
+
+const keepIt: Verdict = { kind: "keep", href: "" };
+
+interface Context {
+  readonly protection: Protection;
+  readonly proxy: ProxyUrls;
+  /** Proxy URLs (ours) are never proxied again. */
+  readonly isProxied: (href: string) => boolean;
+}
+
+const isBlocking = (context: Context) => context.protection.images !== "off";
+
+const verdict = (context: Context, raw: string): Verdict =>
+  Option.match(remoteUrl(raw), {
+    onNone: () => keepIt,
+    onSome: (url): Verdict =>
+      isBlocking(context) && isTrackerUrl(url)
+        ? { kind: "tracker", href: url.href }
+        : context.protection.images === "proxy-images" && !context.isProxied(url.href)
+          ? { kind: "proxy", href: url.href }
+          : keepIt,
+  });
+
+/** A URL in a non-tracker position: its proxy URL, or itself until that is signed. */
+const proxyStep = (context: Context, raw: string, href: string): Step =>
+  Option.match(context.proxy(href), {
+    onNone: () => ({ text: raw, changes: noChanges, unsigned: [href] }),
+    onSome: (proxied) => ({ text: proxied, changes: proxiedOne, unsigned: [] }),
+  });
 
 // URLs
 
@@ -167,23 +237,33 @@ const declarations = (css: string): ReadonlyArray<readonly [string, string]> =>
 /** A CSS `url()`, its target quoted, unquoted, or `&quot;`-quoted inside an attribute. */
 const CSS_URL = /url\([^)]*\)/gi;
 
-const isTrackerCssUrl = (token: string) =>
-  Option.exists(
-    remoteUrl(
-      token
-        .slice("url(".length, -1)
-        .trim()
-        .replace(/^(?:"|'|&quot;)|(?:"|'|&quot;)$/gi, ""),
-    ),
-    isTrackerUrl,
-  );
+const CSS_QUOTES = /^(?:"|'|&quot;)|(?:"|'|&quot;)$/gi;
 
-/** CSS with tracker `url()`s replaced by `none`, and how many there were. */
-const protectCss = (css: string): readonly [string, number] => {
-  const trackers = Arr.filter(css.match(CSS_URL) ?? [], isTrackerCssUrl).length;
-  return trackers === 0
-    ? [css, 0]
-    : [css.replace(CSS_URL, (token) => (isTrackerCssUrl(token) ? "none" : token)), trackers];
+/** One `url(…)`: `none` for a tracker, the proxy URL for another remote image. */
+const cssUrl = (context: Context, token: string): Step => {
+  const target = token.slice("url(".length, -1).trim().replace(CSS_QUOTES, "");
+  const found = verdict(context, target);
+  if (found.kind === "tracker") return { text: "none", changes: tracker, unsigned: [] };
+  if (found.kind === "keep") return unchanged(token);
+  const proxied = proxyStep(context, target, found.href);
+  return isChanged(proxied.changes)
+    ? { ...proxied, text: `url(${proxied.text})` }
+    : { ...proxied, text: token };
+};
+
+/** CSS with every `url(…)` protected. */
+const protectCss = (context: Context, css: string): Step => {
+  const tokens = Arr.fromIterable(css.matchAll(CSS_URL));
+  const steps = Arr.map(tokens, (match) => ({ match, step: cssUrl(context, match[0]) }));
+  const rebuilt = Arr.reduce(
+    steps,
+    { parts: Arr.empty<Step>(), offset: 0 },
+    (state, { match, step }) => ({
+      parts: [...state.parts, unchanged(css.slice(state.offset, match.index)), step],
+      offset: match.index + match[0].length,
+    }),
+  );
+  return combine([...rebuilt.parts, unchanged(css.slice(rebuilt.offset))]);
 };
 
 // Images
@@ -225,6 +305,20 @@ const isTrackingImage = (attributes: ReadonlyArray<Attribute>) =>
   Option.exists(
     Option.flatMap(attributeValue(attributes, "src"), remoteUrl),
     (url) => isTrackerUrl(url) || isInvisible(attributes),
+  );
+
+/** `srcset` candidates: a URL, then optional width or density descriptors, comma-separated. */
+const protectSrcset = (context: Context, srcset: string): Step =>
+  combine(
+    Arr.map(srcset.split(/,(?=\s)/), (candidate) => {
+      const match = /^(\s*)(\S+)(.*)$/s.exec(candidate);
+      if (match === null) return unchanged(candidate);
+      const found = verdict(context, match[2] ?? "");
+      if (found.kind !== "proxy") return unchanged(candidate);
+      const step = proxyStep(context, match[2] ?? "", found.href);
+      return { ...step, text: `${match[1] ?? ""}${step.text}${match[3] ?? ""}` };
+    }),
+    ",",
   );
 
 // Links
@@ -273,126 +367,149 @@ const TAG =
 
 const LINK_TAGS = HashSet.make("a", "area");
 
-interface Rewritten {
-  readonly text: string;
-  readonly changes: Changes;
-}
+/** Attributes that load an image, by tag; `background` loads one on any tag. */
+const IMAGE_ATTRIBUTES = HashSet.make("img src", "input src", "video poster", "img srcset");
+
+const keep = (attribute: Attribute): readonly [Option.Option<Attribute>, Step] => [
+  Option.some(attribute),
+  unchanged(""),
+];
+
+const replaced = (attribute: Attribute, step: Step): readonly [Option.Option<Attribute>, Step] => [
+  Option.some(isChanged(step.changes) ? withValue(attribute, step.text) : attribute),
+  { ...step, text: "" },
+];
+
+const protectAttribute = (
+  context: Context,
+  tag: string,
+  attribute: Attribute,
+): readonly [Option.Option<Attribute>, Step] => {
+  const { name, value } = attribute;
+  if (name === "style" && isBlocking(context))
+    return replaced(attribute, protectCss(context, value));
+  if (name === "srcset" && tag === "img") return replaced(attribute, protectSrcset(context, value));
+  if (name === "background" || HashSet.has(IMAGE_ATTRIBUTES, `${tag} ${name}`)) {
+    const found = verdict(context, value);
+    if (found.kind === "tracker") return [Option.none(), { ...unchanged(""), changes: tracker }];
+    return found.kind === "proxy"
+      ? replaced(attribute, proxyStep(context, value, found.href))
+      : keep(attribute);
+  }
+  if (context.protection.isLinkCleaningEnabled && name === "href" && HashSet.has(LINK_TAGS, tag)) {
+    return Option.match(cleanLink(value), {
+      onNone: () => keep(attribute),
+      onSome: (cleaned) => [
+        Option.some(withValue(attribute, cleaned)),
+        { ...unchanged(""), changes: link },
+      ],
+    });
+  }
+  return keep(attribute);
+};
 
 const protectTag = (
+  context: Context,
   name: string,
   attributeText: string,
   close: string,
-  protection: Protection,
-): Option.Option<Rewritten> => {
+): Option.Option<Step> => {
   const tag = name.toLowerCase();
   const attributes = parseAttributes(attributeText);
-  const isBlocking = protection.images === "block-trackers";
-  if (isBlocking && tag === "img" && isTrackingImage(attributes)) {
-    return Option.some({ text: "", changes: { trackers: 1, links: 0 } });
+  if (isBlocking(context) && tag === "img" && isTrackingImage(attributes)) {
+    return Option.some({ text: "", changes: tracker, unsigned: [] });
   }
-  const rewritten = Arr.map(
-    attributes,
-    (attribute): readonly [Option.Option<Attribute>, Changes] => {
-      if (isBlocking && attribute.name === "style") {
-        const [css, trackers] = protectCss(attribute.value);
-        return trackers > 0
-          ? [Option.some(withValue(attribute, css)), { trackers, links: 0 }]
-          : [Option.some(attribute), noChanges];
-      }
-      if (
-        isBlocking &&
-        attribute.name === "background" &&
-        Option.exists(remoteUrl(attribute.value), isTrackerUrl)
-      ) {
-        return [Option.none(), { trackers: 1, links: 0 }];
-      }
-      if (
-        protection.isLinkCleaningEnabled &&
-        attribute.name === "href" &&
-        HashSet.has(LINK_TAGS, tag)
-      ) {
-        return Option.match(cleanLink(attribute.value), {
-          onNone: () => [Option.some(attribute), noChanges],
-          onSome: (link) => [Option.some(withValue(attribute, link)), { trackers: 0, links: 1 }],
-        });
-      }
-      return [Option.some(attribute), noChanges];
-    },
-  );
-  const changes = Arr.reduce(rewritten, noChanges, (total, [, change]) =>
-    addChanges(total, change),
-  );
-  if (!isChanged(changes)) return Option.none();
+  const rewritten = Arr.map(attributes, (attribute) => protectAttribute(context, tag, attribute));
+  const step = combine(Arr.map(rewritten, ([, change]) => change));
+  if (!isChanged(step.changes))
+    return Arr.isReadonlyArrayNonEmpty(step.unsigned)
+      ? Option.some({ ...step, text: `<${name}${attributeText}${close}>` })
+      : Option.none();
   const kept = Arr.getSomes(Arr.map(rewritten, ([attribute]) => attribute));
   return Option.some({
+    ...step,
     text: `<${name}${Arr.map(kept, formatAttribute).join("")}${close}>`,
-    changes,
   });
 };
 
 const STYLE_ELEMENT = /(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi;
 
-const protectHtml = (html: string, protection: Protection): Rewritten => {
-  const isBlocking = protection.images === "block-trackers";
-  const styleTrackers = isBlocking
-    ? Arr.reduce(
-        Arr.fromIterable(html.matchAll(STYLE_ELEMENT)),
-        0,
-        (total, match) => total + protectCss(match[2] ?? "")[1],
-      )
-    : 0;
-  const styled = {
-    text:
-      styleTrackers === 0
-        ? html
-        : html.replace(
-            STYLE_ELEMENT,
-            (_, open: string, css: string, close: string) => `${open}${protectCss(css)[0]}${close}`,
-          ),
-    changes: { trackers: styleTrackers, links: 0 },
-  };
-  const tags = Arr.map(Arr.fromIterable(styled.text.matchAll(TAG)), (match) => ({
-    match,
-    rewritten: protectTag(match[1] ?? "", match[2] ?? "", match[3] ?? "", protection),
-  }));
-  const result = Arr.reduce(
-    tags,
-    { text: "", changes: styled.changes, offset: 0 },
-    (state, { match, rewritten }) =>
-      Option.match(rewritten, {
-        onNone: () => state,
-        onSome: ({ text, changes }) => ({
-          text: state.text + styled.text.slice(state.offset, match.index) + text,
-          changes: addChanges(state.changes, changes),
-          offset: match.index + match[0].length,
-        }),
-      }),
+const protectHtml = (context: Context, html: string): Step => {
+  const styles = Arr.fromIterable(html.matchAll(STYLE_ELEMENT));
+  const styled = isBlocking(context)
+    ? Arr.reduce(styles, { parts: Arr.empty<Step>(), offset: 0 }, (state, match) => {
+        const start = match.index + (match[1] ?? "").length;
+        return {
+          parts: [
+            ...state.parts,
+            unchanged(html.slice(state.offset, start)),
+            protectCss(context, match[2] ?? ""),
+          ],
+          offset: start + (match[2] ?? "").length,
+        };
+      })
+    : { parts: [], offset: 0 };
+  const css = combine([...styled.parts, unchanged(html.slice(styled.offset))]);
+  const tags = Arr.filterMap(Arr.fromIterable(css.text.matchAll(TAG)), (match) =>
+    Result.fromOption(
+      Option.map(protectTag(context, match[1] ?? "", match[2] ?? "", match[3] ?? ""), (step) => ({
+        match,
+        step,
+      })),
+      () => undefined,
+    ),
   );
-  return { text: result.text + styled.text.slice(result.offset), changes: result.changes };
+  const rebuilt = Arr.reduce(
+    tags,
+    { parts: Arr.empty<Step>(), offset: 0 },
+    (state, { match, step }) => ({
+      parts: [...state.parts, unchanged(css.text.slice(state.offset, match.index)), step],
+      offset: match.index + match[0].length,
+    }),
+  );
+  const body = combine([...rebuilt.parts, unchanged(css.text.slice(rebuilt.offset))]);
+  return {
+    text: body.text,
+    changes: addChanges(css.changes, body.changes),
+    unsigned: [...css.unsigned, ...body.unsigned],
+  };
 };
 
 /** Bare links in plain text, without a closing bracket, quote or punctuation right after one. */
 const PLAIN_LINK = /https?:\/\/[^\s<>"'()[\]{}]*[^\s<>"'()[\]{}.,;:!?]/gi;
 
-const protectPlain = (text: string, protection: Protection): Rewritten => {
-  if (!protection.isLinkCleaningEnabled) return { text, changes: noChanges };
+const protectPlain = (context: Context, text: string): Step => {
+  if (!context.protection.isLinkCleaningEnabled) return unchanged(text);
   const links = Arr.filter(Arr.fromIterable(text.matchAll(PLAIN_LINK)), (match) =>
     Option.isSome(cleanLink(match[0])),
   );
   return {
-    text: text.replace(PLAIN_LINK, (link) => Option.getOrElse(cleanLink(link), () => link)),
-    changes: { trackers: 0, links: links.length },
+    text: text.replace(PLAIN_LINK, (found) => Option.getOrElse(cleanLink(found), () => found)),
+    changes: { ...noChanges, links: links.length },
+    unsigned: [],
   };
 };
 
 const UNICODE = /^utf-?(16|32)/;
 
-/** The part with trackers removed, and what changed; none when nothing did. */
-export const protect = (protection: Protection, part: TextPart): Option.Option<Rewritten> => {
+/**
+ * The part with trackers removed and, in `proxy-images` mode, image URLs that `proxy` knows
+ * replaced. `unsigned` lists the remote image URLs `proxy` didn't know yet, deduplicated: sign
+ * them and run again. None when nothing would change.
+ */
+export const protect = (
+  protection: Protection,
+  part: TextPart,
+  proxy: ProxyUrls,
+  isProxied: (href: string) => boolean,
+): Option.Option<Step> => {
   if (UNICODE.test(part.charset)) return Option.none();
-  const rewritten =
+  const context: Context = { protection, proxy, isProxied };
+  const step =
     part.subtype === "html"
-      ? protectHtml(part.content, protection)
-      : protectPlain(part.content, protection);
-  return isChanged(rewritten.changes) ? Option.some(rewritten) : Option.none();
+      ? protectHtml(context, part.content)
+      : protectPlain(context, part.content);
+  return isChanged(step.changes) || Arr.isReadonlyArrayNonEmpty(step.unsigned)
+    ? Option.some({ ...step, unsigned: Arr.dedupe(step.unsigned) })
+    : Option.none();
 };

@@ -3,7 +3,7 @@ import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { Authentication } from "./Auth.ts";
 import { requires } from "./Scopes.ts";
 
-const ImageProtection = Schema.Literals(["off", "block-trackers"]);
+const ImageProtection = Schema.Literals(["off", "block-trackers", "proxy-images"]);
 
 /** The caller's account settings. */
 const Settings = Schema.Struct({
@@ -14,7 +14,9 @@ const Settings = Schema.Struct({
   isOnTheFlyEnabled: Schema.Boolean,
   /**
    * What forwarding does with remote images in HTML mail: `block-trackers` (the default) removes
-   * tracking pixels and images from known trackers, `off` leaves every image as it came.
+   * tracking pixels and images from known trackers; `proxy-images` also loads every other remote
+   * image through our image proxy, so senders never see the reader's address or mail client;
+   * `off` leaves every image as it came.
    */
   imageProtection: ImageProtection,
   /**

@@ -1,9 +1,11 @@
 import { Keyring } from "@alias/core";
 import * as SSM from "@distilled.cloud/aws/ssm";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as AwsClient from "./Client.ts";
 
 /** A decrypted `SecureString` parameter. */
 interface SecureString {
@@ -90,3 +92,20 @@ export const keyring = Effect.fn("Parameters.keyring")(function* (name: string) 
   );
   return keys;
 });
+
+/**
+ * The keyring whose parameter the environment variable `variable` names, as an Effect to run at
+ * cold start, with `AWS_ENDPOINT_URL_SSM` (the AWS-standard endpoint override) only in emulated
+ * runs.
+ */
+export const keyringConfig = (variable: string) =>
+  Config.all({
+    // The parameter's name, not a secret.
+    // oxlint-disable-next-line effect/prefer-redacted-config
+    name: Config.String(variable),
+    endpoint: Config.option(Config.String("AWS_ENDPOINT_URL_SSM")),
+  }).pipe(
+    Config.map(({ name, endpoint }) =>
+      keyring(name).pipe(Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
+    ),
+  );

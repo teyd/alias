@@ -14,6 +14,7 @@ const env = { ...process.env, ...devEnv, FORCE_COLOR: "1" };
 // a demo alias with a verified forwarding address. Inbound runs the SES emulator's SMTP listener
 // and hands each Lambda event to the real inbound pipeline, which forwards through fakecloud SES.
 // Webhooks polls fakecloud's SQS webhook queue and runs the real delivery handler.
+// The image proxy serves the proxied images in forwarded mail.
 const services: Array<{ name: string; cwd: string; command: string; args: Array<string> }> = [
   {
     name: "fakecloud",
@@ -36,6 +37,7 @@ const services: Array<{ name: string; cwd: string; command: string; args: Array<
   { name: "web", cwd: `${root}/apps/web`, command: "pnpm", args: ["exec", "vp", "dev"] },
   { name: "inbound", cwd: `${root}/apps/inbound`, command: "node", args: ["bin/dev.ts"] },
   { name: "webhooks", cwd: `${root}/apps/webhooks`, command: "node", args: ["bin/dev.ts"] },
+  { name: "images", cwd: `${root}/apps/image-proxy`, command: "node", args: ["bin/dev.ts"] },
 ];
 
 const children: Array<ChildProcess> = [];
@@ -71,5 +73,5 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 console.log(
-  `web http://localhost:${devEnv.ALIAS_WEB_PORT}  api http://localhost:${devEnv.ALIAS_API_PORT}  smtp localhost:${devEnv.ALIAS_SMTP_PORT}  fakecloud http://localhost:${devEnv.ALIAS_FAKECLOUD_PORT}`,
+  `web http://localhost:${devEnv.ALIAS_WEB_PORT}  api http://localhost:${devEnv.ALIAS_API_PORT}  smtp localhost:${devEnv.ALIAS_SMTP_PORT}  images http://localhost:${devEnv.ALIAS_IMAGE_PROXY_PORT}  fakecloud http://localhost:${devEnv.ALIAS_FAKECLOUD_PORT}`,
 );

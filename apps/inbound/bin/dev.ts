@@ -13,6 +13,10 @@
  * fixed dev key is put into fakecloud's SSM as `/alias/dev/reverse-token-keys` unless that
  * parameter already exists, so `aws ssm put-parameter` against fakecloud can replace it. Never use
  * the dev key anywhere real: anyone with this repo can mint reverse aliases for it.
+ *
+ * Image proxy URLs (PLAN.md §20.19) are signed with another fixed dev key, put the same way as
+ * `/alias/dev/image-proxy-keys`, and point at `apps/image-proxy/bin/dev.ts` on
+ * `ALIAS_IMAGE_PROXY_PORT`, which reads that parameter.
  */
 import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
@@ -29,10 +33,13 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
-import { Feedback, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
+import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
 const DEV_REVERSE_TOKEN_KEYS = "1:ZGV2LW9ubHktcmV2ZXJzZS10b2tlbi1rZXktbm90LXNlY3JldA";
 const reverseKeysParameter = "/alias/dev/reverse-token-keys";
+const DEV_IMAGE_PROXY_KEYS = "1:ZGV2LW9ubHktaW1hZ2UtcHJveHkta2V5LW5vdC1hLXNlY3JldC0x";
+const imageProxyKeysParameter = "/alias/dev/image-proxy-keys";
+const imageProxyUrl = `http://localhost:${process.env.ALIAS_IMAGE_PROXY_PORT ?? 8788}`;
 
 const sharedDomainsValue = process.env.ALIAS_SHARED_DOMAINS ?? "alias.test";
 const spoolBucket = "alias-spool";
@@ -49,15 +56,24 @@ const sending = Transport.layer({ configurationSet: Option.some(configurationSet
 const untilFakeCloudIsUp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }));
 
-/** The dev key, stored the way production stores its keys, then read back like the Lambda does. */
-const reverseKeys = Layer.unwrap(
+/** Stores a dev key the way production stores its keys, unless the parameter exists already. */
+const putDevKeys = (name: string, value: string) =>
   untilFakeCloudIsUp(
-    SSM.putParameter({
-      Name: reverseKeysParameter,
-      Type: "SecureString",
-      Value: DEV_REVERSE_TOKEN_KEYS,
-    }).pipe(Effect.catchTag("ParameterAlreadyExists", () => Effect.void)),
-  ).pipe(Effect.as(ReverseKeys.fromParameter(reverseKeysParameter))),
+    SSM.putParameter({ Name: name, Type: "SecureString", Value: value }).pipe(
+      Effect.catchTag("ParameterAlreadyExists", () => Effect.void),
+    ),
+  );
+
+/** The dev keys, read back like the Lambda reads them. */
+const reverseKeys = Layer.unwrap(
+  putDevKeys(reverseKeysParameter, DEV_REVERSE_TOKEN_KEYS).pipe(
+    Effect.as(ReverseKeys.fromParameter(reverseKeysParameter)),
+  ),
+).pipe(Layer.provide(awsClient));
+const imageProxySigner = Layer.unwrap(
+  putDevKeys(imageProxyKeysParameter, DEV_IMAGE_PROXY_KEYS).pipe(
+    Effect.as(ImageProxySigner.fromParameter(imageProxyUrl, imageProxyKeysParameter)),
+  ),
 ).pipe(Layer.provide(awsClient));
 
 /** The webhook queue the pipeline and the feedback handler publish to (`apps/webhooks`). */
@@ -71,6 +87,7 @@ const pipeline = Pipeline.layer(
     Spool.layer(spoolBucket).pipe(Layer.provide(awsClient)),
     sharedDomains,
     reverseKeys,
+    imageProxySigner,
   ),
 );
 

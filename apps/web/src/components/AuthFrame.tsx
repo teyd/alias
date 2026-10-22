@@ -19,9 +19,7 @@ export const AuthFrame = ({
     </div>
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle>
-          <h1>{title}</h1>
-        </CardTitle>
+        <CardTitle render={<h1 />}>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">{children}</CardContent>

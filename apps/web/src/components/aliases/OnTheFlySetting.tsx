@@ -33,6 +33,7 @@ export const OnTheFlySetting = ({ subdomains }: { readonly subdomains: ReadonlyA
         </div>
         <Switch
           aria-labelledby="on-the-fly-label"
+          aria-busy={!settings.isSuccess || update.isPending}
           aria-describedby="on-the-fly-description"
           checked={settings.data?.isOnTheFlyEnabled ?? false}
           disabled={!settings.isSuccess || update.isPending}

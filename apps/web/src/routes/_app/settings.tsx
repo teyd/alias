@@ -1,28 +1,38 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import { FingerprintIcon } from "lucide-react";
 import type * as React from "react";
 import { CopyButton } from "@/components/CopyButton";
+import { DeleteAccount } from "@/components/DeleteAccount";
 import { Page } from "@/components/Page";
 import { Separator } from "@/components/ui/separator";
 import { domainsQuery } from "@/lib/aliases";
 import { meQuery } from "@/lib/session";
 
+/** The account-deletion dialog is URL state, like every other dialog. */
+const Search = Schema.Struct({ dialog: Schema.optionalKey(Schema.Literal("delete-account")) });
+
 /** One settings group: a heading with its explanation, then its rows. */
 const Section = ({
   title,
   description,
+  isDanger = false,
   children,
 }: {
   readonly title: string;
   readonly description: string;
+  readonly isDanger?: boolean;
   readonly children: React.ReactNode;
 }) => (
   <section className="flex flex-col gap-4 py-6 first:pt-0" aria-label={title}>
     <div className="flex flex-col gap-0.5">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <h2 className={isDanger ? "text-sm font-semibold text-destructive" : "text-sm font-semibold"}>
+        {title}
+      </h2>
       <p className="text-xs text-muted-foreground">{description}</p>
     </div>
     {children}
@@ -32,6 +42,14 @@ const Section = ({
 const Settings = () => {
   const me = useQuery(meQuery);
   const domains = useQuery(domainsQuery);
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const setDeleting = (isOpen: boolean) =>
+    void navigate({
+      search: (current) =>
+        isOpen ? { ...current, dialog: "delete-account" } : Struct.omit(current, ["dialog"]),
+      replace: true,
+    });
   return (
     <Page title="Settings">
       <div className="mx-auto flex w-full max-w-3xl flex-col">
@@ -73,9 +91,31 @@ const Settings = () => {
             </div>
           </div>
         </Section>
+        {Option.match(me.data ?? Option.none(), {
+          onNone: () => null,
+          onSome: (user) => (
+            <>
+              <Separator />
+              <Section
+                title="Danger zone"
+                description="Erasing your account is final; deactivate single aliases if you only want quiet."
+                isDanger
+              >
+                <DeleteAccount
+                  username={user.username}
+                  isOpen={search.dialog === "delete-account"}
+                  onOpenChange={setDeleting}
+                />
+              </Section>
+            </>
+          ),
+        })}
       </div>
     </Page>
   );
 };
 
-export const Route = createFileRoute("/_app/settings")({ component: Settings });
+export const Route = createFileRoute("/_app/settings")({
+  validateSearch: Schema.toStandardSchemaV1(Search),
+  component: Settings,
+});

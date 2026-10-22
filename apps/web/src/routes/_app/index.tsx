@@ -117,7 +117,7 @@ const CardHeading = ({
   <CardHeader>
     <CardTitle className="flex items-center gap-2 text-sm [&_svg]:size-4 [&_svg]:text-muted-foreground">
       {icon}
-      <h2>{title}</h2>
+      {title}
     </CardTitle>
     {action && (
       <CardAction>

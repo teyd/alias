@@ -85,7 +85,7 @@ const Domains = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <GlobeIcon className="size-4 text-muted-foreground" aria-hidden />
-            <h2>Domains you can use</h2>
+            Domains you can use
           </CardTitle>
           <CardDescription>
             Shared domains give out random addresses, so they can't be guessed. On your own
@@ -118,7 +118,7 @@ const Domains = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ServerIcon className="size-4 text-muted-foreground" aria-hidden />
-            <h2>Custom domains</h2>
+            Custom domains
           </CardTitle>
           <CardDescription>
             Bringing your own domain isn't available yet. When it is, you'll add it here and follow

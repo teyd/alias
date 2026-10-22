@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Option from "effect/Option";
-import { Trash2Icon } from "lucide-react";
+import { BanIcon, Trash2Icon } from "lucide-react";
 import { Problem } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,9 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { aliasesQuery, deleteAlias } from "@/lib/aliases";
+import { aliasesQuery, deleteAlias, setActive } from "@/lib/aliases";
 
-/** Asks before deleting the alias named in `?delete=`; deleting can't be undone. */
+/**
+ * Asks before deleting the alias named in `?delete=`. Deleting can't be undone (PLAN.md §20.15),
+ * so the dialog offers the everyday alternative, deactivating, right next to it.
+ */
 export const DeleteAliasDialog = ({
   aliasAddress,
   onClose,
@@ -23,13 +26,16 @@ export const DeleteAliasDialog = ({
   readonly onClose: () => void;
 }) => {
   const queryClient = useQueryClient();
-  const remove = useMutation({
-    mutationFn: deleteAlias,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: aliasesQuery.queryKey });
-      onClose();
-    },
+  const done = () => {
+    void queryClient.invalidateQueries({ queryKey: aliasesQuery.queryKey });
+    onClose();
+  };
+  const remove = useMutation({ mutationFn: deleteAlias, onSuccess: done });
+  const deactivate = useMutation({
+    mutationFn: (address: string) => setActive(address, false),
+    onSuccess: done,
   });
+  const isBusy = remove.isPending || deactivate.isPending;
 
   return (
     <Dialog open={Option.isSome(aliasAddress)} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -41,17 +47,25 @@ export const DeleteAliasDialog = ({
               <DialogHeader>
                 <DialogTitle>Delete alias?</DialogTitle>
                 <DialogDescription>
-                  Mail to <span className="data text-foreground">{address}</span> is dropped from
-                  now on, and replies through its reverse aliases stop working (unless on-the-fly
-                  aliases create it again). This can't be undone; to pause an alias, deactivate it.
+                  <span className="data text-foreground">{address}</span> goes for good: its
+                  contacts and counters are erased, replies to them stop working, and nobody else
+                  can ever use the address. To stop its mail for now, deactivate it instead.
                 </DialogDescription>
               </DialogHeader>
-              <Problem error={remove.error} />
+              <Problem error={remove.error ?? deactivate.error} />
               <DialogFooter>
                 <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
                 <Button
+                  variant="outline"
+                  disabled={isBusy}
+                  onClick={() => deactivate.mutate(address)}
+                >
+                  <BanIcon />
+                  Deactivate instead
+                </Button>
+                <Button
                   variant="destructive"
-                  disabled={remove.isPending}
+                  disabled={isBusy}
                   onClick={() => remove.mutate(address)}
                 >
                   <Trash2Icon />

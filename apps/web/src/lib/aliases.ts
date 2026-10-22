@@ -1,4 +1,4 @@
-import { AliasNotFound, AliasTaken, InvalidAlias } from "@alias/contracts";
+import { AliasNotFound, AliasTaken, type AliasView, InvalidAlias } from "@alias/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -43,12 +43,19 @@ export const domainsQuery = queryOptions({
 });
 
 /** A random address on a shared domain, or `local` on one of the caller's subdomains. */
-export const createAlias = (input: { readonly domain: string; readonly local: string }) =>
+/** What an alias does with mail: forward it, keep it in an inbox (encrypted), or both. */
+export type Delivery = AliasView["mode"];
+
+export const createAlias = (input: {
+  readonly domain: string;
+  readonly local: string;
+  readonly mode: Delivery;
+}) =>
   explain((api) =>
     Str.isEmpty(input.local)
-      ? api.aliases.create({ payload: { _tag: "Random", domain: input.domain, mode: "forward" } })
+      ? api.aliases.create({ payload: { _tag: "Random", domain: input.domain, mode: input.mode } })
       : api.aliases.create({
-          payload: { _tag: "Address", address: `${input.local}@${input.domain}`, mode: "forward" },
+          payload: { _tag: "Address", address: `${input.local}@${input.domain}`, mode: input.mode },
         }),
   );
 

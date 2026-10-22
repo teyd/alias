@@ -356,6 +356,42 @@ describe("custom domains on the API handler (fakecloud SES identities, DoH emula
     }).pipe(Effect.scoped),
   );
 
+  it.effect("creates aliases only on the caller's verified custom domains", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.make;
+      const ada = yield* signedIn(api, "ada");
+      const bob = yield* signedIn(api, "bob");
+      const added = yield* addDomain(ada, "custom.example");
+      yield* addDomain(bob, "bob.example");
+      const create = (browser: Browser.Client, address: string) =>
+        browser.post("/v1/aliases", { _tag: "Address", address, mode: "forward" });
+
+      expect((yield* create(ada, "shop@custom.example")).body).toMatchObject({
+        reason: "domain-not-verified",
+      });
+      expect((yield* create(ada, "shop@bob.example")).body).toMatchObject({
+        reason: "unknown-domain",
+      });
+      expect((yield* ada.get("/v1/aliases/domains")).body).toMatchObject({ custom: [] });
+
+      yield* publish(api, "custom.example", zoneFor(added));
+      expect((yield* check(ada, "custom.example")).status).toBe("verified");
+      expect(yield* create(ada, "Shop@Custom.Example")).toMatchObject({
+        status: 201,
+        body: { address: "shop@custom.example" },
+      });
+      expect((yield* create(bob, "news@custom.example")).body).toMatchObject({
+        reason: "unknown-domain",
+      });
+      expect((yield* ada.get("/v1/aliases/domains")).body).toMatchObject({
+        custom: ["custom.example"],
+      });
+      // Deleting it leaves a tombstone (§20.15): only its owner may create it again.
+      expect((yield* ada.delete("/v1/aliases/custom.example/shop")).status).toBe(204);
+      expect((yield* create(ada, "shop@custom.example")).status).toBe(201);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("the verification cron checks every due domain", () =>
     Effect.gen(function* () {
       const api = yield* TestApi.make;

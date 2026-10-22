@@ -91,36 +91,30 @@ const pipeline = Pipeline.layer(
   ),
 );
 
-/** The dev domains, verified as SES identities so forwarded mail and replies can be sent. */
-const devDomains = SharedDomains.SharedDomains.use((domains) =>
-  Effect.succeed([...domains, "custom.test"]),
-);
-
-const emulator = Layer.unwrap(
-  Effect.map(devDomains, (verifiedDomains) =>
-    SesEmulator.layer({
-      smtpPort: Number(process.env.ALIAS_SMTP_PORT ?? 2525),
-      verifiedDomains,
-      rules: [
-        {
-          name: "all-verified",
-          enabled: true,
-          recipients: [],
-          s3: { bucket: spoolBucket, objectKeyPrefix: Inbound.spoolPrefix },
-          lambda: {
-            functionArn: "arn:aws:lambda:eu-west-1:000000000000:function:alias-inbound",
-            invocationType: "Event",
-          },
-          scanEnabled: true,
-        },
-      ],
-    }),
-  ),
-).pipe(Layer.provide([NodeCrypto.layer, awsClient, sharedDomains]));
+// Like SES, the emulator receives for the account's verified domain identities: the shared ones
+// verified below, and each custom domain from the moment the API creates its identity (the
+// pipeline then drops mail to it as `unverified-domain` until it is verified, PLAN.md §20.18.2).
+const emulator = SesEmulator.layer({
+  smtpPort: Number(process.env.ALIAS_SMTP_PORT ?? 2525),
+  verifiedDomains: "identities",
+  rules: [
+    {
+      name: "all-verified",
+      enabled: true,
+      recipients: [],
+      s3: { bucket: spoolBucket, objectKeyPrefix: Inbound.spoolPrefix },
+      lambda: {
+        functionArn: "arn:aws:lambda:eu-west-1:000000000000:function:alias-inbound",
+        invocationType: "Event",
+      },
+      scanEnabled: true,
+    },
+  ],
+}).pipe(Layer.provide([NodeCrypto.layer, awsClient]));
 
 const prepare = Effect.fn("inbound.dev.prepare")(function* () {
   yield* untilFakeCloudIsUp(Inbound.ensureSpool(spoolBucket)).pipe(Effect.provide(awsClient));
-  const domains = yield* devDomains;
+  const domains = yield* SharedDomains.SharedDomains;
   // fakecloud only accepts senders on an exactly verified domain, while AWS also accepts the
   // subdomains (PLAN.md §20.5). `apps/api/bin/dev.ts` verifies each user's subdomains when they
   // sign up, so mail to `<user>.alias.test` aliases can be sent.

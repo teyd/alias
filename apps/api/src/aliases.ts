@@ -7,7 +7,7 @@ import {
   CurrentUser,
   InvalidAlias,
 } from "@alias/contracts";
-import { AliasRepo } from "@alias/db";
+import { AliasRepo, DomainRepo } from "@alias/db";
 import { Publisher } from "@alias/webhooks";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -79,7 +79,24 @@ const createRandom = Effect.fn("aliases.createRandom")(function* (requested: str
   );
 });
 
-/** Any local part on the caller's own subdomain of a shared domain. */
+/** Any local part on one of the caller's custom domains, while it is verified. */
+const createOnCustom = Effect.fn("aliases.createOnCustom")(function* (
+  address: Address.MailAddress,
+  requested: string,
+  mode: Mode,
+) {
+  const user = yield* CurrentUser;
+  const domains = yield* DomainRepo.DomainRepo;
+  const found = Option.filter(
+    yield* Effect.orDie(domains.find(address.domain)),
+    (domain) => domain.userId === user.userId,
+  );
+  if (Option.isNone(found)) return yield* invalid(requested, "unknown-domain");
+  if (found.value.status !== "verified") return yield* invalid(requested, "domain-not-verified");
+  return yield* insert(address, mode);
+});
+
+/** Any local part on the caller's own subdomain of a shared domain, or custom domain. */
 const createAddress = Effect.fn("aliases.createAddress")(function* (requested: string, mode: Mode) {
   const user = yield* CurrentUser;
   const shared = yield* SharedDomains.SharedDomains;
@@ -94,7 +111,7 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
     SharedRandom: () => invalid(requested, "random-only-on-shared-domain"),
     UserSubdomain: ({ username }) =>
       username === user.username ? insert(address, mode) : invalid(requested, "not-your-subdomain"),
-    Custom: () => invalid(requested, "unknown-domain"),
+    Custom: () => createOnCustom(address, requested, mode),
   });
 });
 
@@ -102,6 +119,7 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
 type AliasServices =
   | Crypto.Crypto
   | AliasRepo.AliasRepo
+  | DomainRepo.DomainRepo
   | SharedDomains.SharedDomains
   | Publisher.Publisher;
 
@@ -151,6 +169,7 @@ export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
     const services = yield* Effect.context<AliasServices>();
     const repo = yield* AliasRepo.AliasRepo;
     const shared = yield* SharedDomains.SharedDomains;
+    const domains = yield* DomainRepo.DomainRepo;
     const owned = (params: { readonly domain: string; readonly local: string }) =>
       Effect.map(Effect.service(CurrentUser), (user) => ({
         userId: user.userId,
@@ -165,10 +184,18 @@ export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
         ),
       )
       .handle("domains", () =>
-        Effect.map(Effect.service(CurrentUser), (user) => ({
-          shared,
-          subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
-        })),
+        Effect.gen(function* () {
+          const user = yield* CurrentUser;
+          const custom = yield* Effect.orDie(domains.listByUser(user.userId));
+          return {
+            shared,
+            subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
+            custom: Arr.map(
+              Arr.filter(custom, (domain) => domain.status === "verified"),
+              (domain) => domain.domain,
+            ),
+          };
+        }),
       )
       .handle("create", ({ payload }) =>
         Effect.provide(

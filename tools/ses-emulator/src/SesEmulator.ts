@@ -7,10 +7,13 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as R from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { SMTPServer } from "smtp-server";
 import { type AwsClient, Inbound, SesEvent } from "@alias/aws";
 import * as S3 from "@distilled.cloud/aws/s3";
+import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as Clock from "effect/Clock";
 import { commonHeaders, parseHeaders } from "./Headers.ts";
 import { ruleMatches, type ReceiptRule } from "./ReceiptRules.ts";
@@ -44,7 +47,13 @@ export interface SesEmulatorConfig {
   /** Port for the inbound SMTP listener. `0` picks a free port (the default, and what tests use). */
   readonly smtpPort?: number;
   readonly host?: string;
-  readonly verifiedDomains: ReadonlyArray<string>;
+  /**
+   * The domains SES receives mail for. AWS receives only for the account's verified identities
+   * (and their subdomains); `"identities"` asks SES for them (`ListEmailIdentities`, verified
+   * domain identities) at every recipient, so a custom domain verified at run time is received
+   * from then on. A list fixes them instead.
+   */
+  readonly verifiedDomains: ReadonlyArray<string> | "identities";
   readonly rules: ReadonlyArray<ReceiptRule>;
   /** Verdicts stamped on the next messages; tests override this to simulate spam or DMARC failures. */
   readonly verdicts?: (recipients: ReadonlyArray<string>) => Verdicts;
@@ -104,8 +113,32 @@ const make = Effect.fn("SesEmulator.make")(function* (config: SesEmulatorConfig)
   const client = yield* Effect.context<AwsClient.AwsClient>();
   const verdictsFor = config.verdicts ?? (() => passingVerdicts);
 
+  const verifiedDomains: Effect.Effect<
+    ReadonlyArray<string>,
+    SmtpFailure
+  > = config.verifiedDomains === "identities"
+    ? SESV2.listEmailIdentities.pages({ PageSize: 1000 }).pipe(
+        Stream.runCollect,
+        Effect.map((pages) =>
+          Arr.flatMap(pages, (page) =>
+            Arr.filterMap(page.EmailIdentities ?? [], (identity) =>
+              identity.IdentityType === "DOMAIN" && identity.VerificationStatus === "SUCCESS"
+                ? Result.fromNullishOr(identity.IdentityName, () => undefined)
+                : Result.failVoid,
+            ),
+          ),
+        ),
+        Effect.mapError(
+          (error) => new SmtpFailure({ reason: `cannot list identities: ${String(error)}` }),
+        ),
+        Effect.provide(client),
+      )
+    : Effect.succeed(config.verifiedDomains);
+
   const firstMatchingRule = (recipient: string) =>
-    Arr.findFirst(config.rules, (rule) => ruleMatches(rule, recipient, config.verifiedDomains));
+    Effect.map(verifiedDomains, (verified) =>
+      Arr.findFirst(config.rules, (rule) => ruleMatches(rule, recipient, verified)),
+    );
 
   const deliver = Effect.fn("SesEmulator.deliver")(function* (
     raw: Uint8Array,
@@ -115,8 +148,16 @@ const make = Effect.fn("SesEmulator.make")(function* (config: SesEmulatorConfig)
     const startedAt = yield* Clock.currentTimeMillis;
     const timestamp = DateTime.formatIso(yield* DateTime.now);
     const verdicts = verdictsFor(recipients);
-    const matched = Arr.flatMap(recipients, (recipient) =>
-      Arr.fromOption(Option.map(firstMatchingRule(recipient), (rule) => ({ rule, recipient }))),
+    const matched = Arr.flatMap(
+      yield* Effect.forEach(
+        recipients,
+        (recipient) =>
+          Effect.map(firstMatchingRule(recipient), (rule) =>
+            Arr.fromOption(Option.map(rule, (found) => ({ rule: found, recipient }))),
+          ),
+        { concurrency: 1 },
+      ),
+      (found) => found,
     );
     const byRule = R.values(Arr.groupBy(matched, (match) => match.rule.name));
 
@@ -203,11 +244,15 @@ const make = Effect.fn("SesEmulator.make")(function* (config: SesEmulatorConfig)
     disabledCommands: ["AUTH", "STARTTLS"],
     logger: false,
     onRcptTo(address, _session, callback) {
-      Option.match(firstMatchingRule(address.address), {
-        onNone: () =>
-          callback(new RecipientRejected({ recipient: address.address, responseCode: 550 })),
-        onSome: () => callback(),
-      });
+      run(firstMatchingRule(address.address)).then(
+        Option.match({
+          onNone: () =>
+            callback(new RecipientRejected({ recipient: address.address, responseCode: 550 })),
+          onSome: () => callback(),
+        }),
+        // SES couldn't be asked: a temporary failure, so the sender retries.
+        () => callback(new RecipientRejected({ recipient: address.address, responseCode: 451 })),
+      );
     },
     onData(stream, session, callback) {
       const recipients = Arr.map(session.envelope.rcptTo, (rcpt) => rcpt.address);

@@ -12,6 +12,7 @@ import {
   ContactRepo,
   type DatabaseError,
   DeliveryRepo,
+  DomainRepo,
   type Dynamo,
   RecipientRepo,
   UserRepo,
@@ -268,24 +269,18 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
 });
 
 /**
- * Creates the alias for mail to an unknown address on a user's subdomain, if that user opted in
- * (PLAN.md §3.2 step 1). Spam and viruses never create one, and each user may create only
- * `Limits.aliasesCreatedPerDay` this way. A deleted alias stays deleted: mail to it is dropped
- * like mail to any unknown address and spends nothing. A concurrent creation of the same address
- * is fine: both then use the one that was stored.
+ * Creates the alias for mail to an unknown address on its owner's domain (PLAN.md §3.2 step 1):
+ * a user subdomain or custom domain whose owner opted in. Spam and viruses never create one, and
+ * each user may create only `Limits.aliasesCreatedPerDay` this way. A deleted alias stays
+ * deleted: mail to it is dropped like mail to any unknown address and spends nothing. A
+ * concurrent creation of the same address is fine: both then use the one that was stored.
  */
-const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
+const createFor = Effect.fn("Pipeline.createFor")(function* (
   record: Record,
   address: Address.MailAddress,
-  username: string,
+  ownerId: string,
 ) {
-  const users = yield* UserRepo.UserRepo;
   const aliases = yield* AliasRepo.AliasRepo;
-  const owner = yield* users.findByUsername(username);
-  if (Option.isNone(owner)) return Result.fail<Policy.DropReason>("unknown-alias");
-  if (!(yield* users.settings(owner.value.id)).isOnTheFlyEnabled) {
-    return Result.fail<Policy.DropReason>("unknown-alias");
-  }
   const screened = Policy.screen(record.ses.receipt, "drop");
   if (Option.isSome(screened)) return Result.fail<Policy.DropReason>(screened.value);
   if (yield* aliases.isDeleted(address.domain, address.local)) {
@@ -293,7 +288,7 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   }
   const now = yield* DateTime.now;
   const { aliasesCreatedPerDay } = yield* Limits.Limits;
-  if (!(yield* aliases.reserveCreation(owner.value.id, now, aliasesCreatedPerDay))) {
+  if (!(yield* aliases.reserveCreation(ownerId, now, aliasesCreatedPerDay))) {
     return Result.fail<Policy.DropReason>("creation-limited");
   }
   const ulid = yield* Effect.orDie((yield* Crypto.Crypto).randomULID);
@@ -301,7 +296,7 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   const isCreated = yield* aliases
     .insert({
       id: aliasId,
-      userId: owner.value.id,
+      userId: ownerId,
       domain: address.domain,
       localPart: address.local,
       mode: "forward",
@@ -314,7 +309,7 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   if (isCreated) {
     yield* Effect.logInfo("inbound alias created on the fly");
     yield* (yield* Publisher.Publisher).publish(
-      owner.value.id,
+      ownerId,
       {
         type: "alias.created",
         timestamp: DateTime.formatIso(now),
@@ -324,26 +319,78 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
     );
   }
   const created = yield* aliases.findByAddress(address.domain, address.local);
-  return Option.match(created, {
-    onNone: () => Result.fail<Policy.DropReason>("unknown-alias"),
-    onSome: Result.succeed,
-  });
+  return Option.match(
+    Option.filter(created, (alias) => alias.userId === ownerId),
+    {
+      onNone: () => Result.fail<Policy.DropReason>("unknown-alias"),
+      onSome: Result.succeed,
+    },
+  );
+});
+
+/** On a user subdomain: the subdomain's owner must have turned on-the-fly aliases on. */
+const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
+  record: Record,
+  address: Address.MailAddress,
+  username: string,
+) {
+  const users = yield* UserRepo.UserRepo;
+  const owner = yield* users.findByUsername(username);
+  if (Option.isNone(owner)) return Result.fail<Policy.DropReason>("unknown-alias");
+  if (!(yield* users.settings(owner.value.id)).isOnTheFlyEnabled) {
+    return Result.fail<Policy.DropReason>("unknown-alias");
+  }
+  return yield* createFor(record, address, owner.value.id);
+});
+
+/**
+ * The verified custom domain an address is on (PLAN.md §20.18.2). Anything else is dropped: a
+ * domain nobody added, or one that is pending or failed, receives nothing and sends nothing.
+ */
+const customDomain = Effect.fn("Pipeline.customDomain")(function* (domain: string) {
+  const found = yield* (yield* DomainRepo.DomainRepo).find(domain);
+  if (Option.isNone(found)) return Result.fail<Policy.DropReason>("unknown-domain");
+  return found.value.status === "verified"
+    ? Result.succeed(found.value)
+    : Result.fail<Policy.DropReason>("unverified-domain");
 });
 
 /** Decides what to do for one recipient. Reads the table, never the message. */
 const plan = Effect.fn("Pipeline.plan")(function* (record: Record, recipient: string) {
   const routed = yield* route(recipient, yield* SharedDomains.SharedDomains);
   if (Route.$is("Unroutable")(routed)) return Plan.Drop({ reason: "unroutable" });
-  const found = yield* (yield* AliasRepo.AliasRepo).findByAddress(
-    routed.alias.domain,
-    routed.alias.local,
+  const domain = routed.isCustomDomain
+    ? Result.map(yield* customDomain(routed.alias.domain), Option.some)
+    : Result.succeed(Option.none<DomainRepo.Domain>());
+  if (Result.isFailure(domain)) return Plan.Drop({ reason: domain.failure });
+  const custom = domain.success;
+  // On a custom domain only its owner's aliases count; one a previous owner of the domain left
+  // behind must never receive mail for the new owner.
+  const found = Option.filter(
+    yield* (yield* AliasRepo.AliasRepo).findByAddress(routed.alias.domain, routed.alias.local),
+    (alias) =>
+      Option.match(custom, {
+        onNone: () => true,
+        onSome: (owned) => owned.userId === alias.userId,
+      }),
   );
   const resolved = yield* Option.match(found, {
     onSome: (alias) => Effect.succeed(Result.succeed(alias)),
-    onNone: () =>
-      Route.$is("Forward")(routed) && Option.isSome(routed.username)
-        ? createOnTheFly(record, routed.alias, routed.username.value)
-        : Effect.succeed(Result.fail<Policy.DropReason>("unknown-alias")),
+    onNone: () => {
+      if (!Route.$is("Forward")(routed)) {
+        return Effect.succeed(Result.fail<Policy.DropReason>("unknown-alias"));
+      }
+      if (Option.isSome(routed.username)) {
+        return createOnTheFly(record, routed.alias, routed.username.value);
+      }
+      return Option.match(
+        Option.filter(custom, (owned) => owned.isCatchAllEnabled),
+        {
+          onNone: () => Effect.succeed(Result.fail<Policy.DropReason>("unknown-alias")),
+          onSome: (owned) => createFor(record, routed.alias, owned.userId),
+        },
+      );
+    },
   });
   if (Result.isFailure(resolved)) return Plan.Drop({ reason: resolved.failure });
   const alias = resolved.success;
@@ -533,6 +580,7 @@ export const layer = <E, R>(
     ContactRepo.layer,
     RecipientRepo.layer,
     DeliveryRepo.layer,
+    DomainRepo.layer,
     UserRepo.layer,
     NodeCrypto.layer,
     Publisher.layer.pipe(Layer.provide(NodeCrypto.layer)),

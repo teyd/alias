@@ -1,7 +1,14 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, Username } from "@alias/core";
-import { AliasRepo, ContactRepo, RecipientRepo, UserRepo, WebhookRepo } from "@alias/db";
+import {
+  AliasRepo,
+  ContactRepo,
+  DomainRepo,
+  RecipientRepo,
+  UserRepo,
+  WebhookRepo,
+} from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { freshQueue, TestQueue } from "@alias/webhooks/testing";
 import * as S3 from "@distilled.cloud/aws/s3";
@@ -372,7 +379,7 @@ describe("inbound pipeline (fakecloud)", () => {
 
         expect(yield* Pipeline.handle(event)).toEqual([
           { _tag: "Dropped", reason: "unknown-alias" },
-          { _tag: "Dropped", reason: "unroutable" },
+          { _tag: "Dropped", reason: "unknown-domain" },
           { _tag: "Dropped", reason: "inbox-mode" },
           { _tag: "Dropped", reason: "no-recipient" },
         ]);
@@ -1044,6 +1051,155 @@ describe("inbound pipeline (fakecloud)", () => {
         expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Dropped", reason: "rejected" }]);
         expect(yield* spoolHolds(messageId)).toBe(false);
       }),
+    ),
+  );
+});
+
+/**
+ * Claims `domain` for `usr_1` the way the API does and brings it to `status`. Verified domains
+ * are SES identities, so fakecloud lets mail be sent from them.
+ */
+const customDomain = Effect.fn("customDomain")(function* (
+  domain: string,
+  status: DomainRepo.DomainStatus,
+  options: { readonly userId?: string; readonly isCatchAllEnabled?: boolean } = {},
+) {
+  const repo = yield* DomainRepo.DomainRepo;
+  const userId = options.userId ?? "usr_1";
+  const now = DateTime.makeUnsafe(0);
+  yield* repo.claim({ domain, userId, verificationToken: "tok", createdAt: now }, 3);
+  if (status !== "pending") {
+    yield* repo.recordCheck(userId, domain, {
+      status,
+      checks: [],
+      checkedAt: now,
+      verifiedAt: Option.some(now),
+      nextCheckAt: now,
+    });
+  }
+  if (options.isCatchAllEnabled === true) yield* repo.setCatchAll(userId, domain, true);
+  yield* Transport.ensureIdentity(domain);
+});
+
+describe("inbound pipeline on custom domains (PLAN.md §20.18.2)", () => {
+  it.effect("forwards from and replies as the custom domain once it is verified", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* customDomain("custom.example", "verified");
+        yield* alias({ domain: "custom.example" });
+        yield* recipient("ada@mail.example");
+        const { event } = yield* receive({ recipients: ["Shop@Custom.Example"] });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+        const reverse = Option.getOrElse(
+          Arr.last(yield* sent).pipe(Option.map((email) => email.from)),
+          () => "",
+        );
+        expect(reverse).toMatch(/^shop\+r\.[a-z2-7]+@custom\.example$/);
+
+        expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
+        const reply = Arr.last(yield* sent);
+        expect(Option.map(reply, (email) => [email.from, email.to])).toEqual(
+          Option.some(["shop@custom.example", ["shop@store.example"]]),
+        );
+        expect(header(text(Option.flatMap(reply, (email) => email.raw)), "Message-ID")).toEqual(
+          Option.some(expect.stringMatching(/@custom\.example>$/)),
+        );
+      }),
+    ),
+  );
+
+  it.effect("drops mail to pending, failed and unknown custom domains, both ways", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* customDomain("pending.example", "pending");
+        yield* customDomain("failed.example", "failed");
+        yield* alias({ id: "al_p", domain: "pending.example" });
+        yield* alias({ id: "al_f", domain: "failed.example" });
+        yield* recipient("ada@mail.example");
+        const { event } = yield* receive({
+          recipients: [
+            "shop@pending.example",
+            "shop@failed.example",
+            "shop+r.abc@failed.example",
+            "shop@nobody.example",
+          ],
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "unverified-domain" },
+          { _tag: "Dropped", reason: "unverified-domain" },
+          { _tag: "Dropped", reason: "unverified-domain" },
+          { _tag: "Dropped", reason: "unknown-domain" },
+        ]);
+        expect(yield* sent).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("never delivers to an alias a previous owner of the domain left behind", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* customDomain("custom.example", "verified", { userId: "usr_2" });
+        yield* alias({ domain: "custom.example" });
+        yield* recipient("ada@mail.example");
+        const { event } = yield* receive({ recipients: ["shop@custom.example"] });
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* sent).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("creates aliases for unknown addresses only with catch-all on", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* customDomain("closed.example", "verified");
+        yield* customDomain("open.example", "verified", { isCatchAllEnabled: true });
+        yield* recipient("ada@mail.example");
+        const { event } = yield* receive({
+          recipients: ["new@closed.example", "New@open.example"],
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+          { _tag: "Forwarded" },
+        ]);
+        expect(Option.map(yield* aliasAt("open.example", "new"), (found) => found.userId)).toEqual(
+          Option.some("usr_1"),
+        );
+        expect(yield* aliasAt("closed.example", "new")).toEqual(Option.none());
+
+        const spam = yield* receive({
+          recipients: ["junk@open.example"],
+          verdicts: { spam: "FAIL" },
+        });
+        expect(yield* Pipeline.handle(spam.event)).toEqual([{ _tag: "Dropped", reason: "spam" }]);
+        expect(yield* aliasAt("open.example", "junk")).toEqual(Option.none());
+
+        // A deleted alias stays deleted (§20.15): catch-all doesn't bring it back.
+        yield* AliasRepo.AliasRepo.use((repo) =>
+          repo.delete({ userId: "usr_1", domain: "open.example", localPart: "new" }),
+        );
+        const again = yield* receive({ recipients: ["new@open.example"] });
+        expect(yield* Pipeline.handle(again.event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* aliasAt("open.example", "new")).toEqual(Option.none());
+      }),
+    ),
+  );
+
+  it.effect("counts catch-all creations against the owner's daily allowance", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* customDomain("open.example", "verified", { isCatchAllEnabled: true });
+        yield* recipient("ada@mail.example");
+        const { event } = yield* receive({ recipients: ["a@open.example", "b@open.example"] });
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Forwarded" },
+          { _tag: "Dropped", reason: "creation-limited" },
+        ]);
+      }),
+      { ...Limits.defaults, aliasesCreatedPerDay: 1 },
     ),
   );
 });

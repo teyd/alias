@@ -391,6 +391,7 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
         body: {
           shared: ["alias.test", "alias2.test"],
           subdomains: ["grace.alias.test", "grace.alias2.test"],
+          custom: [],
         },
       });
     }).pipe(Effect.scoped),

@@ -1,4 +1,5 @@
-import { AwsClient, Inbound, SesEvent } from "@alias/aws";
+import { AwsClient, Inbound, SesEvent, Transport } from "@alias/aws";
+import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import { FakeCloud } from "@alias/aws-emulators";
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
@@ -87,6 +88,44 @@ describe("SesEmulator (in-process SMTP on port 0, S3 on fakecloud)", () => {
 
     it.effect("creating the spool bucket again is a no-op (dev restarts)", () =>
       Inbound.ensureSpool(bucket),
+    );
+  });
+});
+
+/** The same rule, with the verified domains read from the account's SES identities. */
+const fromIdentities = SesEmulator.layer({ ...config, verifiedDomains: "identities" }).pipe(
+  Layer.provideMerge(spool),
+  Layer.provide(NodeCrypto.layer),
+);
+
+describe("SesEmulator receiving for the account's verified SES identities (fakecloud)", () => {
+  it.layer(fromIdentities, { timeout: 30_000 })((it) => {
+    it.effect("receives for a domain once it is a verified identity, and its subdomains", () =>
+      Effect.gen(function* () {
+        const ses = yield* SesEmulator.SesEmulator;
+        expect(Exit.isFailure(yield* Effect.exit(send(ses.smtpPort, "shop@custom.example")))).toBe(
+          true,
+        );
+        yield* Transport.ensureIdentity("custom.example");
+        yield* send(ses.smtpPort, "shop@custom.example");
+        expect((yield* Queue.take(ses.events)).Records[0]?.ses.receipt.recipients).toEqual([
+          "shop@custom.example",
+        ]);
+        yield* send(ses.smtpPort, "shop@deep.custom.example");
+        expect((yield* Queue.take(ses.events)).Records[0]?.ses.receipt.recipients).toEqual([
+          "shop@deep.custom.example",
+        ]);
+        // An email-address identity verifies that address for sending, not its domain for
+        // receiving.
+        yield* Transport.ensureIdentity("someone@other.example");
+        expect(Exit.isFailure(yield* Effect.exit(send(ses.smtpPort, "x@other.example")))).toBe(
+          true,
+        );
+        yield* SESV2.deleteEmailIdentity({ EmailIdentity: "custom.example" });
+        expect(Exit.isFailure(yield* Effect.exit(send(ses.smtpPort, "shop@custom.example")))).toBe(
+          true,
+        );
+      }),
     );
   });
 });

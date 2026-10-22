@@ -47,6 +47,7 @@ export default defineConfig({
           "**/bin/**/*.ts",
           "apps/*/src/handler.ts",
           "apps/*/src/feedbackHandler.ts",
+          "apps/*/src/verifyHandler.ts",
           "apps/web/src/lib/api.ts",
         ],
         rules: {

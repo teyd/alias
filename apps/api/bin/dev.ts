@@ -10,10 +10,15 @@
  *
  * Dev-only hook: when someone signs up, their subdomain of each shared domain is verified as its
  * own SES identity on fakecloud (see `verifySubdomains`).
+ *
+ * Custom domains: SES identities live on the same fakecloud, DNS checks go to the DoH emulator
+ * (`tools/doh-emulator/bin/serve.ts`, on `ALIAS_DOH_PORT`), and the verification cron runs here
+ * every minute instead of on EventBridge Scheduler.
  */
-import { AwsClient, type FunctionUrl, Transport } from "@alias/aws";
+import { AwsClient, type FunctionUrl, Identities, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
-import { AliasRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
+import { AliasRepo, DomainRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
+import { Doh } from "@alias/dns";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { UrlPolicy, WebhookQueue } from "@alias/webhooks";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
@@ -23,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as DomainVerification from "../src/DomainVerification.ts";
 import { MailSettings, makeFunctionUrlHandler, RelyingParty } from "../src/index.ts";
 
 const port = Number(process.env.ALIAS_API_PORT ?? 8787);
@@ -43,6 +49,10 @@ const mail = Layer.merge(
 const webhooks = Layer.merge(
   WebhookQueue.dev.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
   UrlPolicy.layer({ isLoopbackAllowed: true }),
+);
+const domains = Layer.merge(
+  Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
+  Doh.layer(`http://127.0.0.1:${process.env.ALIAS_DOH_PORT ?? 8053}/dns-query`),
 );
 const relyingParty = RelyingParty.layer({
   id: "localhost",
@@ -122,7 +132,21 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
     Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
-  const { handle } = makeFunctionUrlHandler(Layer.mergeAll(database, relyingParty, mail, webhooks));
+  const { handle } = makeFunctionUrlHandler(
+    Layer.mergeAll(database, relyingParty, mail, webhooks, domains),
+  );
+  // The verification cron, as EventBridge Scheduler would run it (every ten minutes in infra).
+  yield* DomainVerification.runDue().pipe(
+    Effect.tap((outcome) =>
+      outcome.checked + outcome.failed > 0
+        ? Effect.logInfo("domains checked", outcome)
+        : Effect.void,
+    ),
+    Effect.catch((error) => Effect.logError("domain cron failed", error)),
+    Effect.repeat(Schedule.spaced("1 minute")),
+    Effect.provide(DomainRepo.layer.pipe(Layer.provideMerge(Layer.merge(database, domains)))),
+    Effect.forkScoped,
+  );
   const devHooks = Layer.merge(sharedDomains, AwsClient.emulator(fakecloudUrl));
   const server = yield* FunctionUrlServer.make({
     port,

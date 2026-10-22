@@ -13,11 +13,11 @@
     "dev": "node bin/serve.ts"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@alias/dns": "workspace:*",
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "vite-plus": "catalog:",

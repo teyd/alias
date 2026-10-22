@@ -311,6 +311,9 @@ importers:
       '@alias/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@alias/dns':
+        specifier: workspace:*
+        version: link:../../packages/dns
       '@alias/webhooks':
         specifier: workspace:*
         version: link:../../packages/webhooks
@@ -327,6 +330,9 @@ importers:
       '@alias/aws-emulators':
         specifier: workspace:*
         version: link:../../tools/aws-emulators
+      '@alias/doh-emulator':
+        specifier: workspace:*
+        version: link:../../tools/doh-emulator
       '@alias/lambda-emulator':
         specifier: workspace:*
         version: link:../../tools/lambda-emulator
@@ -660,6 +666,9 @@ importers:
       '@alias/core':
         specifier: workspace:*
         version: link:../core
+      '@alias/dns':
+        specifier: workspace:*
+        version: link:../dns
       effect:
         specifier: 'catalog:'
         version: 4.0.5
@@ -809,6 +818,9 @@ importers:
 
   tools/doh-emulator:
     dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.3.0)
       effect:
         specifier: 'catalog:'
         version: 4.0.5
@@ -816,9 +828,6 @@ importers:
       '@alias/dns':
         specifier: workspace:*
         version: link:../../packages/dns
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.3.0)
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.5)

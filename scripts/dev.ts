@@ -15,6 +15,7 @@ const env = { ...process.env, ...devEnv, FORCE_COLOR: "1" };
 // and hands each Lambda event to the real inbound pipeline, which forwards through fakecloud SES.
 // Webhooks polls fakecloud's SQS webhook queue and runs the real delivery handler.
 // The image proxy serves the proxied images in forwarded mail.
+// Custom domains are checked against the DoH emulator, whose zones you set over HTTP.
 const services: Array<{ name: string; cwd: string; command: string; args: Array<string> }> = [
   {
     name: "fakecloud",
@@ -33,6 +34,7 @@ const services: Array<{ name: string; cwd: string; command: string; args: Array<
       `${root}/.dev/fakecloud`,
     ],
   },
+  { name: "dns", cwd: `${root}/tools/doh-emulator`, command: "node", args: ["bin/serve.ts"] },
   { name: "api", cwd: `${root}/apps/api`, command: "node", args: ["bin/dev.ts"] },
   { name: "web", cwd: `${root}/apps/web`, command: "pnpm", args: ["exec", "vp", "dev"] },
   { name: "inbound", cwd: `${root}/apps/inbound`, command: "node", args: ["bin/dev.ts"] },
@@ -73,5 +75,5 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 console.log(
-  `web http://localhost:${devEnv.ALIAS_WEB_PORT}  api http://localhost:${devEnv.ALIAS_API_PORT}  smtp localhost:${devEnv.ALIAS_SMTP_PORT}  images http://localhost:${devEnv.ALIAS_IMAGE_PROXY_PORT}  fakecloud http://localhost:${devEnv.ALIAS_FAKECLOUD_PORT}`,
+  `web http://localhost:${devEnv.ALIAS_WEB_PORT}  api http://localhost:${devEnv.ALIAS_API_PORT}  smtp localhost:${devEnv.ALIAS_SMTP_PORT}  images http://localhost:${devEnv.ALIAS_IMAGE_PROXY_PORT}  fakecloud http://localhost:${devEnv.ALIAS_FAKECLOUD_PORT}  doh http://localhost:${devEnv.ALIAS_DOH_PORT}/dns-query`,
 );

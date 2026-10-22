@@ -40,5 +40,6 @@ console.log(
 );
 console.log(
   `  images  http://localhost:${block.imageProxy}  (image proxy behind the function URL emulator)`,
+  `  dns     http://localhost:${block.doh}/dns-query  (DoH emulator, custom-domain checks)`,
 );
 console.log(`\nnext: pnpm dev   |   pnpm test   |   pnpm test:affected`);

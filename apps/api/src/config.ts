@@ -1,6 +1,7 @@
-import { MessageQueue, Transport } from "@alias/aws";
+import { Identities, MessageQueue, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
+import { Doh } from "@alias/dns";
 import { UrlPolicy } from "@alias/webhooks";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -50,4 +51,6 @@ export const ServicesConfig = Config.all([
   MailConfig,
   MessageQueue.config("ALIAS_WEBHOOK_QUEUE_URL"),
   UrlPolicy.config,
+  Identities.config,
+  Doh.config,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));

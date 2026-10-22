@@ -18,6 +18,7 @@
     "@alias/contracts": "workspace:*",
     "@alias/core": "workspace:*",
     "@alias/db": "workspace:*",
+    "@alias/dns": "workspace:*",
     "@alias/webhooks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@simplewebauthn/server": "catalog:",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@alias/aws-emulators": "workspace:*",
+    "@alias/doh-emulator": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "@effect/vitest": "catalog:",

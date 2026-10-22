@@ -38,12 +38,16 @@ import { aliasesQuery, createAlias, domainsQuery } from "@/lib/aliases";
 const CreateAliasForm = ({
   shared,
   subdomains,
+  custom,
   onCreated,
 }: {
   readonly shared: ReadonlyArray<string>;
   readonly subdomains: ReadonlyArray<string>;
+  /** The user's verified custom domains: any address, like the subdomain. */
+  readonly custom: ReadonlyArray<string>;
   readonly onCreated: () => void;
 }) => {
+  const addressable = Arr.appendAll(subdomains, custom);
   const queryClient = useQueryClient();
   const create = useMutation({
     mutationFn: createAlias,
@@ -56,14 +60,14 @@ const CreateAliasForm = ({
   const form = useForm({
     defaultValues,
     onSubmit: async ({ value }) => {
-      const isSubdomain = Arr.contains(subdomains, value.domain);
+      const isSubdomain = Arr.contains(addressable, value.domain);
       await create.mutateAsync({ domain: value.domain, local: isSubdomain ? value.local : "" });
       onCreated();
     },
   });
   const domain = useStore(form.store, (state) => state.values.domain);
   const local = useStore(form.store, (state) => Str.trim(state.values.local));
-  const isSubdomain = Arr.contains(subdomains, domain);
+  const isSubdomain = Arr.contains(addressable, domain);
   const preview = isSubdomain && Str.isNonEmpty(local) ? `${local}@${domain}` : "";
 
   return (
@@ -101,6 +105,19 @@ const CreateAliasForm = ({
                       <SelectGroup>
                         <SelectLabel>Your subdomain, any address</SelectLabel>
                         {Arr.map(subdomains, (option) => (
+                          <SelectItem key={option} value={option} className="data">
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </>
+                  )}
+                  {Arr.isReadonlyArrayNonEmpty(custom) && (
+                    <>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>Your custom domains, any address</SelectLabel>
+                        {Arr.map(custom, (option) => (
                           <SelectItem key={option} value={option} className="data">
                             {option}
                           </SelectItem>
@@ -196,6 +213,7 @@ export const CreateAliasDialog = ({
           <CreateAliasForm
             shared={domains.data.shared}
             subdomains={domains.data.subdomains}
+            custom={domains.data.custom}
             onCreated={() => onOpenChange(false)}
           />
         )}

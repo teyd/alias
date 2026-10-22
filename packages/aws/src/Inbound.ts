@@ -2,6 +2,7 @@ import * as S3 from "@distilled.cloud/aws/s3";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { region } from "./Client.ts";
@@ -21,9 +22,17 @@ export const objectKey = (objectKeyPrefix: string, messageId: string): string =>
 
 const spoolObjectKey = (messageId: string): string => objectKey(spoolPrefix, messageId);
 
-class SpoolError extends Schema.TaggedError<SpoolError>()("SpoolError", {
+export class SpoolError extends Schema.TaggedError<SpoolError>()("SpoolError", {
   key: Schema.String,
   reason: Schema.String,
+}) {}
+
+/**
+ * The spool holds no message under this ID: an earlier run processed and deleted it, or the
+ * 1-day lifecycle rule expired it. Retrying can't bring it back.
+ */
+export class MessageGone extends Schema.TaggedError<MessageGone>()("MessageGone", {
+  key: Schema.String,
 }) {}
 
 const concat = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
@@ -43,12 +52,31 @@ export const readMessage = Effect.fn("Inbound.readMessage")(function* (
 ) {
   const key = spoolObjectKey(messageId);
   const fail = (cause: unknown) => new SpoolError({ key, reason: String(cause) });
-  const object = yield* S3.getObject({ Bucket: bucket, Key: key }).pipe(Effect.mapError(fail));
+  const object = yield* S3.getObject({ Bucket: bucket, Key: key }).pipe(
+    Effect.mapError((error) =>
+      P.isTagged(error, "NoSuchKey") ? new MessageGone({ key }) : fail(error),
+    ),
+  );
   const chunks = yield* Option.match(Option.fromUndefinedOr(object.Body), {
     onNone: () => Effect.succeed<ReadonlyArray<Uint8Array>>([]),
     onSome: (body) => Stream.runCollect(body).pipe(Effect.mapError(fail)),
   });
   return concat(chunks);
+});
+
+/**
+ * Removes the stored message once it is processed, so forward-only mail leaves no content behind
+ * (PLAN.md §3.4). Deleting a message that is already gone succeeds, as S3 `DeleteObject` does.
+ */
+export const deleteMessage = Effect.fn("Inbound.deleteMessage")(function* (
+  bucket: string,
+  messageId: string,
+) {
+  const key = spoolObjectKey(messageId);
+  yield* S3.deleteObject({ Bucket: bucket, Key: key }).pipe(
+    Effect.asVoid,
+    Effect.mapError((cause) => new SpoolError({ key, reason: String(cause) })),
+  );
 });
 
 /** Creates the spool bucket if it doesn't exist. Emulators and dev only; Alchemy deploys real stages. */

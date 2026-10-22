@@ -1,3 +1,5 @@
+import * as Effect from "effect/Effect";
+import { flow } from "effect/Function";
 import * as Schema from "effect/Schema";
 
 /**
@@ -61,3 +63,13 @@ const SesRecord = Schema.Struct({
 
 export const SesEvent = Schema.Struct({ Records: Schema.Array(SesRecord) });
 export type SesEvent = typeof SesEvent.Type;
+
+class InvalidSesEvent extends Schema.TaggedError<InvalidSesEvent>()("InvalidSesEvent", {
+  reason: Schema.String,
+}) {}
+
+/** Parses what the Lambda runtime passed in. Run this first; everything below takes the parsed event. */
+export const decode = flow(
+  Schema.decodeUnknownEffect(SesEvent),
+  Effect.mapError((error) => new InvalidSesEvent({ reason: error.message })),
+);

@@ -1,26 +1,12 @@
-import { AwsClient, Transport } from "@alias/aws";
+import { Transport } from "@alias/aws";
+import { SharedDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Str from "effect/String";
 import * as MailSettings from "./MailSettings.ts";
 import * as RelyingParty from "./RelyingParty.ts";
-import * as SharedDomains from "./SharedDomains.ts";
-
-/**
- * Lambda environment. The service runs in eu-west-1 only. `AWS_ENDPOINT_URL_DYNAMODB` and
- * `AWS_ENDPOINT_URL_SESV2` are the AWS-standard endpoint overrides; only emulated runs set them.
- */
-const DatabaseConfig = Config.all({
-  tableName: Config.String("ALIAS_TABLE_NAME"),
-  endpoint: Config.option(Config.String("AWS_ENDPOINT_URL_DYNAMODB")),
-}).pipe(
-  Config.map(({ tableName, endpoint }) =>
-    Dynamo.layer({ tableName, region: "eu-west-1", endpoint }),
-  ),
-);
 
 /** Passkeys are bound to `ALIAS_RP_ID` (e.g. `alias.example`) and the web app's exact origin. */
 const RelyingPartyConfig = Config.all({
@@ -28,27 +14,22 @@ const RelyingPartyConfig = Config.all({
   origin: Config.String("ALIAS_WEB_ORIGIN"),
 }).pipe(Config.map(RelyingParty.layer));
 
-/** Comma-separated, e.g. `alias.example,alias2.example`. */
-const SharedDomainsConfig = Config.String("ALIAS_SHARED_DOMAINS").pipe(
-  Config.map(SharedDomains.layer),
-);
-
-const TransportConfig = Config.option(Config.String("AWS_ENDPOINT_URL_SESV2")).pipe(
-  Config.map((endpoint) =>
-    Transport.ses.pipe(Layer.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
-  ),
-);
-
 /**
- * Confirmation mail is sent as `ALIAS_CONFIRMATION_FROM`, which must be an address on one of the
- * comma-separated `ALIAS_SHARED_DOMAINS`. A bad value fails the cold start, not every request.
+ * The shared domains (`ALIAS_SHARED_DOMAINS`, see `SharedDomains.config`) and the confirmation
+ * sender `ALIAS_CONFIRMATION_FROM`, which must be an address on one of them (default
+ * `no-reply@<first shared domain>`). A bad value fails the cold start, not every request.
  */
 const MailConfig = Config.all({
-  sender: Config.String("ALIAS_CONFIRMATION_FROM"),
-  aliasDomains: Config.String("ALIAS_SHARED_DOMAINS").pipe(Config.map(Str.split(","))),
+  domains: SharedDomains.config,
+  sender: Config.option(Config.String("ALIAS_CONFIRMATION_FROM")),
 }).pipe(
-  Config.mapEffect((settings) =>
-    MailSettings.make(settings).pipe(
+  Config.mapEffect(({ domains, sender }) => {
+    const shared = Layer.succeed(SharedDomains.SharedDomains, domains);
+    return MailSettings.make(sender).pipe(
+      Effect.provide(shared),
+      Effect.map((settings) =>
+        Layer.merge(shared, Layer.succeed(MailSettings.MailSettings, settings)),
+      ),
       Effect.mapError(
         (error) =>
           new Config.ConfigError(
@@ -57,15 +38,13 @@ const MailConfig = Config.all({
             }),
           ),
       ),
-    ),
-  ),
-  Config.map((settings) => Layer.succeed(MailSettings.MailSettings, settings)),
+    );
+  }),
 );
 
 export const ServicesConfig = Config.all([
-  DatabaseConfig,
+  Dynamo.config,
   RelyingPartyConfig,
-  SharedDomainsConfig,
-  TransportConfig,
+  Transport.config,
   MailConfig,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));

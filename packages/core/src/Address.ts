@@ -35,6 +35,12 @@ const isLocalLengthOk = (local: string): boolean => {
 
 const DOMAIN_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
+/** A lowercase domain name of at least two DNS labels, such as `alias.example`. */
+export const isDomain = (domain: string): boolean => {
+  const labels = domain.split(".");
+  return labels.length >= 2 && Arr.every(labels, (label) => DOMAIN_LABEL.test(label));
+};
+
 export const parse = Effect.fn("Address.parse")(function* (input: string) {
   const normalized = input.trim().toLowerCase();
   const at = normalized.lastIndexOf("@");
@@ -49,8 +55,7 @@ export const parse = Effect.fn("Address.parse")(function* (input: string) {
   if (!isLocalLengthOk(local) || !LOCAL_PART.test(local)) {
     return yield* new InvalidAddress({ input, reason: "invalid local part" });
   }
-  const labels = domain.split(".");
-  if (labels.length < 2 || !Arr.every(labels, (label) => DOMAIN_LABEL.test(label))) {
+  if (!isDomain(domain)) {
     return yield* new InvalidAddress({ input, reason: "invalid domain" });
   }
   const address: MailAddress = { local, domain };

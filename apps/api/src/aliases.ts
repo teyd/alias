@@ -1,4 +1,4 @@
-import { Address } from "@alias/core";
+import { Address, SharedDomains } from "@alias/core";
 import {
   AliasNotFound,
   AliasTaken,
@@ -16,7 +16,6 @@ import { HttpApiBuilder } from "effect/http-api";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
-import { SharedDomains } from "./SharedDomains.ts";
 
 type Mode = AliasView["mode"];
 
@@ -49,7 +48,7 @@ const insert = Effect.fn("aliases.insert")(function* (address: Address.MailAddre
 
 /** A fresh local part on one of the shared domains. Draws again if it is already taken. */
 const createRandom = Effect.fn("aliases.createRandom")(function* (requested: string, mode: Mode) {
-  const shared = yield* SharedDomains;
+  const shared = yield* SharedDomains.SharedDomains;
   const domain = requested.trim().toLowerCase();
   if (!Arr.contains(shared, domain)) return yield* invalid(requested, "unknown-domain");
   return yield* Address.randomLocal().pipe(
@@ -62,7 +61,7 @@ const createRandom = Effect.fn("aliases.createRandom")(function* (requested: str
 /** Any local part on the caller's own subdomain of a shared domain. */
 const createAddress = Effect.fn("aliases.createAddress")(function* (requested: string, mode: Mode) {
   const user = yield* CurrentUser;
-  const shared = yield* SharedDomains;
+  const shared = yield* SharedDomains.SharedDomains;
   const address = yield* Address.parse(requested).pipe(
     Effect.catchTag("InvalidAddress", () => invalid(requested, "invalid-address")),
   );
@@ -79,7 +78,7 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
 });
 
 /** What the alias handlers use. The group captures them once, at startup. */
-type AliasServices = Crypto.Crypto | AliasRepo.AliasRepo | SharedDomains;
+type AliasServices = Crypto.Crypto | AliasRepo.AliasRepo | SharedDomains.SharedDomains;
 
 const notFound = (params: { readonly domain: string; readonly local: string }) =>
   new AliasNotFound({ address: `${params.local}@${params.domain}`.toLowerCase() });
@@ -88,7 +87,7 @@ export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<AliasServices>();
     const repo = yield* AliasRepo.AliasRepo;
-    const shared = yield* SharedDomains;
+    const shared = yield* SharedDomains.SharedDomains;
     const owned = (params: { readonly domain: string; readonly local: string }) =>
       Effect.map(Effect.service(CurrentUser), (user) => ({
         userId: user.userId,

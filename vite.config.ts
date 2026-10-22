@@ -43,7 +43,7 @@ export default defineConfig({
       },
       {
         // Composition roots are the only places allowed to run Effects and read the process environment.
-        files: ["**/bin/**/*.ts", "apps/api/src/handler.ts", "apps/web/src/lib/api.ts"],
+        files: ["**/bin/**/*.ts", "apps/*/src/handler.ts", "apps/web/src/lib/api.ts"],
         rules: {
           "effect/effect-run-in-body": "off",
           "effect/avoid-process-env": "off",

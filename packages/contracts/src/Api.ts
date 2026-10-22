@@ -8,6 +8,7 @@ import { InboxesGroup, RetentionDays } from "./Inboxes.ts";
 import { requires } from "./Scopes.ts";
 import { DomainsGroup } from "./Domains.ts";
 import { RecipientsGroup } from "./Recipients.ts";
+import { SecurityGroup } from "./Security.ts";
 import { SettingsGroup } from "./Settings.ts";
 import { TokensGroup } from "./Tokens.ts";
 import { WebhooksGroup } from "./Webhooks.ts";
@@ -218,6 +219,7 @@ export const Api = HttpApi.make("alias")
   .add(RecipientsGroup)
   .add(DomainsGroup)
   .add(SettingsGroup)
+  .add(SecurityGroup)
   .add(TokensGroup)
   .add(WebhooksGroup)
   .add(OAuthGroup)

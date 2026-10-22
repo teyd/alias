@@ -105,6 +105,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       counter: 0,
       transports: ["internal"],
       createdAt: at(1_000),
+      lastUsedAt: Option.none(),
     },
   );
   yield* Effect.forEach(

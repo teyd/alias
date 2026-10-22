@@ -56,7 +56,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
  * A username is unique by its confusable skeleton (`Username.skeleton` in `@alias/core`): the
  * Username item is the claim, written in the same transaction as the User and their first Passkey.
- * Logins look a passkey up by credential ID and a session by the hash of its cookie token.
+ * Logins look a passkey up by credential ID and a session by the hash of its cookie token;
+ * Settings lists a user's passkeys and sessions on their gsi1 partitions.
  * Challenges are deleted when answered (single use).
  *
  * Recipients (forwarding addresses) live in their user's partition: listing them is one strongly

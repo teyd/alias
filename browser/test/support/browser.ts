@@ -129,7 +129,10 @@ export const openPage = Effect.fn("browser.openPage")(function* () {
     Effect.promise(() => cdp.send("WebAuthn.getCredentials", { authenticatorId })).pipe(
       Effect.map(({ credentials }) => credentials),
     );
-  return { page, context, passkeys };
+  /** Gives this authenticator a copy of another one's passkey, as a synced passkey would arrive. */
+  const addPasskey = (credential: Effect.Success<ReturnType<typeof passkeys>>[number]) =>
+    Effect.promise(() => cdp.send("WebAuthn.addCredential", { authenticatorId, credential }));
+  return { page, context, passkeys, addPasskey };
 });
 
 /** Runs a few steps in the browser; Playwright's locators wait for the page on their own. */

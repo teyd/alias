@@ -7,6 +7,7 @@ export * from "./Outbox.ts";
 export * from "./Inboxes.ts";
 export * from "./Recipients.ts";
 export * from "./Scopes.ts";
+export * from "./Security.ts";
 export * from "./Settings.ts";
 export * from "./Tokens.ts";
 export * from "./Webhooks.ts";

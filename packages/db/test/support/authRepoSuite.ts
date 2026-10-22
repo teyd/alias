@@ -18,6 +18,7 @@ const passkey = (overrides: Partial<PasskeyRepo.Passkey> = {}): PasskeyRepo.Pass
   counter: 0,
   transports: ["internal", "hybrid"],
   createdAt: at(1_000),
+  lastUsedAt: Option.none(),
   ...overrides,
 });
 
@@ -186,17 +187,66 @@ export const authRepoSuite = (
       });
 
       describe("PasskeyRepo", () => {
-        it.effect("records the signature counter of the last login", () =>
+        it.effect("records the signature counter and time of the last login", () =>
           withRepos(
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
               yield* users.register(yield* user("ada"), passkey());
 
-              yield* passkeys.recordUse("cred_1", 7);
+              yield* passkeys.recordUse("cred_1", 7, at(5_000));
               expect(yield* passkeys.findById("cred_1")).toEqual(
-                Option.some(passkey({ counter: 7 })),
+                Option.some(passkey({ counter: 7, lastUsedAt: Option.some(at(5_000)) })),
               );
+            }),
+          ),
+        );
+
+        // SR-26 (PLAN.md §20.25): two racing assertions must not both pass.
+        it.effect("refuses a counter that doesn't go up, unless the passkey doesn't count", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const users = yield* UserRepo.UserRepo;
+              const passkeys = yield* PasskeyRepo.PasskeyRepo;
+              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(
+                yield* user("grace", "usr_2"),
+                passkey({ id: "cred_2", userId: "usr_2" }),
+              );
+              yield* passkeys.recordUse("cred_1", 7, at(5_000));
+              const refused = new PasskeyRepo.CounterNotIncreased({ credentialId: "cred_1" });
+              expect(yield* Effect.flip(passkeys.recordUse("cred_1", 7, at(6_000)))).toEqual(
+                refused,
+              );
+              expect(yield* Effect.flip(passkeys.recordUse("cred_1", 6, at(6_000)))).toEqual(
+                refused,
+              );
+              expect(
+                Option.map(yield* passkeys.findById("cred_1"), (found) => found.counter),
+              ).toEqual(Option.some(7));
+              yield* passkeys.recordUse("cred_1", 8, at(7_000));
+              // Most passkeys report 0 every time.
+              yield* passkeys.recordUse("cred_2", 0, at(5_000));
+              yield* passkeys.recordUse("cred_2", 0, at(6_000));
+              expect(
+                Option.map(yield* passkeys.findById("cred_2"), (found) => found.lastUsedAt),
+              ).toEqual(Option.some(Option.some(at(6_000))));
+            }),
+          ),
+        );
+
+        it.effect("lists a user's passkeys, oldest first, and no one else's", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const users = yield* UserRepo.UserRepo;
+              const passkeys = yield* PasskeyRepo.PasskeyRepo;
+              yield* users.register(yield* user("ada"), passkey({ createdAt: at(2_000) }));
+              yield* users.register(
+                yield* user("grace", "usr_2"),
+                passkey({ id: "cred_2", userId: "usr_2" }),
+              );
+              expect(yield* passkeys.list("usr_1")).toEqual([passkey({ createdAt: at(2_000) })]);
+              expect(yield* passkeys.list("usr_3")).toEqual([]);
             }),
           ),
         );
@@ -205,7 +255,7 @@ export const authRepoSuite = (
           withRepos(
             Effect.gen(function* () {
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
-              const error = yield* Effect.flip(passkeys.recordUse("cred_missing", 1));
+              const error = yield* Effect.flip(passkeys.recordUse("cred_missing", 1, at(1)));
               expect(error).toEqual(
                 new PasskeyRepo.PasskeyNotFound({ credentialId: "cred_missing" }),
               );
@@ -235,6 +285,29 @@ export const authRepoSuite = (
               expect(Option.isNone(yield* sessions.find("hash_1"))).toBe(true);
               // Logging out twice is fine.
               yield* sessions.delete("hash_1");
+            }),
+          ),
+        );
+
+        it.effect("lists a user's live sessions and deletes only their own", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const sessions = yield* SessionRepo.SessionRepo;
+              yield* sessions.create({ ...session, id: "hash_2", createdAt: at(10) });
+              yield* sessions.create(session);
+              yield* sessions.create({ ...session, id: "hash_3", expiresAt: at(30_000) });
+              yield* sessions.create({ ...session, id: "hash_9", userId: "usr_2" });
+              yield* TestClock.setTime(30_000);
+              const ids = (found: ReadonlyArray<SessionRepo.Session>) => found.map((one) => one.id);
+              expect(ids(yield* sessions.list("usr_1"))).toEqual(["hash_1", "hash_2"]);
+
+              const notTheirs = yield* Effect.flip(sessions.deleteOwned("usr_1", "hash_9"));
+              expect(notTheirs).toEqual(new SessionRepo.NoSuchSession({ sessionId: "hash_9" }));
+              expect(Option.isSome(yield* sessions.find("hash_9"))).toBe(true);
+              const gone = yield* Effect.flip(sessions.deleteOwned("usr_1", "hash_missing"));
+              expect(gone._tag).toBe("NoSuchSession");
+              yield* sessions.deleteOwned("usr_1", "hash_2");
+              expect(ids(yield* sessions.list("usr_1"))).toEqual(["hash_1"]);
             }),
           ),
         );

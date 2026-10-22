@@ -108,13 +108,20 @@ const register = Effect.fn("auth.register")(function* (payload: {
   const now = yield* DateTime.now;
   const user = { id: ceremony.userId, username, createdAt: now };
   const users = yield* UserRepo.UserRepo;
-  yield* users.register(user, { ...credential, userId: user.id, createdAt: now }).pipe(
-    Effect.catchTags({
-      UsernameTaken: (error) => Effect.fail(new UsernameTaken({ username: error.username })),
-      CredentialTaken: () => Effect.fail(new PasskeyRejected({ reason: "credential-taken" })),
-      DatabaseError: Effect.die,
-    }),
-  );
+  yield* users
+    .register(user, {
+      ...credential,
+      userId: user.id,
+      createdAt: now,
+      lastUsedAt: Option.none(),
+    })
+    .pipe(
+      Effect.catchTags({
+        UsernameTaken: (error) => Effect.fail(new UsernameTaken({ username: error.username })),
+        CredentialTaken: () => Effect.fail(new PasskeyRejected({ reason: "credential-taken" })),
+        DatabaseError: Effect.die,
+      }),
+    );
   return yield* Effect.orDie(Sessions.start(user));
 });
 
@@ -150,9 +157,12 @@ const assertPasskey = Effect.fn("auth.assertPasskey")(function* (
     expectedChallenge: challenge,
     passkey,
   });
-  yield* passkeys.recordUse(passkey.id, counter).pipe(
+  yield* passkeys.recordUse(passkey.id, counter, yield* DateTime.now).pipe(
     Effect.catchTags({
       PasskeyNotFound: () => Effect.fail(unknownCredential),
+      // A racing assertion with a higher counter won, or the credential is cloned.
+      CounterNotIncreased: () =>
+        Effect.fail(new PasskeyRejected({ reason: "verification-failed" })),
       DatabaseError: Effect.die,
     }),
   );

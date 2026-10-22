@@ -8,6 +8,7 @@ import { HttpClient, HttpClientRequest } from "effect/http";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 
 /** A client as the authorization server knows it, however it got its `client_id`. */
@@ -66,7 +67,17 @@ const fromMetadataDocument = Effect.fn("Clients.fromMetadataDocument")(function*
     if (Number(response.headers["content-length"] ?? 0) > MAX_DOCUMENT_BYTES) {
       return yield* unavailable("too large");
     }
-    return yield* response.text;
+    // Read with a cap, not `response.text`: a chunked answer names no length, and the host is
+    // the requester's, so it could stream until the Lambda runs out of memory (PLAN.md §20.25).
+    const chunks = yield* Stream.runFoldEffect(
+      response.stream,
+      () => ({ size: 0, chunks: Arr.empty<Uint8Array>() }),
+      (read, chunk) =>
+        read.size + chunk.length > MAX_DOCUMENT_BYTES
+          ? unavailable("too large")
+          : Effect.succeed({ size: read.size + chunk.length, chunks: [...read.chunks, chunk] }),
+    );
+    return new TextDecoder().decode(Uint8Array.from(Arr.flatMap(chunks.chunks, (c) => [...c])));
   }).pipe(
     Effect.timeoutOrElse({ duration: FETCH_TIMEOUT, orElse: () => unavailable("timed out") }),
     Effect.catchTag("HttpClientError", () => unavailable("unreachable")),

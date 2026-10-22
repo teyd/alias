@@ -51,6 +51,9 @@ import { DynamoTable } from "./Dynamo.ts";
  * | OAuthGrant        | `OAUTH-GRANT#<grantId>`      | `GRANT`                | `OAUTH#<userId>`           | `GRANT#<grantId>`         | `expiresAt` |
  * | OAuthAccess       | `OAUTH-ACCESS#<sha256>`      | `ACCESS`               | `OAUTH#<userId>`           | `ACCESS#<sha256>`         | `expiresAt` |
  * | OAuthRefresh      | `OAUTH-REFRESH#<sha256>`     | `REFRESH`              | `OAUTH#<userId>`           | `REFRESH#<sha256>`        | `expiresAt` |
+ * | ProxyOwnerQuota   | `PROXY#USER#<userId>`        | `FETCHES#<minute>`     |                            |                           | `expiresAt` |
+ * | ProxyHostQuota    | `PROXY#HOST#<host>`          | `FETCHES#<minute>`     |                            |                           | `expiresAt` |
+ * | ProxyHostDown     | `PROXY#HOST#<host>`          | `DOWN`                 |                            |                           | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -72,6 +75,11 @@ import { DynamoTable } from "./Dynamo.ts";
  * (`2026-10-22T09`), next to the alias in its partition; the hourly cap is one conditional
  * UpdateItem on it. It outlives its hour by an hour and is never read after. MailQuota and
  * AliasQuota (aliases created on the fly per user and UTC day) work the same way (`Quota.ts`).
+ *
+ * The image proxy (PLAN.md §20.29) counts its origin fetches per alias owner and per origin host
+ * in one UTC minute (`2026-10-22T09:41`) the same way, and a ProxyHostDown item (`until`, epoch
+ * millis) keeps it from asking a host that just timed out or refused to connect. All three live
+ * under `PROXY#` partition keys, the only ones the proxy's role may touch.
  *
  * Deleting an alias (PLAN.md §20.15) replaces its item with an AliasTombstone holding only
  * `deletedAt` and the deleting user's `userId`, listed on gsi1 under `DELETED-ALIASES#<userId>`,

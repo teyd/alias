@@ -1,6 +1,6 @@
 import { AwsClient, Inbound, Objects, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { Pgp, SharedDomains, TempDomains, Username } from "@alias/core";
+import { ImageProxy, Keyring, Pgp, SharedDomains, TempDomains, Username } from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
@@ -590,6 +590,29 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
+  it.effect("writes no contacts for senders whose mail the hourly cap refused", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const outcomes = yield* Effect.forEach(
+          ["a@flood.example", "b@flood.example", "c@flood.example", "a@flood.example"],
+          (from) => Effect.map(forwardFrom(from), (forward) => forward.outcomes),
+          { concurrency: 1 },
+        );
+
+        expect(Arr.flatten(outcomes)).toEqual([
+          { _tag: "Forwarded" },
+          { _tag: "Dropped", reason: "rate-limited" },
+          { _tag: "Dropped", reason: "rate-limited" },
+          { _tag: "Dropped", reason: "rate-limited" },
+        ]);
+        expect(Arr.map(yield* contacts, (contact) => contact.address)).toEqual(["a@flood.example"]);
+      }),
+      { ...Limits.defaults, forwardsPerHour: 1 },
+    ),
+  );
+
   it.effect("drops oversized mail before reading it, and counts it as blocked", () =>
     withPipeline(
       Effect.gen(function* () {
@@ -1010,9 +1033,15 @@ describe("inbound pipeline (fakecloud)", () => {
           const { event } = yield* receive({ recipients: ["shop@alias.test"], raw: withHero });
           expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
           const proxied = text(Arr.last(yield* sent).pipe(Option.flatMap((email) => email.raw)));
-          expect(proxied).toMatch(
-            /<img src="https:\/\/img\.alias\.test\/img\/1\/[\w-]{22}\/[\w-]+" width="600">/,
+          const src = /<img src="https:\/\/img\.alias\.test(\/img\/1\/[\w/-]+)" width="600">/.exec(
+            proxied,
+          )?.[1];
+          // Signed for the alias owner, whose fetch budget the image spends (PLAN.md §20.29).
+          const verified = yield* ImageProxy.verify(yield* Keyring.parse(keys), src ?? "").pipe(
+            Effect.provide(NodeCrypto.layer),
           );
+          expect(verified).toMatchObject({ userId: "usr_1" });
+          expect(verified.url.href).toBe("https://img.store.example/hero.jpg");
           expect(proxied).not.toContain("img.store.example");
           expect(proxied).not.toContain("list-manage.com");
           expect(header(proxied, "X-Alias-Images-Proxied")).toEqual(Option.some("1"));

@@ -424,6 +424,9 @@ importers:
       '@alias/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@alias/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)

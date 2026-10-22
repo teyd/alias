@@ -16,6 +16,7 @@
   "dependencies": {
     "@alias/aws": "workspace:*",
     "@alias/core": "workspace:*",
+    "@alias/db": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:"
   },

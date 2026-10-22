@@ -31,13 +31,14 @@ and compares the result byte for byte with `forward-<name>.expected.eml`. Forwar
 again must change no body byte, and the test-side MIME decoder must find no tracker in any inline
 text part.
 
-| File                         | Shape                                                                                                                   |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `forward-mailchimp`          | Mailchimp: plain 7bit + HTML quoted-printable, `list-manage.com/track/open.php` pixel, UTM and `mc_*` links             |
-| `forward-sendgrid-base64`    | SendGrid: base64 HTML, `/wf/open` pixel, a 1 px spacer, a `@media print` CSS tracker, a click redirect (kept)           |
-| `forward-related-attachment` | multipart/mixed + related: `cid:` banner (kept), `display:none` pixel, a PDF and an attached HTML file (both untouched) |
-| `forward-latin1-qp`          | ISO-8859-1 quoted-printable: tracker `background` attribute, unquoted `width=1 height=1`, Outlook VML comment           |
-| `forward-nothing-to-protect` | Visible images and plain links only: the body must come through byte for byte                                           |
+| File                         | Shape                                                                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `forward-mailchimp`          | Mailchimp: plain 7bit + HTML quoted-printable, `list-manage.com/track/open.php` pixel, UTM and `mc_*` links                      |
+| `forward-sendgrid-base64`    | SendGrid: base64 HTML, `/wf/open` pixel, a 1 px spacer, a `@media print` CSS tracker, a click redirect (kept)                    |
+| `forward-related-attachment` | multipart/mixed + related: `cid:` banner (kept), `display:none` pixel, a PDF and an attached HTML file (both untouched)          |
+| `forward-latin1-qp`          | ISO-8859-1 quoted-printable: tracker `background` attribute, unquoted `width=1 height=1`, Outlook VML comment                    |
+| `forward-mailchimp-proxied`  | `forward-mailchimp.eml` in `proxy-images` mode: the logo points at the image proxy (signed with the test key), the pixel is gone |
+| `forward-nothing-to-protect` | Visible images and plain links only: the body must come through byte for byte                                                    |
 
 The expected outputs were read back with Python's `email` package: only the trackers and tracking
 parameters listed above differ, and every non-text part decodes to the same bytes.

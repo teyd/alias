@@ -1,10 +1,12 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Str from "effect/String";
 import * as Address from "./Address.ts";
+import * as ImageProxy from "./ImageProxy.ts";
 import { decode as decodeWords } from "./internal/encodedWords.ts";
 import * as Headers from "./internal/headers.ts";
 import * as Mime from "./internal/mime.ts";
@@ -110,7 +112,34 @@ const FORWARD_MARKER = "X-Alias-Forwarded";
  */
 const TRACKERS_REMOVED = "X-Alias-Trackers-Removed";
 const LINKS_CLEANED = "X-Alias-Links-Cleaned";
-const PROTECTION_FIELDS = HashSet.make(TRACKERS_REMOVED.toLowerCase(), LINKS_CLEANED.toLowerCase());
+const IMAGES_PROXIED = "X-Alias-Images-Proxied";
+const PROTECTION_FIELDS = HashSet.make(
+  TRACKERS_REMOVED.toLowerCase(),
+  LINKS_CLEANED.toLowerCase(),
+  IMAGES_PROXIED.toLowerCase(),
+);
+
+/**
+ * One text part with tracker protection applied. In `proxy-images` mode the rewrite runs twice:
+ * the first run names the image URLs to sign, the second puts in their proxy URLs.
+ */
+const protectPart = Effect.fn("Mail.protectPart")(function* (
+  protection: Protection,
+  signer: ImageProxy.Signer,
+  part: Mime.TextPart,
+) {
+  const isProxied = (href: string) => ImageProxy.isProxied(signer, href);
+  const first = Trackers.protect(protection, part, () => Option.none(), isProxied);
+  if (Option.isNone(first) || !Arr.isReadonlyArrayNonEmpty(first.value.unsigned)) return first;
+  const signed = HashMap.fromIterable(
+    yield* Effect.forEach(
+      first.value.unsigned,
+      (href) => Effect.map(ImageProxy.sign(signer, href), (proxied) => [href, proxied] as const),
+      { concurrency: 1 },
+    ),
+  );
+  return Trackers.protect(protection, part, (href) => HashMap.get(signed, href), isProxied);
+});
 
 export type Protection = Trackers.Protection;
 
@@ -149,8 +178,10 @@ const isReplyRemoved = (field: Headers.Field) =>
  * loop through several aliases is still caught when it comes back to one of them.
  *
  * `protection` takes tracking images and, if asked, click-tracking parameters out of the text
- * parts (PLAN.md §20.19). Only parts that change are re-encoded (in their own transfer encoding),
- * and `X-Alias-Trackers-Removed: <n>` / `X-Alias-Links-Cleaned: <n>` say what changed.
+ * parts, and in `proxy-images` mode points every other remote image at the image proxy, signed
+ * by `imageProxy` (PLAN.md §20.19). Only parts that change are re-encoded (in their own transfer
+ * encoding), and `X-Alias-Trackers-Removed`, `X-Alias-Links-Cleaned` and
+ * `X-Alias-Images-Proxied: <n>` say what changed.
  */
 export const forward = Effect.fn("Mail.forward")(function* (
   raw: Uint8Array,
@@ -159,20 +190,24 @@ export const forward = Effect.fn("Mail.forward")(function* (
     readonly sender: Sender;
     readonly token: string;
     readonly protection: Protection;
+    readonly imageProxy: ImageProxy.Signer;
   },
 ) {
   const changes = yield* Ref.make(Trackers.noChanges);
   const message = yield* Mime.rewriteText(yield* Headers.parse(raw), (part) =>
-    Option.match(Trackers.protect(options.protection, part), {
-      onNone: () => Effect.succeedNone,
-      onSome: (rewritten) =>
-        Effect.as(
-          Ref.update(changes, (total) => Trackers.addChanges(total, rewritten.changes)),
-          Option.some(rewritten.text),
-        ),
-    }),
+    Effect.flatMap(
+      protectPart(options.protection, options.imageProxy, part),
+      Option.match({
+        onNone: () => Effect.succeedNone,
+        onSome: (rewritten) =>
+          Effect.as(
+            Ref.update(changes, (total) => Trackers.addChanges(total, rewritten.changes)),
+            Option.some(rewritten.text),
+          ),
+      }),
+    ),
   );
-  const { trackers, links } = yield* Ref.get(changes);
+  const { trackers, links, proxied } = yield* Ref.get(changes);
   const senderAddress = sanitize(options.sender.address);
   const display = options.sender.name.pipe(
     Option.map(sanitize),
@@ -197,6 +232,7 @@ export const forward = Effect.fn("Mail.forward")(function* (
     `${FORWARD_MARKER}: ${alias}`,
     ...(trackers > 0 ? [`${TRACKERS_REMOVED}: ${trackers}`] : []),
     ...(links > 0 ? [`${LINKS_CLEANED}: ${links}`] : []),
+    ...(proxied > 0 ? [`${IMAGES_PROXIED}: ${proxied}`] : []),
   ]);
 });
 

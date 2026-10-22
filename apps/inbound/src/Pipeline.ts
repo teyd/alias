@@ -28,6 +28,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import { ImageProxySigner } from "./ImageProxySigner.ts";
 import * as Limits from "./Limits.ts";
 import * as Policy from "./Policy.ts";
 import { ReverseKeys } from "./ReverseKeys.ts";
@@ -77,7 +78,9 @@ interface Send {
    * allowance, run once it is read. None means send it.
    */
   readonly admit: (signals: Mail.Signals) => Effect.Effect<Option.Option<Refusal>, DatabaseError>;
-  readonly rewrite: (raw: Uint8Array) => ReturnType<typeof Mail.reply>;
+  readonly rewrite: (
+    raw: Uint8Array,
+  ) => Effect.Effect<Uint8Array, Effect.Error<ReturnType<typeof Mail.reply>>, Crypto.Crypto>;
   readonly envelope: Transport.Envelope;
 }
 
@@ -199,6 +202,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     images: settings.imageProtection,
     isLinkCleaningEnabled: settings.isLinkCleaningEnabled,
   };
+  const imageProxy = yield* ImageProxySigner;
   const aliases = yield* AliasRepo.AliasRepo;
   const { forwardsPerHour } = yield* Limits.Limits;
   const admit = Effect.fn("Pipeline.admitForward")(function* (signals: Mail.Signals) {
@@ -220,7 +224,14 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     contactId: Option.some(contact.id),
     admit,
     rewrite: (raw) =>
-      Mail.forward(raw, { alias: address, sender: sender.value, token: token.value, protection }),
+      Mail.forward(raw, {
+        alias: address,
+        sender: sender.value,
+        token: token.value,
+        protection,
+        imageProxy,
+        // Signing image URLs needs a working SHA-256; without one nothing can run.
+      }).pipe(Effect.catchTag("PlatformError", Effect.die)),
     envelope: {
       from: Address.format(Address.reverseAddress(address, token.value)),
       to: [target.value.address],
@@ -513,8 +524,8 @@ export const handle = Effect.fn("Pipeline.handle")(function* (event: SesEvent.Se
 });
 
 /**
- * What callers provide: the table, SES sending, the spool, the shared domains, the token keys and
- * the webhook queue.
+ * What callers provide: the table, SES sending, the spool, the shared domains, the token keys, the
+ * webhook queue and the image proxy's signer.
  */
 export type Services =
   | Dynamo.Database
@@ -522,7 +533,8 @@ export type Services =
   | MessageQueue.MessageQueue
   | Spool
   | SharedDomains.SharedDomains
-  | ReverseKeys;
+  | ReverseKeys
+  | ImageProxySigner;
 
 /**
  * Everything {@link handle} needs, from {@link Services}: real AWS in Lambda, emulators elsewhere.

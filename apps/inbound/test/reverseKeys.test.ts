@@ -12,7 +12,7 @@ import { ReverseKeys } from "../src/index.ts";
 
 /**
  * Reverse-token keys from SSM Parameter Store, the way the inbound Lambda loads them at cold
- * start (PLAN.md §20.14), on fakecloud. The parsing rules themselves are in `decisions.test.ts`.
+ * start (PLAN.md §20.14), on fakecloud. The parsing rules themselves are in core's `Keyring.test.ts`.
  */
 const aws = Layer.unwrap(
   Effect.map(Effect.service(FakeCloud.FakeCloud), ({ url }) => AwsClient.emulator(url)),
@@ -88,7 +88,7 @@ describe("ReverseKeys from Parameter Store (fakecloud)", () => {
         const leaked = secret(3).slice(0, 20);
         yield* put("/alias/test/bad", `1:${leaked}`);
         const error = yield* Effect.flip(load("/alias/test/bad"));
-        expect(error._tag).toBe("InvalidReverseKeys");
+        expect(error._tag).toBe("InvalidKeys");
         expect(JSON.stringify(error)).toContain("/alias/test/bad (version 1)");
         expect(JSON.stringify(error)).not.toContain(leaked);
         expect(String(error)).not.toContain(leaked);

@@ -1,8 +1,27 @@
+import type { Settings } from "@alias/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { settingsQuery, updateSettings } from "@/lib/settings";
 
-/** Tracker protection on forwarded mail (PLAN.md §20.19): tracking pixels and link tracking. */
+const imageChoices: ReadonlyArray<{
+  readonly value: Settings["imageProtection"];
+  readonly label: string;
+}> = [
+  { value: "block-trackers", label: "Block tracking pixels" },
+  { value: "proxy-images", label: "Block pixels, proxy images" },
+  { value: "off", label: "Leave as they are" },
+];
+
+/** Tracker protection on forwarded mail (PLAN.md §20.19): images and link tracking. */
 export const TrackerSettings = () => {
   const queryClient = useQueryClient();
   const settings = useQuery(settingsQuery);
@@ -16,24 +35,49 @@ export const TrackerSettings = () => {
     <div className="flex flex-col gap-3 rounded-lg border p-3">
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">
-          <span id="trackers-label" className="font-medium">
-            Block tracking pixels
+          <span id="images-label" className="font-medium">
+            Images in forwarded mail
           </span>
-          <span id="trackers-description" className="text-xs text-muted-foreground">
-            Removes invisible images and images from known trackers, which tell the sender when and
-            where you opened their mail.
+          <span id="images-description" className="text-xs text-muted-foreground">
+            Tracking pixels tell the sender when and where you opened their mail. The proxy also
+            loads every other image through us, so senders never see your address or mail app.
           </span>
         </div>
-        <Switch
-          aria-labelledby="trackers-label"
-          aria-describedby="trackers-description"
-          aria-busy={isBusy}
-          checked={settings.data?.imageProtection !== "off"}
+        <Select
+          value={settings.data?.imageProtection ?? "block-trackers"}
           disabled={isBusy}
-          onCheckedChange={(isEnabled) =>
-            update.mutate({ imageProtection: isEnabled ? "block-trackers" : "off" })
+          onValueChange={(value) =>
+            Option.map(
+              Arr.findFirst(imageChoices, (choice) => choice.value === value),
+              (choice) => update.mutate({ imageProtection: choice.value }),
+            )
           }
-        />
+        >
+          <SelectTrigger
+            aria-labelledby="images-label"
+            aria-describedby="images-description"
+            className="w-56 shrink-0"
+          >
+            <SelectValue>
+              {(value: string) =>
+                Option.getOrElse(
+                  Option.map(
+                    Arr.findFirst(imageChoices, (choice) => choice.value === value),
+                    (choice) => choice.label,
+                  ),
+                  () => value,
+                )
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            {Arr.map(imageChoices, (choice) => (
+              <SelectItem key={choice.value} value={choice.value}>
+                {choice.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">

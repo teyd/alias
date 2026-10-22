@@ -1,4 +1,6 @@
 export * as Address from "./Address.ts";
+export * as ImageProxy from "./ImageProxy.ts";
+export * as Keyring from "./Keyring.ts";
 export * as Mail from "./Mail.ts";
 export * as ReverseToken from "./ReverseToken.ts";
 export * as SharedDomains from "./SharedDomains.ts";

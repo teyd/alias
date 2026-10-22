@@ -38,4 +38,7 @@ console.log(`  smtp    localhost:${block.smtp}  (ses-emulator inbound)`);
 console.log(
   `  aws     http://localhost:${block.fakecloud}  (fakecloud: S3 + DynamoDB, data in .dev/fakecloud)`,
 );
+console.log(
+  `  images  http://localhost:${block.imageProxy}  (image proxy behind the function URL emulator)`,
+);
 console.log(`\nnext: pnpm dev   |   pnpm test   |   pnpm test:affected`);

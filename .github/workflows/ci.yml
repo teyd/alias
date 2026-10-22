@@ -32,6 +32,7 @@ jobs:
           - "@alias/inbound"
           - "@alias/webhooks"
           - "@alias/webhooks-lambda"
+          - "@alias/image-proxy"
           - "@alias/ses-emulator"
           - "@alias/aws-emulators"
           - "@alias/lambda-emulator"

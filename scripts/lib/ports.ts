@@ -17,6 +17,7 @@ const PORTS = {
   mailpitSmtp: 5,
   inspector: 6,
   fakecloud: 7,
+  imageProxy: 8,
 } as const;
 
 type PortName = keyof typeof PORTS;
@@ -126,4 +127,5 @@ export const toEnv = (block: PortBlock): Record<string, string> => ({
   ALIAS_MAILPIT_SMTP_PORT: String(block.mailpitSmtp),
   ALIAS_INSPECTOR_PORT: String(block.inspector),
   ALIAS_FAKECLOUD_PORT: String(block.fakecloud),
+  ALIAS_IMAGE_PROXY_PORT: String(block.imageProxy),
 });

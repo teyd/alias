@@ -1,0 +1,31 @@
+{
+  "name": "@alias/image-proxy",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/support/index.ts"
+  },
+  "scripts": {
+    "test": "vp test",
+    "test:unit": "vp test",
+    "dev": "node bin/dev.ts"
+  },
+  "dependencies": {
+    "@alias/aws": "workspace:*",
+    "@alias/core": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alias/aws-emulators": "workspace:*",
+    "@alias/lambda-emulator": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

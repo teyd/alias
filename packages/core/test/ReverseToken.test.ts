@@ -8,12 +8,12 @@ import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { Address, ReverseToken } from "../src/index.ts";
+import { Address, Keyring, ReverseToken } from "../src/index.ts";
 import * as Base32 from "../src/internal/base32.ts";
 import { hmacSha256 } from "../src/internal/hmac.ts";
 import { bytes } from "./support/mime.ts";
 
-const key = (version: number, fill: number): ReverseToken.Key => ({
+const key = (version: number, fill: number): Keyring.Key => ({
   version,
   secret: Redacted.make(new Uint8Array(32).fill(fill)),
 });
@@ -70,7 +70,7 @@ layer(NodeCrypto.layer)((it) => {
         expect(ids.every((id) => /^[a-z2-7]{16}$/.test(id))).toBe(true);
         expect(HashSet.size(HashSet.fromIterable(ids))).toBe(50);
 
-        const keys = yield* ReverseToken.keyring({
+        const keys = yield* Keyring.make({
           current: { version: 1, secret: Redacted.make(new Uint8Array(32).fill(5)) },
           retired: [],
         });
@@ -121,7 +121,7 @@ layer(NodeCrypto.layer)((it) => {
   describe("ReverseToken", () => {
     it.effect("round-trips a sender and fits the inbound address rules", () =>
       Effect.gen(function* () {
-        const keys = yield* ReverseToken.keyring({ current: key(1, 7), retired: [] });
+        const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
         const token = yield* ReverseToken.mint(keys, alias, sender("Billing@Shop.example"));
         expect(token).toMatch(/^[a-z2-7]+$/);
 
@@ -144,7 +144,7 @@ layer(NodeCrypto.layer)((it) => {
 
     it.effect("carries a contact id instead of, or next to, the sender", () =>
       Effect.gen(function* () {
-        const keys = yield* ReverseToken.keyring({ current: key(1, 7), retired: [] });
+        const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
         const contactOnly = { sender: Option.none(), contactId: Option.some("ct_01jb7") };
         const both = { sender: Option.some("a@b.example"), contactId: Option.some("ct_01jb7") };
         const short = yield* ReverseToken.mint(keys, alias, contactOnly);
@@ -161,7 +161,7 @@ layer(NodeCrypto.layer)((it) => {
 
     it.effect("is bound to the alias it was minted for", () =>
       Effect.gen(function* () {
-        const keys = yield* ReverseToken.keyring({ current: key(1, 7), retired: [] });
+        const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
         const token = yield* ReverseToken.mint(keys, alias, sender("a@b.example"));
         const otherLocal = yield* failureReason(
           ReverseToken.verify(keys, { ...alias, local: "other" }, token),
@@ -176,9 +176,9 @@ layer(NodeCrypto.layer)((it) => {
 
     it.effect("keeps verifying retired keys after rotation and rejects removed ones", () =>
       Effect.gen(function* () {
-        const before = yield* ReverseToken.keyring({ current: key(1, 7), retired: [] });
+        const before = yield* Keyring.make({ current: key(1, 7), retired: [] });
         const token = yield* ReverseToken.mint(before, alias, sender("a@b.example"));
-        const rotated = yield* ReverseToken.keyring({ current: key(2, 9), retired: [key(1, 7)] });
+        const rotated = yield* Keyring.make({ current: key(2, 9), retired: [key(1, 7)] });
         expect((yield* ReverseToken.verify(rotated, alias, token)).keyVersion).toBe(1);
         expect(
           (yield* ReverseToken.verify(
@@ -187,12 +187,12 @@ layer(NodeCrypto.layer)((it) => {
             yield* ReverseToken.mint(rotated, alias, sender("a@b.example")),
           )).keyVersion,
         ).toBe(2);
-        const dropped = yield* ReverseToken.keyring({ current: key(2, 9), retired: [] });
+        const dropped = yield* Keyring.make({ current: key(2, 9), retired: [] });
         expect(yield* failureReason(ReverseToken.verify(dropped, alias, token))).toBe(
           "unknown-key",
         );
         // Same version, different secret: a leaked-key rotation that reused the number.
-        const replaced = yield* ReverseToken.keyring({ current: key(1, 8), retired: [] });
+        const replaced = yield* Keyring.make({ current: key(1, 8), retired: [] });
         expect(yield* failureReason(ReverseToken.verify(replaced, alias, token))).toBe(
           "bad-signature",
         );
@@ -201,7 +201,7 @@ layer(NodeCrypto.layer)((it) => {
 
     it.effect("rejects garbage, truncation and unknown formats", () =>
       Effect.gen(function* () {
-        const keys = yield* ReverseToken.keyring({ current: key(1, 7), retired: [] });
+        const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
         const token = yield* ReverseToken.mint(keys, alias, sender("a@b.example"));
         const reason = (candidate: string) =>
           failureReason(ReverseToken.verify(keys, alias, candidate));
@@ -227,7 +227,7 @@ layer(NodeCrypto.layer)((it) => {
       [Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 })))],
       ([seed]) =>
         Effect.gen(function* () {
-          const keys = yield* ReverseToken.keyring({ current: key(3, 1), retired: [] });
+          const keys = yield* Keyring.make({ current: key(3, 1), retired: [] });
           const token = yield* ReverseToken.mint(keys, alias, sender("news@letters.example"));
           const position = seed % token.length;
           const original = token.charAt(position);
@@ -254,7 +254,7 @@ layer(NodeCrypto.layer)((it) => {
       ],
       ([text]) =>
         Effect.gen(function* () {
-          const keys = yield* ReverseToken.keyring({ current: key(0, 5), retired: [] });
+          const keys = yield* Keyring.make({ current: key(0, 5), retired: [] });
           const address = `${text}@x.example`;
           const token = yield* ReverseToken.mint(keys, alias, sender(address));
           const claims = yield* ReverseToken.verify(keys, alias, token);
@@ -264,7 +264,7 @@ layer(NodeCrypto.layer)((it) => {
 
     it.effect("refuses subjects it cannot encode", () =>
       Effect.gen(function* () {
-        const keys = yield* ReverseToken.keyring({ current: key(1, 7), retired: [] });
+        const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
         const reason = (subject: ReverseToken.Subject) =>
           failureReason(ReverseToken.mint(keys, alias, subject));
         expect(yield* reason({ sender: Option.none(), contactId: Option.none() })).toMatch(/needs/);
@@ -280,10 +280,8 @@ layer(NodeCrypto.layer)((it) => {
 
     it.effect("validates the keyring", () =>
       Effect.gen(function* () {
-        const reason = (keys: {
-          current: ReverseToken.Key;
-          retired: ReadonlyArray<ReverseToken.Key>;
-        }) => failureReason(ReverseToken.keyring(keys));
+        const reason = (keys: { current: Keyring.Key; retired: ReadonlyArray<Keyring.Key> }) =>
+          failureReason(Keyring.make(keys));
         expect(yield* reason({ current: key(256, 1), retired: [] })).toMatch(/0 to 255/);
         expect(yield* reason({ current: key(1, 1), retired: [key(1, 2)] })).toMatch(/distinct/);
         const weak = { version: 1, secret: Redacted.make(new Uint8Array(16)) };

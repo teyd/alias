@@ -13,6 +13,7 @@
     "test:unit": "vp test"
   },
   "dependencies": {
+    "@alias/core": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "effect": "catalog:"
   },

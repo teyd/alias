@@ -70,9 +70,14 @@ export default defineConfig({
         },
       },
       {
-        // The webhook egress guard hooks Node's resolver into the socket (PLAN.md §20.20), and the
-        // tests' webhook receiver is an HTTP server: Node's job, like an emulator's.
-        files: ["packages/webhooks/src/Egress.ts", "packages/webhooks/test/support/Receiver.ts"],
+        // Egress guards hook Node's resolver into the socket (webhooks, PLAN.md §20.20; the image
+        // proxy, §20.19), and the tests' webhook receiver is an HTTP server: Node's job, like an
+        // emulator's.
+        files: [
+          "packages/webhooks/src/Egress.ts",
+          "packages/webhooks/test/support/Receiver.ts",
+          "apps/image-proxy/src/Egress.ts",
+        ],
         rules: {
           "effect/avoid-node-imports": "off",
           "effect/use-http-client-service": "off",

@@ -1,8 +1,11 @@
+import { Keyring } from "@alias/core";
 import * as SSM from "@distilled.cloud/aws/ssm";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as AwsClient from "./Client.ts";
 
 /** A decrypted `SecureString` parameter. */
 interface SecureString {
@@ -63,3 +66,46 @@ export const secureString = Effect.fn("Parameters.secureString")(function* (name
   };
   return parameter;
 });
+
+/** The parameter holds no valid keyring. Names the parameter and its version, never the value. */
+class InvalidKeys extends Schema.TaggedError<InvalidKeys>()("InvalidKeys", {
+  reason: Schema.String,
+}) {}
+
+/**
+ * A {@link Keyring.Keyring} (`<version>:<base64url secret>` entries, the first one signing) from
+ * a `SecureString` parameter, read once per container: the reverse-alias token keys (PLAN.md
+ * §20.14) and the image proxy's URL keys (§20.19). A new value reaches new containers only, so a
+ * rotation takes two puts: add the new key after the current one (verify-only), and only once
+ * every container runs that set, move it to the front.
+ */
+export const keyring = Effect.fn("Parameters.keyring")(function* (name: string) {
+  const parameter = yield* secureString(name);
+  const keys = yield* Keyring.parse(parameter.value).pipe(
+    Effect.mapError(
+      (error) =>
+        new InvalidKeys({ reason: `${name} (version ${parameter.version}): ${error.reason}` }),
+    ),
+  );
+  yield* Effect.logInfo(
+    `keys loaded from ${name} (version ${parameter.version}, signing key ${keys.current.version})`,
+  );
+  return keys;
+});
+
+/**
+ * The keyring whose parameter the environment variable `variable` names, as an Effect to run at
+ * cold start, with `AWS_ENDPOINT_URL_SSM` (the AWS-standard endpoint override) only in emulated
+ * runs.
+ */
+export const keyringConfig = (variable: string) =>
+  Config.all({
+    // The parameter's name, not a secret.
+    // oxlint-disable-next-line effect/prefer-redacted-config
+    name: Config.String(variable),
+    endpoint: Config.option(Config.String("AWS_ENDPOINT_URL_SSM")),
+  }).pipe(
+    Config.map(({ name, endpoint }) =>
+      keyring(name).pipe(Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
+    ),
+  );

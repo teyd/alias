@@ -1,0 +1,58 @@
+From: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Reply-To: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+X-Alias-Forwarded: shop@ada.alias.test
+X-Alias-Trackers-Removed: 1
+X-Alias-Links-Cleaned: 2
+X-Alias-Images-Proxied: 1
+Received: from mail123.atl11.mcsv.net (mail123.atl11.mcsv.net [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+To: shop@ada.alias.test
+Subject: Fall sale
+Date: Wed, 21 Oct 2026 16:02:00 +0000
+Message-ID: <0f1e2d3c4b5a.123@mcsv.net>
+List-Unsubscribe: <https://store.us1.list-manage.com/unsubscribe?u=abc123&id=def456&e=9b8c7d>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="_----------=_MCPart_4f2a"
+
+This is a multi-part message in MIME format
+
+--_----------=_MCPart_4f2a
+Content-Type: text/plain; charset="utf-8"; format="fixed"
+Content-Transfer-Encoding: 7bit
+
+Fall sale - 30 % off
+
+Our autumn collection is here.
+
+Shop now: https://store.example/fall
+
+Unsubscribe: https://store.us1.list-manage.com/unsubscribe?u=abc123&id=def456&e=9b8c7d
+
+--_----------=_MCPart_4f2a
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html>
+<html><head><meta charset=3D"utf-8"><title>Fall sale</title>
+<style type=3D"text/css">body{margin:0} .btn{background:#e63}</style></head=
+>
+<body>
+<table width=3D"100%" cellpadding=3D"0" cellspacing=3D"0"><tr><td align=3D"=
+center">
+<img src=3D"https://img.alias.test/img/1/gqMULEbTSK-c52sTJkYQTA/aHR0cHM6Ly9=
+tY3VzZXJjb250ZW50LmNvbS9hYmMxMjMvaW1hZ2VzL2xvZ28ucG5n" width=3D"180" height=
+=3D"60" alt=3D"Store" style=3D"display:block;border:0">
+<h1>Fall sale =E2=80=93 30 % off</h1>
+<p>Gr=C3=BC=C3=9Fe from the whole team! Our autumn collection is here.</p>
+<a class=3D"btn" href=3D"https://store.example/fall" target=3D"_blank">Shop=
+ now</a>
+<p><a href=3D"https://store.us1.list-manage.com/unsubscribe?u=3Dabc123&amp;=
+id=3Ddef456&amp;e=3D9b8c7d">Unsubscribe</a></p>
+</td></tr></table>
+
+</body></html>
+
+--_----------=_MCPart_4f2a--

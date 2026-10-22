@@ -7,9 +7,7 @@ import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import * as Policy from "../src/Policy.ts";
-import * as ReverseKeys from "../src/ReverseKeys.ts";
 import { route } from "../src/Route.ts";
 
 const shared = ["alias.test", "alias2.test"];
@@ -333,32 +331,6 @@ describe("Policy.automatedReply", () => {
       expect(Policy.automatedReply(person, withSender(mail, "", "ada@mail.example"))).toEqual(
         Option.none(),
       );
-    }),
-  );
-});
-
-describe("ReverseKeys.parse", () => {
-  const secret = (fill: number) => Buffer.alloc(32, fill).toString("base64url");
-
-  it.effect("mints with the first key and keeps the others for verifying", () =>
-    Effect.gen(function* () {
-      const keys = yield* ReverseKeys.parse(Redacted.make(` 2:${secret(2)}, 1:${secret(1)} `));
-      expect(keys.current.version).toBe(2);
-      expect(keys.retired.map((key) => key.version)).toEqual([1]);
-      expect(Redacted.value(keys.current.secret)).toEqual(new Uint8Array(32).fill(2));
-    }),
-  );
-
-  it.effect.each<readonly [string, string]>([
-    ["", "no key given"],
-    [`one:${secret(1)}`, "entry 1: expected <version>:<base64url secret>"],
-    [`1:${secret(1)},2:not+base64`, "entry 2: expected <version>:<base64url secret>"],
-    ["1:c2hvcnQ", "secrets need at least 32 bytes"],
-    [`1:${secret(1)},1:${secret(2)}`, "key versions must be distinct"],
-  ])("rejects %j without echoing a secret", ([value, reason]) =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(ReverseKeys.parse(Redacted.make(value)));
-      expect(error.reason).toBe(reason);
     }),
   );
 });

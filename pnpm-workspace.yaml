@@ -41,6 +41,9 @@ catalog:
   "@simplewebauthn/browser": 14.0.0
   # mail
   openpgp: 6.3.2
+  # inbox mode: sanitizes stored HTML before the API serves it (PLAN.md §20.22)
+  sanitize-html: ^2.17.0
+  "@types/sanitize-html": ^2.16.0
   smtp-server: 3.20.2
   nodemailer: 10.1.7
   # browser tests (Chromium only; `playwright install` fetches the matching build)

@@ -8,6 +8,8 @@ export const SCOPE_LABELS: Record<Scope, string> = {
   "contacts:write": "Block, unblock and remove contacts",
   "domains:read": "See your custom domains and their DNS status",
   "domains:write": "Add, check and remove custom domains",
+  "inboxes:read": "Read mail kept in your inboxes and temporary inboxes, codes included",
+  "inboxes:write": "Create temporary inboxes and delete kept mail",
   "recipients:read": "See your forwarding addresses",
   "recipients:write": "Add and remove forwarding addresses",
   "settings:read": "See your account settings",

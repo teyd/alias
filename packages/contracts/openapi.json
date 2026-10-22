@@ -1075,6 +1075,14 @@
                         "type": "integer",
                         "minimum": -9007199254740991,
                         "maximum": 9007199254740991
+                      },
+                      "retentionDays": {
+                        "type": "number",
+                        "enum": [
+                          1,
+                          7,
+                          30
+                        ]
                       }
                     },
                     "required": [
@@ -1083,7 +1091,8 @@
                       "mode",
                       "isActive",
                       "forwardedCount",
-                      "blockedCount"
+                      "blockedCount",
+                      "retentionDays"
                     ],
                     "additionalProperties": false
                   }
@@ -1175,6 +1184,14 @@
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "retentionDays": {
+                      "type": "number",
+                      "enum": [
+                        1,
+                        7,
+                        30
+                      ]
                     }
                   },
                   "required": [
@@ -1183,7 +1200,8 @@
                     "mode",
                     "isActive",
                     "forwardedCount",
-                    "blockedCount"
+                    "blockedCount",
+                    "retentionDays"
                   ],
                   "additionalProperties": false
                 }
@@ -1469,6 +1487,14 @@
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "retentionDays": {
+                      "type": "number",
+                      "enum": [
+                        1,
+                        7,
+                        30
+                      ]
                     }
                   },
                   "required": [
@@ -1477,7 +1503,8 @@
                     "mode",
                     "isActive",
                     "forwardedCount",
-                    "blockedCount"
+                    "blockedCount",
+                    "retentionDays"
                   ],
                   "additionalProperties": false
                 }
@@ -1595,6 +1622,14 @@
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
+                    },
+                    "retentionDays": {
+                      "type": "number",
+                      "enum": [
+                        1,
+                        7,
+                        30
+                      ]
                     }
                   },
                   "required": [
@@ -1603,7 +1638,8 @@
                     "mode",
                     "isActive",
                     "forwardedCount",
-                    "blockedCount"
+                    "blockedCount",
+                    "retentionDays"
                   ],
                   "additionalProperties": false
                 }
@@ -1667,6 +1703,14 @@
                   },
                   "isActive": {
                     "type": "boolean"
+                  },
+                  "retentionDays": {
+                    "type": "number",
+                    "enum": [
+                      1,
+                      7,
+                      30
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -2119,6 +2163,825 @@
         },
         "summary": "Delete a contact and revoke its reverse alias",
         "description": "API tokens need the `contacts:write` scope."
+      }
+    },
+    "/v1/inboxes": {
+      "get": {
+        "tags": [
+          "inboxes"
+        ],
+        "operationId": "inboxes.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "inboxes:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "address": {
+                        "type": "string"
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "inbox",
+                          "both"
+                        ]
+                      },
+                      "isTemporary": {
+                        "type": "boolean"
+                      },
+                      "expiresAt": {
+                        "type": "string"
+                      },
+                      "retentionDays": {
+                        "type": "number",
+                        "enum": [
+                          1,
+                          7,
+                          30
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "address",
+                      "mode",
+                      "isTemporary",
+                      "retentionDays"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `inboxes:read` scope."
+      },
+      "post": {
+        "tags": [
+          "inboxes"
+        ],
+        "operationId": "inboxes.create",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "inboxes:write"
+            ]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "inbox",
+                        "both"
+                      ]
+                    },
+                    "isTemporary": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "retentionDays": {
+                      "type": "number",
+                      "enum": [
+                        1,
+                        7,
+                        30
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "mode",
+                    "isTemporary",
+                    "retentionDays"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidTemporaryInbox",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidTemporaryInboxEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TemporaryInboxLimit | TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TemporaryInboxLimitEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string"
+                  },
+                  "lifetimeHours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 168
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `inboxes:write` scope."
+      }
+    },
+    "/v1/inboxes/{domain}/{local}": {
+      "delete": {
+        "tags": [
+          "inboxes"
+        ],
+        "operationId": "inboxes.remove",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "inboxes:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "InboxNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `inboxes:write` scope."
+      }
+    },
+    "/v1/inboxes/{domain}/{local}/messages": {
+      "get": {
+        "tags": [
+          "inboxes"
+        ],
+        "operationId": "inboxes.messages",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "inboxes:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "receivedAt": {
+                        "type": "string"
+                      },
+                      "expiresAt": {
+                        "type": "string"
+                      },
+                      "size": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": [
+                              "Infinity",
+                              "-Infinity",
+                              "NaN"
+                            ]
+                          }
+                        ]
+                      },
+                      "from": {
+                        "type": "string"
+                      },
+                      "subject": {
+                        "type": "string"
+                      },
+                      "preview": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "link": {
+                        "type": "string"
+                      },
+                      "attachmentCount": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": [
+                              "Infinity",
+                              "-Infinity",
+                              "NaN"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "receivedAt",
+                      "expiresAt",
+                      "size",
+                      "preview",
+                      "attachmentCount"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "InboxNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `inboxes:read` scope."
+      }
+    },
+    "/v1/inboxes/{domain}/{local}/messages/{messageId}": {
+      "get": {
+        "tags": [
+          "inboxes"
+        ],
+        "operationId": "inboxes.message",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "inboxes:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "receivedAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Infinity",
+                            "-Infinity",
+                            "NaN"
+                          ]
+                        }
+                      ]
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "preview": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "link": {
+                      "type": "string"
+                    },
+                    "attachmentCount": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Infinity",
+                            "-Infinity",
+                            "NaN"
+                          ]
+                        }
+                      ]
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "html": {
+                      "type": "string"
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "filename": {
+                            "type": "string"
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "Infinity",
+                                  "-Infinity",
+                                  "NaN"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "contentType",
+                          "size"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "blockedImageCount": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Infinity",
+                            "-Infinity",
+                            "NaN"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "receivedAt",
+                    "expiresAt",
+                    "size",
+                    "preview",
+                    "attachmentCount",
+                    "attachments",
+                    "blockedImageCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "InboxNotFound | MessageNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InboxNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `inboxes:read` scope."
+      },
+      "delete": {
+        "tags": [
+          "inboxes"
+        ],
+        "operationId": "inboxes.removeMessage",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "inboxes:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "InboxNotFound | MessageNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InboxNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `inboxes:write` scope."
       }
     },
     "/v1/recipients": {
@@ -4466,6 +5329,8 @@
                             "contacts:write",
                             "domains:read",
                             "domains:write",
+                            "inboxes:read",
+                            "inboxes:write",
                             "recipients:read",
                             "recipients:write",
                             "settings:read",
@@ -4570,6 +5435,8 @@
                           "contacts:write",
                           "domains:read",
                           "domains:write",
+                          "inboxes:read",
+                          "inboxes:write",
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
@@ -4659,6 +5526,8 @@
                           "contacts:write",
                           "domains:read",
                           "domains:write",
+                          "inboxes:read",
+                          "inboxes:write",
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
@@ -4677,6 +5546,8 @@
                         "contacts:write",
                         "domains:read",
                         "domains:write",
+                        "inboxes:read",
+                        "inboxes:write",
                         "recipients:read",
                         "recipients:write",
                         "settings:read",
@@ -5666,6 +6537,8 @@
                           "contacts:write",
                           "domains:read",
                           "domains:write",
+                          "inboxes:read",
+                          "inboxes:write",
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
@@ -5984,6 +6857,8 @@
                           "contacts:write",
                           "domains:read",
                           "domains:write",
+                          "inboxes:read",
+                          "inboxes:write",
                           "recipients:read",
                           "recipients:write",
                           "settings:read",
@@ -6237,6 +7112,8 @@
                         "contacts:write",
                         "domains:read",
                         "domains:write",
+                        "inboxes:read",
+                        "inboxes:write",
                         "recipients:read",
                         "recipients:write",
                         "settings:read",
@@ -6303,6 +7180,8 @@
                             "contacts:write",
                             "domains:read",
                             "domains:write",
+                            "inboxes:read",
+                            "inboxes:write",
                             "recipients:read",
                             "recipients:write",
                             "settings:read",
@@ -6880,6 +7759,8 @@
               "contacts:write",
               "domains:read",
               "domains:write",
+              "inboxes:read",
+              "inboxes:write",
               "recipients:read",
               "recipients:write",
               "settings:read",
@@ -7543,6 +8424,82 @@
         ],
         "additionalProperties": false
       },
+      "MessageNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "MessageNotFound"
+            ]
+          },
+          "messageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "messageId"
+        ],
+        "additionalProperties": false
+      },
+      "InboxNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InboxNotFound"
+            ]
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "address"
+        ],
+        "additionalProperties": false
+      },
+      "TemporaryInboxLimitEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TemporaryInboxLimit"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidTemporaryInboxEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidTemporaryInbox"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "temp-mail-disabled",
+              "unknown-domain"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
       "ContactNotFoundEncoded": {
         "type": "object",
         "properties": {
@@ -7742,6 +8699,9 @@
     {
       "name": "contacts",
       "description": "The people who wrote to an alias. Blocking one drops its mail and replies to it; deleting one revokes its reverse alias."
+    },
+    {
+      "name": "inboxes"
     },
     {
       "name": "recipients",

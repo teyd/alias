@@ -21,6 +21,7 @@
     "@alias/doh-emulator": "workspace:*",
     "@alias/image-proxy": "workspace:*",
     "@alias/inbound": "workspace:*",
+    "@alias/inbox": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
     "@alias/ses-emulator": "workspace:*",
     "@alias/webhooks": "workspace:*",

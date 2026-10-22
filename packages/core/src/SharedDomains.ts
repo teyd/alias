@@ -24,8 +24,11 @@ class InvalidSharedDomains extends Schema.TaggedError<InvalidSharedDomains>()(
   { value: Schema.String, reason: Schema.String },
 ) {}
 
-/** Parses a comma-separated list such as `alias.example, Alias2.example`. */
-export const parse = Effect.fn("SharedDomains.parse")(function* (value: string) {
+/**
+ * A comma-separated list of domains such as `alias.example, Alias2.example`: lowercased, trimmed
+ * and deduplicated, in the order given. It may be empty.
+ */
+export const parseList = Effect.fn("SharedDomains.parseList")(function* (value: string) {
   const domains = Arr.dedupe(
     Arr.filter(
       Arr.map(Str.split(value, ","), (domain) => Str.toLowerCase(Str.trim(domain))),
@@ -39,6 +42,12 @@ export const parse = Effect.fn("SharedDomains.parse")(function* (value: string) 
       reason: `not a domain: ${Arr.join(invalid, ", ")}`,
     });
   }
+  return domains;
+});
+
+/** Parses the shared domains: a {@link parseList} list of at least one. */
+export const parse = Effect.fn("SharedDomains.parse")(function* (value: string) {
+  const domains = yield* parseList(value);
   if (!Arr.isArrayNonEmpty(domains)) {
     return yield* new InvalidSharedDomains({ value, reason: "no domain given" });
   }

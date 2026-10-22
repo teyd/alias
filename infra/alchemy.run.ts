@@ -5,7 +5,9 @@
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
  */
+import { RetentionDays } from "@alias/contracts";
 import { Table } from "@alias/db";
+import { Inbox } from "@alias/inbox";
 import { WebhookQueue } from "@alias/webhooks";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
@@ -74,6 +76,31 @@ const reverseTokenKeysParameter = `/alias/${stage}/reverse-token-keys`;
  */
 const imageProxyKeysParameter = `/alias/${stage}/image-proxy-keys`;
 
+/**
+ * The temp-mail domains (PLAN.md §3.1, §20.22): separate registrable domains, never one of the
+ * shared domains (checked at cold start), receive-only. Empty turns temp mail off.
+ */
+const tempDomains = (process.env.ALIAS_TEMP_DOMAINS ?? "")
+  .split(",")
+  .map((domain) => domain.trim())
+  .filter((domain) => domain.length > 0);
+/** Stored mail of inbox aliases and temporary inboxes, sealed (`Envelope` in `@alias/inbox`). */
+const inboxBucketName = `alias-inbox-${stage}`;
+
+/**
+ * The inbox keys (PLAN.md §20.22.2): they wrap each stored message's data key. Same format,
+ * storage and two-step rotation as the reverse-token keys; both the inbound Lambda (wraps) and
+ * the API (unwraps) read it. Put it once before the first deploy:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/inbox-keys \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * A retired key may be removed 30 days (the longest retention) after it stopped wrapping: no
+ * message wrapped with it is left by then. Removing it earlier makes those messages unreadable.
+ */
+const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
+
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
   "alias",
@@ -90,6 +117,8 @@ export default Alchemy.Stack(
     // A name with a leading slash has no extra slash in its ARN.
     const reverseTokenKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${reverseTokenKeysParameter}`;
     const imageProxyKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${imageProxyKeysParameter}`;
+    const inboxKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${inboxKeysParameter}`;
+    const inboxObjects = `arn:aws:s3:::${inboxBucketName}/*`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
     // both name it, and SES checks both when the rule is created, before it exists. The format is
@@ -173,6 +202,35 @@ export default Alchemy.Stack(
       ],
     });
 
+    // Stored mail (PLAN.md §20.22.2). Each retention class is a key prefix with its own
+    // expiration; the message metadata in DynamoDB expires (TTL) at the same time and holds the
+    // only wrapped data key, so a body S3 has yet to delete can't be decrypted. Private, SSE-S3
+    // on top of our own encryption, TLS only.
+    yield* AWS.S3.Bucket("Inbox", {
+      bucketName: inboxBucketName,
+      lifecycleRules: RetentionDays.literals.map((days) => ({
+        ID: `expire-${days}d`,
+        Status: "Enabled" as const,
+        Filter: { Prefix: Inbox.classPrefix(days) },
+        Expiration: { Days: days },
+      })),
+      policy: [
+        {
+          Effect: "Deny",
+          Sid: "TlsOnly",
+          Principal: "*",
+          Action: ["s3:*"],
+          Resource: [`arn:aws:s3:::${inboxBucketName}`, inboxObjects],
+          Condition: { Bool: { "aws:SecureTransport": "false" } },
+        },
+      ],
+    });
+    const inboxKeys = {
+      Effect: "Allow" as const,
+      Action: ["ssm:GetParameter"],
+      Resource: inboxKeysParameterArn,
+    };
+
     // Logs carry no addresses or content, but still expire (PLAN.md §20.15): without a retention
     // Lambda's log groups never do.
     const logging = { retention: Duration.days(14) };
@@ -226,7 +284,19 @@ export default Alchemy.Stack(
         // No ALIAS_WEBHOOK_ALLOW_LOOPBACK: webhook URLs must be https on public addresses.
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
         ALIAS_DOH_URL: dohUrl,
+        ALIAS_TEMP_DOMAINS: tempDomains.join(","),
+        ALIAS_INBOX_BUCKET: inboxBucketName,
+        ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
       },
+    });
+    // Stored mail: read, delete one, and list an alias's objects to purge them with the alias or
+    // the account (ListBucket also makes a missing key a 404, not a 403). The inbox keys unwrap.
+    yield* api.bind("Inbox", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["s3:GetObject", "s3:DeleteObject"], Resource: inboxObjects },
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: `arn:aws:s3:::${inboxBucketName}` },
+        inboxKeys,
+      ],
     });
     yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
     yield* api.bind("DataAccess", {
@@ -379,7 +449,17 @@ export default Alchemy.Stack(
         ALIAS_IMAGE_PROXY_URL: Output.interpolate`https://${images.domainName}`,
         ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
+        ALIAS_TEMP_DOMAINS: tempDomains.join(","),
+        ALIAS_INBOX_BUCKET: inboxBucketName,
+        ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
       },
+    });
+    // Inbox mode: put a sealed body, and delete it again when its alias vanished meanwhile.
+    yield* inbound.bind("Inbox", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["s3:PutObject", "s3:DeleteObject"], Resource: inboxObjects },
+        inboxKeys,
+      ],
     });
     // Least privilege: aliases, recipients and contacts are read by key or one partition Query;
     // counters, quotas and delivery claims are single-item writes. A new contact and its id are
@@ -539,6 +619,14 @@ export default Alchemy.Stack(
         feedbackForwardingEnabled: false,
       }),
     );
+    // Temp-mail domains only receive (the receipt rule covers every verified domain); nothing
+    // is ever sent from them, so no sending policy names them.
+    yield* Effect.forEach(tempDomains, (domain) =>
+      AWS.SES.EmailIdentity(`Temp-${domain}`, {
+        emailIdentity: domain,
+        feedbackForwardingEnabled: false,
+      }),
+    );
 
     // SES reputation alarms (PLAN.md §20.13). SES reviews the account at a 5% bounce or 0.1%
     // complaint rate and may pause sending at 10% / 0.5%; these warn at half the review level and
@@ -647,6 +735,7 @@ export default Alchemy.Stack(
       apiUrl: api.functionUrl,
       tableName: table.tableName,
       spoolBucket: spool.bucketName,
+      inboxBucket: inboxBucketName,
       inboundFunction: inbound.functionName,
       feedbackFunction: feedback.functionName,
       webhookDeliveryFunction: delivery.functionName,

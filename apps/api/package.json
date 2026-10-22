@@ -19,6 +19,7 @@
     "@alias/core": "workspace:*",
     "@alias/db": "workspace:*",
     "@alias/dns": "workspace:*",
+    "@alias/inbox": "workspace:*",
     "@alias/webhooks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@simplewebauthn/server": "catalog:",

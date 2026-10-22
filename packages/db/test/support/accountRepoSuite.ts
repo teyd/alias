@@ -22,6 +22,7 @@ import {
   Dynamo,
   OAuthRepo,
   OutboxRepo,
+  MessageRepo,
   RecipientRepo,
   SessionRepo,
   TokenRepo,
@@ -39,6 +40,7 @@ const repos = Layer.mergeAll(
   DomainRepo.layer,
   OAuthRepo.layer,
   OutboxRepo.layer,
+  MessageRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
   TokenRepo.layer,
@@ -53,6 +55,7 @@ type Repos =
   | DomainRepo.DomainRepo
   | OAuthRepo.OAuthRepo
   | OutboxRepo.OutboxRepo
+  | MessageRepo.MessageRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
@@ -82,8 +85,8 @@ const scan = Effect.fn("scan")(function* () {
  * One user with one of everything the service stores about a user: sessions, tokens, a connected
  * app (its grant, a used and a current refresh token, two access tokens, the redeemed code and
  * one waiting), a drafted email and a day's send count, settings, a recipient, a creation quota, a custom domain, live and deleted aliases
- * on a shared domain, on their subdomain and on their custom domain, contacts, counters, and a
- * deletion that stopped halfway.
+ * on a shared domain, on their subdomain and on their custom domain, contacts, counters, a
+ * deletion that stopped halfway, and a temporary inbox with a stored message and its quotas.
  */
 const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) {
   const users = yield* UserRepo.UserRepo;
@@ -281,6 +284,35 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
   yield* aliases.delete({ userId, ...addresses.oldCustom });
   yield* AliasRepo.retire(table, { userId, ...addresses.halfway });
 
+  const temporary = { domain: "tmp.test", localPart: `${name}-temp` };
+  yield* aliases.insert({
+    id: `al_${name}_temp`,
+    userId,
+    mode: "inbox",
+    createdAt: 1,
+    inboxExpiresAt: 9_000_000_000_000,
+    retentionDays: 1,
+    ...temporary,
+  });
+  yield* aliases.reserveTemporary(userId, at(1_000), 20);
+  const messages = yield* MessageRepo.MessageRepo;
+  yield* messages.reserveStorage(userId, at(1_000), 500);
+  yield* messages.insert(
+    {
+      id: `msg_${name}`,
+      aliasId: `al_${name}_temp`,
+      userId,
+      receivedAt: at(1_000),
+      expiresAt: at(9_000_000_000_000),
+      size: 10,
+      objectKey: `inbox/1d/al_${name}_temp/msg_${name}`,
+      keyVersion: 1,
+      wrappedKey: new Uint8Array([1]),
+      summary: new Uint8Array([2]),
+    },
+    temporary,
+  );
+
   return {
     userId,
     username: name,
@@ -328,6 +360,7 @@ export const accountRepoSuite = (
               { pk: "ALIAS#alias.test#ada-halfway", sk: "ALIAS", attributes: tombstone },
               { pk: "ALIAS#alias.test#ada-old", sk: "ALIAS", attributes: tombstone },
               { pk: "ALIAS#alias.test#ada-shared", sk: "ALIAS", attributes: tombstone },
+              { pk: "ALIAS#tmp.test#ada-temp", sk: "ALIAS", attributes: tombstone },
               { pk: `USERNAME#${Username.skeleton("ada")}`, sk: "USERNAME", attributes: tombstone },
             ]);
             const notAdas = (item: { readonly pk: string }) =>
@@ -339,7 +372,7 @@ export const accountRepoSuite = (
             expect(Arr.filter(after, (item) => item.pk.startsWith("ERASURE#"))).toEqual([
               { pk: journal, sk: "ERASURE", attributes: ["expiresAt", "pk", "sk"] },
             ]);
-            expect(after).toHaveLength(graces.length + 5);
+            expect(after).toHaveLength(graces.length + 6);
             // Her OpenPGP key went with her recipient item; Grace's is still there.
             const keys = Arr.filter(before, (item) => item.attributes.includes("encryption"));
             expect(Arr.map(keys, (item) => item.sk)).toEqual([
@@ -390,6 +423,19 @@ export const accountRepoSuite = (
             expect(yield* claim("usr_ada", "ada-shared")).toBeInstanceOf(AliasRepo.AliasTaken);
             expect(yield* claim("usr_ada", "ada-old")).toBeInstanceOf(AliasRepo.AliasTaken);
             expect(yield* aliases.isDeleted("alias.test", "ada-halfway")).toBe(true);
+            // A temporary inbox's address is never handed out again either.
+            expect(
+              yield* Effect.flip(
+                aliases.insert({
+                  id: "al_new",
+                  userId: "usr_grace",
+                  domain: "tmp.test",
+                  localPart: "ada-temp",
+                  mode: "inbox",
+                  createdAt: 2,
+                }),
+              ),
+            ).toBeInstanceOf(AliasRepo.AliasTaken);
             expect(yield* aliases.listByUser("usr_ada")).toEqual([]);
             // Her custom domain is free again, with every address on it.
             const domains = yield* DomainRepo.DomainRepo;

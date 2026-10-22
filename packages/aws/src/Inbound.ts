@@ -1,11 +1,9 @@
 import * as S3 from "@distilled.cloud/aws/s3";
-import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { region } from "./Client.ts";
+import * as Objects from "./Objects.ts";
 
 /**
  * Where SES receiving puts mail. `infra/alchemy.run.ts`, the SES emulator and the inbound Lambda
@@ -35,33 +33,18 @@ export class MessageGone extends Schema.TaggedError<MessageGone>()("MessageGone"
   key: Schema.String,
 }) {}
 
-const concat = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const total = Arr.reduce(chunks, 0, (size, chunk) => size + chunk.byteLength);
-  const bytes = new Uint8Array(total);
-  Arr.reduce(chunks, 0, (offset, chunk) => {
-    bytes.set(chunk, offset);
-    return offset + chunk.byteLength;
-  });
-  return bytes;
-};
-
 /** The raw RFC 5322 message SES stored for `messageId`, byte for byte. */
 export const readMessage = Effect.fn("Inbound.readMessage")(function* (
   bucket: string,
   messageId: string,
 ) {
   const key = spoolObjectKey(messageId);
-  const fail = (cause: unknown) => new SpoolError({ key, reason: String(cause) });
-  const object = yield* S3.getObject({ Bucket: bucket, Key: key }).pipe(
-    Effect.mapError((error) =>
-      P.isTagged(error, "NoSuchKey") ? new MessageGone({ key }) : fail(error),
-    ),
+  return yield* Objects.get(bucket, key).pipe(
+    Effect.catchTags({
+      NoSuchObject: () => Effect.fail(new MessageGone({ key })),
+      ObjectError: (error) => Effect.fail(new SpoolError({ key, reason: error.reason })),
+    }),
   );
-  const chunks = yield* Option.match(Option.fromUndefinedOr(object.Body), {
-    onNone: () => Effect.succeed<ReadonlyArray<Uint8Array>>([]),
-    onSome: (body) => Stream.runCollect(body).pipe(Effect.mapError(fail)),
-  });
-  return concat(chunks);
 });
 
 /**
@@ -97,21 +80,14 @@ export const deleteMessage = Effect.fn("Inbound.deleteMessage")(function* (
   bucket: string,
   messageId: string,
 ) {
-  const key = spoolObjectKey(messageId);
-  yield* S3.deleteObject({ Bucket: bucket, Key: key }).pipe(
-    Effect.asVoid,
-    Effect.mapError((cause) => new SpoolError({ key, reason: String(cause) })),
+  yield* Objects.remove(bucket, spoolObjectKey(messageId)).pipe(
+    Effect.mapError((error) => new SpoolError({ key: error.key, reason: error.reason })),
   );
 });
 
 /** Creates the spool bucket if it doesn't exist. Emulators and dev only; Alchemy deploys real stages. */
 export const ensureSpool = Effect.fn("Inbound.ensureSpool")(function* (bucket: string) {
-  yield* S3.createBucket({
-    Bucket: bucket,
-    CreateBucketConfiguration: { LocationConstraint: region },
-  }).pipe(
-    Effect.asVoid,
-    Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
-    Effect.mapError((cause) => new SpoolError({ key: bucket, reason: String(cause) })),
+  yield* Objects.ensureBucket(bucket).pipe(
+    Effect.mapError((error) => new SpoolError({ key: error.key, reason: error.reason })),
   );
 });

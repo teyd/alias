@@ -1,10 +1,11 @@
 import { AwsClient, Identities, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains } from "@alias/core";
+import { SharedDomains, TempDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
+import { freshInbox } from "@alias/inbox/testing";
+import { NodeCrypto } from "@effect/platform-node";
 import { UrlPolicy } from "@alias/webhooks";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
-import { NodeCrypto } from "@effect/platform-node";
 import { freshQueue } from "@alias/webhooks/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
@@ -37,10 +38,12 @@ const resolver = Layer.unwrap(
  */
 export const make = Effect.acquireRelease(
   Effect.gen(function* () {
+    const table = freshTable();
     const context = yield* Layer.build(
       Layer.mergeAll(
-        freshTable(),
+        table,
         freshQueue(),
+        freshInbox().pipe(Layer.provide(Layer.merge(table, NodeCrypto.layer))),
         Transport.ses.pipe(Layer.provide(fakecloudClient)),
         Identities.layer.pipe(Layer.provide(fakecloudClient)),
         resolver,
@@ -61,6 +64,9 @@ export const make = Effect.acquireRelease(
         // A second shared domain lets alias tests pick between domains.
         MailSettings.layer(Option.some(`no-reply@${sharedDomain}`)).pipe(
           Layer.provideMerge(SharedDomains.layer(`${sharedDomain},alias2.test`)),
+        ),
+        TempDomains.layer("tmp.test,tmp2.test").pipe(
+          Layer.provide(SharedDomains.layer(`${sharedDomain},alias2.test`)),
         ),
       ),
     );

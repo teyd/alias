@@ -1,0 +1,33 @@
+{
+  "name": "@alias/inbox",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/support/index.ts"
+  },
+  "scripts": {
+    "test": "vp test",
+    "test:unit": "vp test"
+  },
+  "dependencies": {
+    "@alias/aws": "workspace:*",
+    "@alias/contracts": "workspace:*",
+    "@alias/core": "workspace:*",
+    "@alias/db": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
+    "sanitize-html": "catalog:"
+  },
+  "devDependencies": {
+    "@alias/aws-emulators": "workspace:*",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/sanitize-html": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

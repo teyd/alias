@@ -1,7 +1,8 @@
 import { Identities, MessageQueue, Transport } from "@alias/aws";
-import { SharedDomains } from "@alias/core";
+import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { Doh } from "@alias/dns";
+import { Inbox } from "@alias/inbox";
 import { UrlPolicy } from "@alias/webhooks";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -44,8 +45,14 @@ const MailConfig = Config.all({
   }),
 );
 
+/** The table, and the inbox store on it (its keys are read when the layer is built). */
+const StorageConfig = Config.all({ database: Dynamo.config, inbox: Inbox.config }).pipe(
+  Config.map(({ database, inbox }) => Layer.merge(database, Inbox.fromConfig(inbox, database))),
+);
+
 export const ServicesConfig = Config.all([
-  Dynamo.config,
+  StorageConfig,
+  TempDomains.config.pipe(Config.map((domains) => Layer.succeed(TempDomains.TempDomains, domains))),
   RelyingPartyConfig,
   Transport.config,
   MailConfig,

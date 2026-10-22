@@ -1,4 +1,5 @@
-import { Username } from "@alias/core";
+import { Transport } from "@alias/aws";
+import { SharedDomains, Username } from "@alias/core";
 import {
   Api,
   CurrentUser,
@@ -6,8 +7,16 @@ import {
   PasskeyRejected,
   UsernameTaken,
 } from "@alias/contracts";
-import { ChallengeRepo, PasskeyRepo, type SessionRepo, UserRepo } from "@alias/db";
+import {
+  AccountRepo,
+  ChallengeRepo,
+  PasskeyRepo,
+  RecipientRepo,
+  type SessionRepo,
+  UserRepo,
+} from "@alias/db";
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
+import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -109,22 +118,21 @@ const register = Effect.fn("auth.register")(function* (payload: {
 const loginOptions = () =>
   issueChallenge(ChallengeRepo.Authentication(), Passkeys.authenticationOptions).pipe(Effect.orDie);
 
-const login = Effect.fn("auth.login")(function* (payload: {
-  readonly challengeId: string;
-  readonly credential: AuthenticationResponseJSON;
-}) {
-  const { challenge } = yield* takeChallenge(
-    payload.challengeId,
-    Option.liftPredicate(ChallengeRepo.isAuthentication),
-  );
+/**
+ * Verifies a passkey assertion answering the challenge `select` accepts, and returns the passkey
+ * with its new signature counter recorded.
+ */
+const assertPasskey = Effect.fn("auth.assertPasskey")(function* (
+  payload: { readonly challengeId: string; readonly credential: AuthenticationResponseJSON },
+  select: (ceremony: ChallengeRepo.Ceremony) => Option.Option<ChallengeRepo.Ceremony>,
+) {
+  const { challenge } = yield* takeChallenge(payload.challengeId, select);
   const unknownCredential = new PasskeyRejected({ reason: "unknown-credential" });
-  const orUnknown = <A>(found: Option.Option<A>) =>
-    Option.match(found, { onNone: () => Effect.fail(unknownCredential), onSome: Effect.succeed });
-
   const passkeys = yield* PasskeyRepo.PasskeyRepo;
   const passkey = yield* Effect.flatMap(
     Effect.orDie(passkeys.findById(payload.credential.id)),
-    orUnknown,
+    (found) =>
+      Option.match(found, { onNone: () => Effect.fail(unknownCredential), onSome: Effect.succeed }),
   );
   // A discoverable credential names its user; it must be the one the passkey belongs to.
   const claimedUser = Option.map(
@@ -145,9 +153,72 @@ const login = Effect.fn("auth.login")(function* (payload: {
       DatabaseError: Effect.die,
     }),
   );
+  return passkey;
+});
+
+const login = Effect.fn("auth.login")(function* (payload: {
+  readonly challengeId: string;
+  readonly credential: AuthenticationResponseJSON;
+}) {
+  const passkey = yield* assertPasskey(
+    payload,
+    Option.liftPredicate(ChallengeRepo.isAuthentication),
+  );
   const users = yield* UserRepo.UserRepo;
-  const user = yield* Effect.flatMap(Effect.orDie(users.findById(passkey.userId)), orUnknown);
+  const user = yield* Effect.flatMap(Effect.orDie(users.findById(passkey.userId)), (found) =>
+    Option.match(found, {
+      onNone: () => Effect.fail(new PasskeyRejected({ reason: "unknown-credential" })),
+      onSome: Effect.succeed,
+    }),
+  );
   return yield* Effect.orDie(Sessions.start(user));
+});
+
+/** A challenge only the signed-in user can answer, to confirm erasing their account. */
+const eraseOptions = Effect.fn("auth.eraseOptions")(function* () {
+  const user = yield* CurrentUser;
+  return yield* issueChallenge(
+    ChallengeRepo.Erasure(user.userId),
+    Passkeys.authenticationOptions,
+  ).pipe(Effect.orDie);
+});
+
+/**
+ * Erases the signed-in account (PLAN.md §20.15) once a passkey of that account answered an
+ * erasure challenge issued to it. The recipients' addresses come off SES's suppression list first:
+ * they are personal data too, and a retry after a failure later on finds them again.
+ */
+const erase = Effect.fn("auth.erase")(function* (payload: {
+  readonly challengeId: string;
+  readonly credential: AuthenticationResponseJSON;
+}) {
+  const user = yield* CurrentUser;
+  const passkey = yield* assertPasskey(
+    payload,
+    Option.liftPredicate(
+      (ceremony) => ChallengeRepo.isErasure(ceremony) && ceremony.userId === user.userId,
+    ),
+  );
+  // Someone else's passkey proves nothing about this account.
+  if (passkey.userId !== user.userId) {
+    return yield* new PasskeyRejected({ reason: "unknown-credential" });
+  }
+  const recipients = yield* Effect.orDie((yield* RecipientRepo.RecipientRepo).list(user.userId));
+  const transport = yield* Transport.Transport;
+  yield* Effect.forEach(recipients, (recipient) => transport.unsuppress(recipient.address), {
+    concurrency: 4,
+    discard: true,
+  }).pipe(Effect.orDie);
+  const shared = yield* SharedDomains.SharedDomains;
+  yield* Effect.orDie(
+    (yield* AccountRepo.AccountRepo).erase({
+      userId: user.userId,
+      username: user.username,
+      subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
+      sessionId: yield* Effect.orDie(Sessions.currentId()),
+    }),
+  );
+  yield* Effect.orDie(Sessions.end());
 });
 
 export const AuthLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
@@ -163,6 +234,19 @@ export const AuthLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
   ),
 );
 
+/** What the account handlers use beyond the auth ones. */
+type AccountServices =
+  | AuthServices
+  | RecipientRepo.RecipientRepo
+  | AccountRepo.AccountRepo
+  | Transport.Transport
+  | SharedDomains.SharedDomains;
+
 export const AccountLive = HttpApiBuilder.group(Api, "account", (handlers) =>
-  handlers.handle("me", () => Effect.service(CurrentUser)),
+  Effect.map(Effect.context<AccountServices>(), (services) =>
+    handlers
+      .handle("me", () => Effect.service(CurrentUser))
+      .handle("eraseOptions", () => Effect.provide(eraseOptions(), services))
+      .handle("erase", ({ payload }) => Effect.provide(erase(payload), services)),
+  ),
 );

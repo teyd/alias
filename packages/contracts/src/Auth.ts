@@ -128,7 +128,28 @@ export const AuthGroup = HttpApiGroup.make("auth")
   )
   .prefix("/v1/auth");
 
+/**
+ * The signed-in account. Erasing it (GDPR Art. 17) is two calls, like a login: `eraseOptions`
+ * issues a single-use challenge for this account only, and `erase` takes a fresh passkey
+ * assertion answering it, erases everything stored about the account except the tombstones that
+ * keep its username and shared-domain addresses from ever being reused, and clears the session
+ * cookie. If `erase` fails halfway, calling both again finishes the job.
+ */
 export const AccountGroup = HttpApiGroup.make("account")
   .add(HttpApiEndpoint.get("me", "/me", { success: Me }))
+  .add(
+    HttpApiEndpoint.post("eraseOptions", "/me/erase/options", {
+      success: AuthenticationChallenge,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("erase", "/me/erase", {
+      payload: Schema.Struct({
+        challengeId: Schema.String,
+        credential: WebAuthn.AuthenticationCredential,
+      }),
+      error: PasskeyRejected,
+    }),
+  )
   .middleware(Authentication)
   .prefix("/v1");

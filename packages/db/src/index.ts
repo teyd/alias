@@ -1,3 +1,4 @@
+export * as AccountRepo from "./AccountRepo.ts";
 export * as AliasRepo from "./AliasRepo.ts";
 export * as ChallengeRepo from "./ChallengeRepo.ts";
 export * as ContactRepo from "./ContactRepo.ts";

@@ -10,23 +10,24 @@ import { DynamoTable } from "./Dynamo.ts";
  * Single-table design. This spec is the one source of truth. `infra/alchemy.run.ts` deploys it and
  * the emulators create it with {@link ensure}, so tests run against the table production gets.
  *
- * | Item              | pk                           | sk                     | gsi1pk          | gsi1sk                   | TTL         |
- * | ----------------- | ---------------------------- | ---------------------- | --------------- | ------------------------ | ----------- |
- * | Alias             | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |             |
- * | ForwardQuota      | `ALIAS#<domain>#<localPart>` | `FORWARDS#<hour>`      |                 |                          | `expiresAt` |
- * | Contact           | `CONTACTS#<aliasId>`         | `CONTACT#<address>`    |                 |                          |             |
- * | ContactId         | `CONTACTS#<aliasId>`         | `CONTACT-ID#<id>`      |                 |                          |             |
- * | User              | `USER#<userId>`              | `USER`                 |                 |                          |             |
- * | UserSettings      | `USER#<userId>`              | `SETTINGS`             |                 |                          |             |
- * | AliasQuota        | `USER#<userId>`              | `ALIASES#<date>`       |                 |                          | `expiresAt` |
- * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                 |                          |             |
- * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                 |                          |             |
- * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                 |                          | `expiresAt` |
- * | Username          | `USERNAME#<skeleton>`        | `USERNAME`             |                 |                          |             |
- * | Passkey           | `PASSKEY#<credentialId>`     | `PASSKEY`              |                 |                          |             |
- * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              |                 |                          | `expiresAt` |
- * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                 |                          | `expiresAt` |
- * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                 |                          | `expiresAt` |
+ * | Item              | pk                           | sk                     | gsi1pk                     | gsi1sk                    | TTL         |
+ * | ----------------- | ---------------------------- | ---------------------- | -------------------------- | ------------------------- | ----------- |
+ * | Alias             | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `USER#<userId>`            | `ALIAS#<createdAt>#<id>`  |             |
+ * | AliasTombstone    | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `DELETED-ALIASES#<userId>` | the item's pk             |             |
+ * | ForwardQuota      | `ALIAS#<domain>#<localPart>` | `FORWARDS#<hour>`      |                            |                           | `expiresAt` |
+ * | Contact           | `CONTACTS#<aliasId>`         | `CONTACT#<address>`    |                            |                           |             |
+ * | ContactId         | `CONTACTS#<aliasId>`         | `CONTACT-ID#<id>`      |                            |                           |             |
+ * | User              | `USER#<userId>`              | `USER`                 |                            |                           |             |
+ * | UserSettings      | `USER#<userId>`              | `SETTINGS`             |                            |                           |             |
+ * | AliasQuota        | `USER#<userId>`              | `ALIASES#<date>`       |                            |                           | `expiresAt` |
+ * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                            |                           |             |
+ * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                            |                           |             |
+ * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                            |                           | `expiresAt` |
+ * | Username          | `USERNAME#<skeleton>`        | `USERNAME`             |                            |                           |             |
+ * | Passkey           | `PASSKEY#<credentialId>`     | `PASSKEY`              | `PASSKEYS#<userId>`        | `PASSKEY#<credentialId>`  |             |
+ * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              | `SESSIONS#<userId>`        | `SESSION#<sha256(token)>` | `expiresAt` |
+ * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                            |                           | `expiresAt` |
+ * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                            |                           | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -45,9 +46,18 @@ import { DynamoTable } from "./Dynamo.ts";
  *
  * A ForwardQuota counts the mail the inbound Lambda forwarded for an alias in one UTC hour
  * (`2026-10-22T09`), next to the alias in its partition; the hourly cap is one conditional
- * UpdateItem on it. It outlives its hour by an hour and is never read after, so a deleted alias
- * leaves nothing behind for long. MailQuota and AliasQuota (aliases created on the fly per user
- * and UTC day) work the same way (`Quota.ts`).
+ * UpdateItem on it. It outlives its hour by an hour and is never read after. MailQuota and
+ * AliasQuota (aliases created on the fly per user and UTC day) work the same way (`Quota.ts`).
+ *
+ * Deleting an alias (PLAN.md §20.15) replaces its item with an AliasTombstone holding only
+ * `deletedAt` and the deleting user's `userId`, listed on gsi1 under `DELETED-ALIASES#<userId>`,
+ * and purges its contacts and ForwardQuotas. The tombstone keeps the alias's `id` only until that
+ * purge is done, so a retry finds what is left. A tombstone keeps the address from anyone but its
+ * user, and makes mail to it look like mail to an unknown address. Erasing an account deletes
+ * everything of the user's except tombstones: shared-domain AliasTombstones lose `userId` and
+ * their index keys, subdomain ones go entirely, and the Username item becomes a tombstone too
+ * (`deletedAt`, no owner), so nobody registers the username or its lookalikes again. gsi1 lists a
+ * user's passkeys and sessions for that sweep (`AccountRepo.erase`).
  *
  * A Contact is someone who wrote to an alias, keyed by the alias's id (not its address, so an
  * alias recreated at the same address starts without contacts) and the sender's lowercased

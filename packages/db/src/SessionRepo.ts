@@ -31,7 +31,10 @@ export class SessionRepo extends Context.Service<
   }
 >()("@alias/db/SessionRepo") {}
 
-const sessionKey = (id: string) => ({ pk: { S: `SESSION#${id}` }, sk: { S: "SESSION" } });
+export const sessionKey = (id: string) => ({ pk: { S: `SESSION#${id}` }, sk: { S: "SESSION" } });
+
+/** The gsi1 partition listing a user's sessions, so erasing the account finds them. */
+export const userSessionsKey = (userId: string) => `SESSIONS#${userId}`;
 
 const SessionItem = Item.codec(
   Schema.Struct({
@@ -54,7 +57,12 @@ const make = Effect.fn("SessionRepo.make")(function* () {
         Effect.flatMap((item) =>
           DynamoDB.putItem({
             TableName: table.name,
-            Item: { ...sessionKey(session.id), ...item },
+            Item: {
+              ...sessionKey(session.id),
+              gsi1pk: { S: userSessionsKey(session.userId) },
+              gsi1sk: { S: `SESSION#${session.id}` },
+              ...item,
+            },
             ConditionExpression: "attribute_not_exists(pk)",
           }).pipe(Effect.mapError(databaseError("PutItem"))),
         ),

@@ -3,19 +3,22 @@ import { Link, Outlet, createRootRoute, useNavigate } from "@tanstack/react-rout
 import * as Option from "effect/Option";
 import { Button } from "@/components/ui/button";
 import { callApi } from "@/lib/api";
+import { eraseAccount } from "@/lib/passkeys";
 import { meQuery } from "@/lib/session";
 
 const Account = () => {
   const me = useQuery(meQuery);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const signedOut = () => {
+    queryClient.setQueryData(meQuery.queryKey, Option.none());
+    void navigate({ to: "/" });
+  };
   const logout = useMutation({
     mutationFn: () => callApi((api) => api.auth.logout()),
-    onSuccess: () => {
-      queryClient.setQueryData(meQuery.queryKey, Option.none());
-      void navigate({ to: "/" });
-    },
+    onSuccess: signedOut,
   });
+  const erase = useMutation({ mutationFn: () => callApi(eraseAccount), onSuccess: signedOut });
 
   if (me.isPending) return null;
   return Option.match(me.data ?? Option.none(), {
@@ -43,6 +46,29 @@ const Account = () => {
         >
           Log out
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive"
+          disabled={erase.isPending}
+          onClick={() => {
+            if (
+              window.confirm(
+                "Delete your account for good? Every alias, contact and forwarding address is " +
+                  `erased, and the username ${user.username} can never be registered again.`,
+              )
+            ) {
+              erase.mutate();
+            }
+          }}
+        >
+          Delete account
+        </Button>
+        {erase.error && (
+          <span role="alert" className="text-destructive">
+            {erase.error.message}
+          </span>
+        )}
       </div>
     ),
   });

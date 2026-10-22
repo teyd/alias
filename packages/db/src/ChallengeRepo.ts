@@ -10,16 +10,25 @@ import { type DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Item from "./Item.ts";
 
-/** What a challenge was issued for. Registration remembers who is signing up. */
+/**
+ * What a challenge was issued for. Registration remembers who is signing up; Erasure, whose
+ * account the signed-in user confirmed they want erased.
+ */
 const Ceremony = Schema.TaggedUnion({
   Registration: { userId: Schema.String, username: Schema.String },
   Authentication: {},
+  Erasure: { userId: Schema.String },
 });
 export type Ceremony = typeof Ceremony.Type;
 export const Registration = (fields: { readonly userId: string; readonly username: string }) =>
   Ceremony.cases.Registration.make(fields);
 export const Authentication = () => Ceremony.cases.Authentication.make({});
-export const { Registration: isRegistration, Authentication: isAuthentication } = Ceremony.guards;
+export const Erasure = (userId: string) => Ceremony.cases.Erasure.make({ userId });
+export const {
+  Registration: isRegistration,
+  Authentication: isAuthentication,
+  Erasure: isErasure,
+} = Ceremony.guards;
 
 /** A WebAuthn challenge the server issued and has not seen answered yet. */
 export interface Challenge {

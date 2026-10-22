@@ -10,7 +10,7 @@ import * as Browser from "./support/Browser.ts";
 import { TestAuthenticator } from "./support/index.ts";
 import * as TestApi from "./support/TestApi.ts";
 
-const { RegistrationChallenge, signUp } = TestApi;
+const { AuthenticationChallenge, RegistrationChallenge, logIn, signUp } = TestApi;
 
 const SESSION = "__Host-alias_session";
 
@@ -22,11 +22,13 @@ const api = Effect.map(TestApi.make, (handler) => ({
       Effect.flatMap((repo) => repo.insert(alias)),
       Effect.provide(handler.context),
     ),
-  seedContact: (contact: ContactRepo.NewContact) =>
+  seedContact: (contact: ContactRepo.NewContact, alias: { domain: string; localPart: string }) =>
     ContactRepo.layer.pipe(
       Layer.build,
       Effect.flatMap((context) =>
-        ContactRepo.ContactRepo.use((repo) => repo.create(contact)).pipe(Effect.provide(context)),
+        ContactRepo.ContactRepo.use((repo) => repo.create(contact, alias)).pipe(
+          Effect.provide(context),
+        ),
       ),
       Effect.provide(handler.context),
     ),
@@ -42,24 +44,7 @@ const api = Effect.map(TestApi.make, (handler) => ({
     ),
 }));
 
-const AuthenticationChallenge = Schema.Struct({
-  challengeId: Schema.String,
-  options: Schema.Struct({ challenge: Schema.String, rpId: Schema.optionalKey(Schema.String) }),
-});
-
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
-
-const logIn = Effect.fn("logIn")(function* (
-  browser: Browser.Client,
-  authenticator: TestAuthenticator.TestAuthenticator,
-) {
-  const started = yield* browser.post("/v1/auth/login/options");
-  const { challengeId, options } = Schema.decodeUnknownSync(AuthenticationChallenge)(started.body);
-  return yield* browser.post("/v1/auth/login", {
-    challengeId,
-    credential: authenticator.get(options),
-  });
-});
 
 /** A browser signed in as a freshly registered user. */
 const signedIn = Effect.fn("signedIn")(function* (open: () => Browser.Client, username: string) {
@@ -522,13 +507,16 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
         createdAt: 1,
       });
       const contact = (id: string, address: string, aliasId = "al_shop") =>
-        seedContact({
-          id,
-          aliasId,
-          address,
-          name: id === "c1" ? Option.some("Store") : Option.none(),
-          createdAt: DateTime.makeUnsafe(id === "c1" ? 1_000 : 2_000),
-        });
+        seedContact(
+          {
+            id,
+            aliasId,
+            address,
+            name: id === "c1" ? Option.some("Store") : Option.none(),
+            createdAt: DateTime.makeUnsafe(id === "c1" ? 1_000 : 2_000),
+          },
+          { domain: "alias.test", localPart: aliasId === "al_shop" ? "shop" : "bank" },
+        );
       yield* contact("c1", "orders@store.example");
       yield* contact("c2", "news@store.example");
       yield* contact("c3", "boss@bank.example", "al_bank");

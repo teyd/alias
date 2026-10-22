@@ -1,5 +1,6 @@
 import { Api } from "@alias/contracts";
 import {
+  AccountRepo,
   AliasRepo,
   ChallengeRepo,
   ContactRepo,
@@ -30,6 +31,7 @@ const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
 );
 
 const Repositories = Layer.mergeAll(
+  AccountRepo.layer,
   AliasRepo.layer,
   ContactRepo.layer,
   UserRepo.layer,

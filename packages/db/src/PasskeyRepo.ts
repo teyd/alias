@@ -48,6 +48,9 @@ const passkeyKey = (credentialId: string) => ({
   sk: { S: "PASSKEY" },
 });
 
+/** The gsi1 partition listing a user's passkeys, so erasing the account finds them. */
+export const userPasskeysKey = (userId: string) => `PASSKEYS#${userId}`;
+
 const PasskeyItem = Item.codec(
   Schema.Struct({
     id: Attribute.S,
@@ -64,6 +67,8 @@ const PasskeyItem = Item.codec(
 export const passkeyItem = (passkey: Passkey) =>
   Effect.map(PasskeyItem.encode(passkey), (attributes) => ({
     ...passkeyKey(passkey.id),
+    gsi1pk: { S: userPasskeysKey(passkey.userId) },
+    gsi1sk: { S: `PASSKEY#${passkey.id}` },
     ...attributes,
   }));
 

@@ -6,7 +6,9 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { AliasRepo, Dynamo, Table } from "../../src/index.ts";
+import * as R from "effect/Record";
+import * as Str from "effect/String";
+import { AliasRepo, ContactRepo, Dynamo, Table } from "../../src/index.ts";
 import { freshTable } from "./database.ts";
 
 const alias = (overrides: Partial<AliasRepo.NewAlias> = {}): AliasRepo.NewAlias => ({
@@ -145,15 +147,144 @@ export const aliasRepoSuite = (
         ),
       );
 
-      it.effect("deletes an alias, freeing its address and dropping it from the list", () =>
-        withRepo(
+      const at = (iso: string) => DateTime.makeUnsafe(iso);
+
+      /** The alias repo plus contacts and raw table access, on one fresh table. */
+      const withTable = <A, E>(
+        effect: Effect.Effect<
+          A,
+          E,
+          AliasRepo.AliasRepo | ContactRepo.ContactRepo | Dynamo.Database
+        >,
+      ) =>
+        effect.pipe(
+          Effect.provide(
+            Layer.mergeAll(AliasRepo.layer, ContactRepo.layer).pipe(
+              Layer.provideMerge(freshTable()),
+            ),
+          ),
+        );
+
+      /** Every item in one partition, as stored. */
+      const partition = (pk: string) =>
+        Effect.flatMap(Effect.service(Dynamo.DynamoTable), (table) =>
+          DynamoDB.query({
+            TableName: table.name,
+            KeyConditionExpression: "pk = :pk",
+            ExpressionAttributeValues: { ":pk": { S: pk } },
+            ConsistentRead: true,
+          }),
+        ).pipe(Effect.map((result) => result.Items ?? []));
+
+      const contact = (id: string, address: string): ContactRepo.NewContact => ({
+        id,
+        aliasId: "al_1",
+        address,
+        name: Option.none(),
+        createdAt: DateTime.makeUnsafe(1),
+      });
+      const shop = { domain: "alias.test", localPart: "shop" };
+
+      it.effect("deletes an alias with its contacts and counters, leaving a tombstone", () =>
+        withTable(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const contacts = yield* ContactRepo.ContactRepo;
+            yield* repo.insert(alias());
+            yield* repo.increment("alias.test", "shop", "forwarded");
+            yield* contacts.create(contact("c1aaaaaaaaaaaaaa", "a@store.example"), shop);
+            yield* contacts.create(contact("c2aaaaaaaaaaaaaa", "b@store.example"), shop);
+            yield* repo.reserveForward("alias.test", "shop", at("2026-10-22T09:30:00Z"), 5);
+
+            yield* repo.delete({ ...owned, localPart: "SHOP" });
+
+            expect(Option.isNone(yield* repo.findByAddress("alias.test", "shop"))).toBe(true);
+            expect(yield* repo.isDeleted("ALIAS.test", "Shop")).toBe(true);
+            expect(yield* repo.listByUser("usr_1")).toEqual([]);
+            // The contacts, their id pointers and the hourly counter are gone.
+            expect(yield* partition("CONTACTS#al_1")).toEqual([]);
+            expect(yield* contacts.findById("al_1", "c1aaaaaaaaaaaaaa")).toEqual(Option.none());
+            // The tombstone keeps who deleted it and when, nothing else.
+            const items = yield* partition("ALIAS#alias.test#shop");
+            expect(items).toHaveLength(1);
+            expect(Arr.sort(R.keys(items[0] ?? {}), Str.Order)).toEqual([
+              "deletedAt",
+              "gsi1pk",
+              "gsi1sk",
+              "pk",
+              "sk",
+              "userId",
+            ]);
+            expect(items[0]).toMatchObject({
+              userId: { S: "usr_1" },
+              gsi1pk: { S: "DELETED-ALIASES#usr_1" },
+            });
+          }),
+        ),
+      );
+
+      it.effect("keeps a deleted address from everyone but the user who deleted it", () =>
+        withTable(
           Effect.gen(function* () {
             const repo = yield* AliasRepo.AliasRepo;
             yield* repo.insert(alias());
             yield* repo.delete(owned);
+            const missing = new AliasRepo.NoSuchAlias({ address: "shop@alias.test" });
+
+            // A tombstone is no alias: nothing changes it, nothing counts on it.
+            expect(yield* Effect.flip(repo.delete(owned))).toEqual(missing);
+            expect(yield* Effect.flip(repo.update(owned, { isActive: true }))).toEqual(missing);
+            expect(yield* Effect.flip(repo.increment("alias.test", "shop", "blocked"))).toEqual(
+              missing,
+            );
+            expect(yield* repo.isDeleted("alias.test", "shop")).toBe(true);
+            expect(yield* repo.isDeleted("alias.test", "nobody")).toBe(false);
+
+            // Nobody else gets the address, in any letter case.
+            expect(
+              yield* Effect.flip(
+                repo.insert(alias({ id: "al_2", userId: "usr_2", localPart: "SHOP" })),
+              ),
+            ).toEqual(new AliasRepo.AliasTaken({ address: "shop@alias.test" }));
+
+            // Its owner may create it again: a new alias, with a new id and fresh counters.
+            yield* repo.insert(alias({ id: "al_3", createdAt: 5 }));
+            expect(yield* repo.findByAddress("alias.test", "shop")).toEqual(
+              Option.some(
+                expect.objectContaining({ id: "al_3", forwardedCount: 0, isActive: true }),
+              ),
+            );
+            expect(yield* repo.isDeleted("alias.test", "shop")).toBe(false);
+            expect(Arr.map(yield* repo.listByUser("usr_1"), (found) => found.id)).toEqual(["al_3"]);
+          }),
+        ),
+      );
+
+      it.effect("finishes a deletion that stopped before its contacts were purged", () =>
+        withTable(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const contacts = yield* ContactRepo.ContactRepo;
+            const table = yield* Dynamo.DynamoTable;
+            yield* repo.insert(alias());
+            yield* contacts.create(contact("c1aaaaaaaaaaaaaa", "a@store.example"), shop);
+            // The first step alone, as if the Lambda died right after it.
+            expect(yield* AliasRepo.retire(table, owned)).toBe("al_1");
 
             expect(Option.isNone(yield* repo.findByAddress("alias.test", "shop"))).toBe(true);
-            expect(yield* repo.listByUser("usr_1")).toEqual([]);
+            // Not even its owner reclaims it while the purge is pending, and nobody else can
+            // finish it.
+            expect(yield* Effect.flip(repo.insert(alias({ id: "al_2" })))).toBeInstanceOf(
+              AliasRepo.AliasTaken,
+            );
+            expect(yield* Effect.flip(repo.delete({ ...owned, userId: "usr_2" }))).toBeInstanceOf(
+              AliasRepo.NoSuchAlias,
+            );
+            expect(yield* contacts.list("al_1")).toHaveLength(1);
+
+            // Deleting again finishes the job.
+            yield* repo.delete(owned);
+            expect(yield* partition("CONTACTS#al_1")).toEqual([]);
             expect(yield* Effect.flip(repo.delete(owned))).toBeInstanceOf(AliasRepo.NoSuchAlias);
             yield* repo.insert(alias({ id: "al_2" }));
           }),
@@ -176,8 +307,6 @@ export const aliasRepoSuite = (
           }),
         ),
       );
-
-      const at = (iso: string) => DateTime.makeUnsafe(iso);
 
       it.effect("allows up to the hourly forward cap per alias, and the next hour afresh", () =>
         withRepo(

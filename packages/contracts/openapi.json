@@ -5495,6 +5495,9 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "refresh_token": {
+                      "type": "string"
+                    },
                     "scope": {
                       "type": "string"
                     }
@@ -5540,16 +5543,33 @@
                   "grant_type": {
                     "type": "string"
                   },
+                  "client_id": {
+                    "type": "string"
+                  },
                   "device_code": {
                     "type": "string"
                   },
-                  "client_id": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "redirect_uri": {
+                    "type": "string"
+                  },
+                  "code_verifier": {
+                    "type": "string"
+                  },
+                  "refresh_token": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string"
+                  },
+                  "resource": {
                     "type": "string"
                   }
                 },
                 "required": [
                   "grant_type",
-                  "device_code",
                   "client_id"
                 ],
                 "additionalProperties": false
@@ -5558,7 +5578,7 @@
           },
           "required": true
         },
-        "summary": "Poll for the token a device login issues"
+        "summary": "Exchange a device code, an authorization code or a refresh token for tokens"
       }
     },
     "/v1/oauth/revoke": {
@@ -5584,6 +5604,9 @@
                     "type": "string"
                   },
                   "token_type_hint": {
+                    "type": "string"
+                  },
+                  "client_id": {
                     "type": "string"
                   }
                 },
@@ -5889,10 +5912,537 @@
         "summary": "Deny a device login",
         "description": "Session only: API tokens are refused."
       }
+    },
+    "/v1/oauth/authorization": {
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "consent.inspect",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "registered",
+                            "metadata-document"
+                          ]
+                        },
+                        "uri": {
+                          "type": "string"
+                        },
+                        "redirectHost": {
+                          "type": "string"
+                        },
+                        "isLocalRedirect": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "kind",
+                        "redirectHost",
+                        "isLocalRedirect"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "aliases:read",
+                          "aliases:write",
+                          "contacts:read",
+                          "contacts:write",
+                          "domains:read",
+                          "domains:write",
+                          "recipients:read",
+                          "recipients:write",
+                          "settings:read",
+                          "settings:write"
+                        ]
+                      }
+                    },
+                    "resource": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client",
+                    "scopes",
+                    "resource"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidAuthorizationRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidAuthorizationRequestEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "response_type": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "code_challenge": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "code_challenge_method": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "scope": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "state": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "resource": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "response_type",
+                  "client_id",
+                  "redirect_uri"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Validate an MCP client's authorization request for the consent screen",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/oauth/authorization/decision": {
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "consent.decide",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "redirectTo": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "redirectTo"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidAuthorizationRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidAuthorizationRequestEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "object",
+                    "properties": {
+                      "response_type": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "client_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "redirect_uri": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "code_challenge": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "code_challenge_method": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "scope": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "state": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "resource": {
+                        "type": "string",
+                        "maxLength": 2048
+                      }
+                    },
+                    "required": [
+                      "response_type",
+                      "client_id",
+                      "redirect_uri"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "isApproved": {
+                    "type": "boolean"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "aliases:read",
+                        "aliases:write",
+                        "contacts:read",
+                        "contacts:write",
+                        "domains:read",
+                        "domains:write",
+                        "recipients:read",
+                        "recipients:write",
+                        "settings:read",
+                        "settings:write"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "request",
+                  "isApproved",
+                  "scopes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Approve or deny an MCP client: the redirect with a code or an error",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/oauth/grants": {
+      "get": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "consent.grants",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "clientId": {
+                        "type": "string"
+                      },
+                      "clientName": {
+                        "type": "string"
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "aliases:read",
+                            "aliases:write",
+                            "contacts:read",
+                            "contacts:write",
+                            "domains:read",
+                            "domains:write",
+                            "recipients:read",
+                            "recipients:write",
+                            "settings:read",
+                            "settings:write"
+                          ]
+                        }
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "clientId",
+                      "clientName",
+                      "scopes",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List the MCP clients you connected",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/oauth/grants/{grantId}": {
+      "delete": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "consent.revoke",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ConnectedAppNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectedAppNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Disconnect an MCP client and revoke its tokens",
+        "description": "Session only: API tokens are refused."
+      }
     }
   },
   "components": {
     "schemas": {
+      "TooManyAttemptsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyAttempts"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
       "ForbiddenEncoded": {
         "type": "object",
         "properties": {
@@ -5938,18 +6488,54 @@
         ],
         "additionalProperties": false
       },
-      "TooManyAttemptsEncoded": {
+      "ConnectedAppNotFoundEncoded": {
         "type": "object",
         "properties": {
           "_tag": {
             "type": "string",
             "enum": [
-              "TooManyAttempts"
+              "ConnectedAppNotFound"
             ]
+          },
+          "grantId": {
+            "type": "string"
           }
         },
         "required": [
-          "_tag"
+          "_tag",
+          "grantId"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidAuthorizationRequestEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidAuthorizationRequest"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unknown-client",
+              "client-metadata-unavailable",
+              "invalid-redirect-uri",
+              "unsupported-response-type",
+              "pkce-required",
+              "invalid-scope",
+              "invalid-resource",
+              "no-scope-granted"
+            ]
+          },
+          "redirectTo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -5988,7 +6574,8 @@
               "authorization_pending",
               "slow_down",
               "access_denied",
-              "expired_token"
+              "expired_token",
+              "invalid_target"
             ]
           },
           "error_description": {
@@ -6674,11 +7261,15 @@
     },
     {
       "name": "oauth",
-      "description": "The device side of a device login (OAuth 2.0 device authorization grant, RFC 8628) and token revocation (RFC 7009). Form-encoded requests, no credentials."
+      "description": "The OAuth token endpoint and revocation (RFC 7009), form-encoded, no credentials: device logins (RFC 8628) and MCP clients (authorization code with PKCE, rotating refresh tokens)."
     },
     {
       "name": "device",
       "description": "The signed-in person's side of a device login: look up the code a device shows, then approve or deny it. Session-only."
+    },
+    {
+      "name": "consent",
+      "description": "The signed-in person's side of an MCP client's authorization (the web app's `/oauth/authorize` page), and the connected apps it created. Session-only."
     }
   ]
 }

@@ -2,6 +2,7 @@ export * as Address from "./Address.ts";
 export * as ImageProxy from "./ImageProxy.ts";
 export * as Keyring from "./Keyring.ts";
 export * as Mail from "./Mail.ts";
+export * as OAuth from "./OAuth.ts";
 export * as Pgp from "./Pgp.ts";
 export * as PgpKey from "./PgpKey.ts";
 export * as ReverseToken from "./ReverseToken.ts";

@@ -68,17 +68,18 @@ export const make = (handle: Handle, options: Options = {}) => {
           onNone: () => accepts,
           onSome: () => ({ ...accepts, "content-type": "application/json" }),
         });
+    const [rawPath = path, rawQueryString = ""] = path.split("?");
     const event: Types.Mutable<FunctionUrl.FunctionUrlEvent> = {
       version: "2.0",
-      rawPath: path,
-      rawQueryString: "",
+      rawPath,
+      rawQueryString,
       headers,
       isBase64Encoded: false,
       requestContext: {
         domainName: "api.alias.test",
         requestId: "req-1",
         timeEpoch: 0,
-        http: { method, path, sourceIp: options.sourceIp ?? "127.0.0.1" },
+        http: { method, path: rawPath, sourceIp: options.sourceIp ?? "127.0.0.1" },
       },
     };
     const cookies = Arr.map(Arr.fromIterable(jar), ([name, value]) => `${name}=${value}`);

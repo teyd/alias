@@ -79,12 +79,13 @@ export default defineConfig({
       },
       {
         // Egress guards hook Node's resolver into the socket (webhooks, PLAN.md §20.20; the image
-        // proxy, §20.19), and the tests' webhook receiver is an HTTP server: Node's job, like an
-        // emulator's.
+        // proxy, §20.19), and the tests' webhook receiver and client-metadata host are HTTP servers:
+        // Node's job, like an emulator's.
         files: [
           "packages/webhooks/src/Egress.ts",
           "packages/webhooks/test/support/Receiver.ts",
           "apps/image-proxy/src/Egress.ts",
+          "apps/api/test/support/DocumentHost.ts",
         ],
         rules: {
           "effect/avoid-node-imports": "off",

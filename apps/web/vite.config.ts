@@ -19,6 +19,8 @@ export default defineConfig({
     proxy: {
       "/v1": apiOrigin,
       "/health": apiOrigin,
+      // OAuth authorization server metadata (PLAN.md §20.24); `/oauth/authorize` stays the app's.
+      "/.well-known": apiOrigin,
     },
   },
 });

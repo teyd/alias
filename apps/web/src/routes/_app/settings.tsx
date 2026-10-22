@@ -10,6 +10,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { DeleteAccount } from "@/components/DeleteAccount";
 import { Page } from "@/components/Page";
 import { ApiTokens } from "@/components/settings/ApiTokens";
+import { ConnectedApps } from "@/components/settings/ConnectedApps";
 import { Webhooks } from "@/components/settings/Webhooks";
 import { Separator } from "@/components/ui/separator";
 import { domainsQuery } from "@/lib/aliases";
@@ -99,6 +100,13 @@ const Settings = () => {
           description="Let the CLI and your scripts call the API as you, limited to the scopes you pick."
         >
           <ApiTokens />
+        </Section>
+        <Separator />
+        <Section
+          title="Connected apps"
+          description="Assistants and other MCP clients you let in. Disconnecting one ends its access at once."
+        >
+          <ConnectedApps />
         </Section>
         <Separator />
         <Section

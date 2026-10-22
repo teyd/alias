@@ -7,6 +7,7 @@ import {
   DeviceRepo,
   DomainRepo,
   type Dynamo,
+  OAuthRepo,
   PasskeyRepo,
   RecipientRepo,
   SessionRepo,
@@ -14,7 +15,7 @@ import {
   UserRepo,
   WebhookRepo,
 } from "@alias/db";
-import { Publisher, type UrlPolicy } from "@alias/webhooks";
+import { Egress, Publisher, type UrlPolicy } from "@alias/webhooks";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
@@ -29,6 +30,9 @@ import { ContactsLive } from "./contacts.ts";
 import { DeviceLive, OAuthLive } from "./device.ts";
 import { DomainsLive } from "./domains.ts";
 import type { MailSettings } from "./MailSettings.ts";
+import { ConsentLive } from "./consent.ts";
+import * as OAuthEndpoints from "./oauth/Endpoints.ts";
+import * as Issuer from "./oauth/Issuer.ts";
 import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Authentication.ts";
@@ -52,6 +56,7 @@ const Repositories = Layer.mergeAll(
   AliasRepo.layer,
   ContactRepo.layer,
   DeviceRepo.layer,
+  OAuthRepo.layer,
   UserRepo.layer,
   PasskeyRepo.layer,
   SessionRepo.layer,
@@ -81,7 +86,7 @@ export type Services =
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
  * elsewhere.
  */
-const ApiLive = Layer.merge(HttpApiBuilder.layer(Api), OpenApiLive).pipe(
+const ApiLive = Layer.mergeAll(HttpApiBuilder.layer(Api), OpenApiLive, OAuthEndpoints.routes).pipe(
   Layer.provide([
     SystemLive,
     AuthLive,
@@ -91,13 +96,15 @@ const ApiLive = Layer.merge(HttpApiBuilder.layer(Api), OpenApiLive).pipe(
     RecipientsLive,
     SettingsLive,
     TokensLive,
-    WebhooksLive,
     OAuthLive,
+    WebhooksLive,
+    ConsentLive,
     DeviceLive,
     DomainsLive,
   ]),
   Layer.provide(authenticationLayer),
-  Layer.provide(Layer.merge(Repositories, Publisher.layer)),
+  // Client metadata documents are fetched through the same SSRF guard as webhooks.
+  Layer.provide(Layer.mergeAll(Repositories, Publisher.layer, Issuer.layer, Egress.layer)),
   Layer.provide([HttpServer.layerServices, NodeCrypto.layer]),
 );
 

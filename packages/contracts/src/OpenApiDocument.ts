@@ -27,9 +27,11 @@ const groups = {
   webhooks:
     "Webhook endpoints, signed per Standard Webhooks. Session-only: an endpoint is a standing data sink.",
   oauth:
-    "The device side of a device login (OAuth 2.0 device authorization grant, RFC 8628) and token revocation (RFC 7009). Form-encoded requests, no credentials.",
+    "The OAuth token endpoint and revocation (RFC 7009), form-encoded, no credentials: device logins (RFC 8628) and MCP clients (authorization code with PKCE, rotating refresh tokens).",
   device:
     "The signed-in person's side of a device login: look up the code a device shows, then approve or deny it. Session-only.",
+  consent:
+    "The signed-in person's side of an MCP client's authorization (the web app's `/oauth/authorize` page), and the connected apps it created. Session-only.",
 } satisfies Record<string, string>;
 
 const schemes = {
@@ -76,11 +78,15 @@ const summaries = {
   "webhooks.rotateSecret": "Rotate a webhook signing secret",
   "webhooks.remove": "Delete a webhook endpoint",
   "oauth.deviceAuthorization": "Start a device login: get a device code and a user code",
-  "oauth.token": "Poll for the token a device login issues",
+  "oauth.token": "Exchange a device code, an authorization code or a refresh token for tokens",
   "oauth.revoke": "Revoke a token (RFC 7009)",
   "device.lookup": "Look up a device login by its user code",
   "device.approve": "Approve a device login: the device gets a token with the requested scopes",
   "device.deny": "Deny a device login",
+  "consent.inspect": "Validate an MCP client's authorization request for the consent screen",
+  "consent.decide": "Approve or deny an MCP client: the redirect with a code or an error",
+  "consent.grants": "List the MCP clients you connected",
+  "consent.revoke": "Disconnect an MCP client and revoke its tokens",
 } satisfies Record<string, string>;
 
 /** A text by name; None when there is none. */

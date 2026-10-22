@@ -40,6 +40,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * | DeviceRequests    | `DEVICEAUTH#<sha256(ip)>`    | `REQUESTS#<hour>`      |                            |                           | `expiresAt` |
  * | DeviceMisses      | `USER#<userId>`              | `DEVICE-MISSES#<hour>` |                            |                           | `expiresAt` |
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
+ * | OAuthClient       | `OAUTH-CLIENT#<clientId>`    | `CLIENT`               |                            |                           |             |
+ * | Registrations     | `OAUTHREG#<sha256(ip)>`      | `REGISTRATIONS#<hour>` |                            |                           | `expiresAt` |
+ * | OAuthCode         | `OAUTH-CODE#<sha256(code)>`  | `CODE`                 | `OAUTH#<userId>`           | `CODE#<sha256(code)>`     | `expiresAt` |
+ * | OAuthGrant        | `OAUTH-GRANT#<grantId>`      | `GRANT`                | `OAUTH#<userId>`           | `GRANT#<grantId>`         | `expiresAt` |
+ * | OAuthAccess       | `OAUTH-ACCESS#<sha256>`      | `ACCESS`               | `OAUTH#<userId>`           | `ACCESS#<sha256>`         | `expiresAt` |
+ * | OAuthRefresh      | `OAUTH-REFRESH#<sha256>`     | `REFRESH`              | `OAUTH#<userId>`           | `REFRESH#<sha256>`        | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -102,6 +108,18 @@ import { DynamoTable } from "./Dynamo.ts";
  * alias list); revoking deletes the item by its key. An expiring token carries `expiresAt`, so TTL
  * removes it later. AuthFailures counts failed token attempts per hashed client address and UTC
  * hour, like the other quota items.
+ *
+ * The OAuth authorization server (PLAN.md §20.24) keeps a dynamically registered client by its
+ * id, and an authorization code, access token and refresh token by the SHA-256 of its secret, so
+ * each token request or authenticated MCP call reads them with GetItem. A Grant is one client's
+ * access to one user's account; redeeming a code writes the grant and its first tokens in one
+ * transaction that also marks the code redeemed, and a refresh writes the next tokens in one that
+ * marks the old refresh token used. An access token authenticates only while its grant exists
+ * (a second GetItem), so deleting the grant revokes everything it issued at once; the tokens
+ * themselves are then deleted through the gsi1 partition `OAUTH#<userId>`, which lists a user's
+ * grants (`begins_with(gsi1sk, "GRANT#")`), codes and tokens, and which erasing the account
+ * empties.
+ * Registrations counts client registrations per hashed client address and UTC hour.
  *
  * A Webhook is one of the user's webhook endpoints, in their partition: every published event
  * lists the user's webhooks with one strongly consistent Query (`begins_with(sk, "WEBHOOK#")`),

@@ -27,6 +27,7 @@
     "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@modelcontextprotocol/client": "catalog:",
     "@types/node": "catalog:",
     "@types/nodemailer": "catalog:",
     "effect": "catalog:",

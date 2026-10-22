@@ -31,6 +31,7 @@ import { DeviceLive, OAuthLive } from "./device.ts";
 import { DomainsLive } from "./domains.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { ConsentLive } from "./consent.ts";
+import * as Mcp from "./mcp/Endpoint.ts";
 import * as OAuthEndpoints from "./oauth/Endpoints.ts";
 import * as Issuer from "./oauth/Issuer.ts";
 import { RecipientsLive } from "./recipients.ts";
@@ -86,7 +87,12 @@ export type Services =
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
  * elsewhere.
  */
-const ApiLive = Layer.mergeAll(HttpApiBuilder.layer(Api), OpenApiLive, OAuthEndpoints.routes).pipe(
+const ApiLive = Layer.mergeAll(
+  HttpApiBuilder.layer(Api),
+  OpenApiLive,
+  OAuthEndpoints.routes,
+  Mcp.routes,
+).pipe(
   Layer.provide([
     SystemLive,
     AuthLive,

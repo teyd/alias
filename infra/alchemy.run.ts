@@ -77,13 +77,20 @@ export default Alchemy.Stack(
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_RP_ID: appDomain,
         ALIAS_WEB_ORIGIN: `https://${appDomain}`,
+        ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
       },
     });
     yield* api.bind("DataAccess", {
       policyStatements: [
         {
           Effect: "Allow",
-          Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"],
+          Action: [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+            "dynamodb:Query",
+          ],
           Resource: [tableArn, `${tableArn}/index/*`],
         },
       ],

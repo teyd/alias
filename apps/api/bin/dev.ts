@@ -9,7 +9,7 @@ import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import { makeFunctionUrlHandler, RelyingParty } from "../src/index.ts";
+import { makeFunctionUrlHandler, RelyingParty, SharedDomains } from "../src/index.ts";
 
 const port = Number(process.env.ALIAS_API_PORT ?? 8787);
 const dynamoUrl = `http://127.0.0.1:${process.env.ALIAS_FAKECLOUD_PORT ?? 4566}`;
@@ -18,6 +18,7 @@ const relyingParty = RelyingParty.layer({
   id: "localhost",
   origin: `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`,
 });
+const sharedDomains = SharedDomains.layer(process.env.ALIAS_SHARED_DOMAINS ?? "alias.test");
 
 const seed = Effect.fn("api.dev.seed")(function* () {
   yield* Table.ensure();
@@ -39,7 +40,7 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
     Effect.provide(database),
   );
-  const { handle } = makeFunctionUrlHandler(Layer.merge(database, relyingParty));
+  const { handle } = makeFunctionUrlHandler(Layer.mergeAll(database, relyingParty, sharedDomains));
   const server = yield* FunctionUrlServer.make({
     port,
     handler: (event) => Effect.runPromise(handle(event)),

@@ -40,7 +40,7 @@ export const make = (handle: Handle) => {
   };
 
   const request = Effect.fn("Browser.request")(function* (
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body: Option.Option<Schema.Json>,
   ) {
@@ -81,6 +81,8 @@ export const make = (handle: Handle) => {
   return {
     get: (path: string) => request("GET", path, Option.none()),
     post: (path: string, body: Schema.Json = {}) => request("POST", path, Option.some(body)),
+    patch: (path: string, body: Schema.Json) => request("PATCH", path, Option.some(body)),
+    delete: (path: string) => request("DELETE", path, Option.none()),
     cookie: (name: string) => HashMap.get(jar, name),
     /** Sets a cookie by hand, e.g. to replay a logged-out session. */
     setCookie: (name: string, value: string) => {

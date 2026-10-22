@@ -18,6 +18,7 @@ const PORTS = {
   inspector: 6,
   fakecloud: 7,
   imageProxy: 8,
+  doh: 9,
 } as const;
 
 type PortName = keyof typeof PORTS;
@@ -128,4 +129,5 @@ export const toEnv = (block: PortBlock): Record<string, string> => ({
   ALIAS_INSPECTOR_PORT: String(block.inspector),
   ALIAS_FAKECLOUD_PORT: String(block.fakecloud),
   ALIAS_IMAGE_PROXY_PORT: String(block.imageProxy),
+  ALIAS_DOH_PORT: String(block.doh),
 });

@@ -1,0 +1,23 @@
+{
+  "Status": 0,
+  "TC": false,
+  "RD": true,
+  "RA": true,
+  "AD": false,
+  "CD": false,
+  "Question": [
+    {
+      "name": "*.dns-example.info.",
+      "type": 99
+    }
+  ],
+  "Answer": [
+    {
+      "name": "*.dns-example.info.",
+      "type": 99,
+      "TTL": 21599,
+      "data": "\"v=spf1 -all\""
+    }
+  ],
+  "Comment": "Response from 216.239.38.110"
+}

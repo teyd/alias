@@ -18,6 +18,7 @@ import {
   AccountRepo,
   AliasRepo,
   ContactRepo,
+  DomainRepo,
   Dynamo,
   RecipientRepo,
   SessionRepo,
@@ -33,6 +34,7 @@ const repos = Layer.mergeAll(
   AccountRepo.layer.pipe(Layer.provide(NodeCrypto.layer)),
   AliasRepo.layer,
   ContactRepo.layer,
+  DomainRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
   TokenRepo.layer,
@@ -44,6 +46,7 @@ type Repos =
   | AccountRepo.AccountRepo
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
+  | DomainRepo.DomainRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
@@ -71,8 +74,9 @@ const scan = Effect.fn("scan")(function* () {
 
 /**
  * One user with one of everything the service stores about a user: sessions, settings, a
- * recipient, a creation quota, live and deleted aliases on a shared domain and on their
- * subdomain, contacts, counters, and a deletion that stopped halfway.
+ * recipient, a creation quota, a custom domain, live and deleted aliases on a shared domain, on
+ * their subdomain and on their custom domain, contacts, counters, and a deletion that stopped
+ * halfway.
  */
 const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) {
   const users = yield* UserRepo.UserRepo;
@@ -146,7 +150,14 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
   yield* aliases.reserveCreation(userId, at(1_000), 20);
 
   const subdomain = `${name}.alias.test`;
+  const custom = `${name}.example`;
+  yield* (yield* DomainRepo.DomainRepo).claim(
+    { domain: custom, userId, verificationToken: "tok", createdAt: at(1_000) },
+    3,
+  );
   const addresses = {
+    custom: { domain: custom, localPart: "shop" },
+    oldCustom: { domain: custom, localPart: "old" },
     shared: { domain: "alias.test", localPart: `${name}-shared` },
     sub: { domain: subdomain, localPart: "shop" },
     oldShared: { domain: "alias.test", localPart: `${name}-old` },
@@ -175,12 +186,14 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
   );
   yield* aliases.delete({ userId, ...addresses.oldShared });
   yield* aliases.delete({ userId, ...addresses.oldSub });
+  yield* aliases.delete({ userId, ...addresses.oldCustom });
   yield* AliasRepo.retire(table, { userId, ...addresses.halfway });
 
   return {
     userId,
     username: name,
     subdomains: [subdomain, `${name}.alias2.test`],
+    customDomains: [custom],
     sessionId: `${name}_now`,
   };
 });
@@ -214,8 +227,8 @@ export const accountRepoSuite = (
 
             const after = yield* scan();
             // Grace's items are untouched; of Ada's only tombstones are left, each holding its
-            // key and `deletedAt`. Aliases on her own subdomain leave none: the username's
-            // tombstone covers the subdomain.
+            // key and `deletedAt`. Aliases on her own subdomain leave none (the username's
+            // tombstone covers the subdomain), and neither do her custom domain and its aliases.
             // (The journal's hex hash could spell "ada"; it is checked on its own below.)
             const adas = (item: { readonly pk: string }) =>
               Str.includes("ada")(JSON.stringify(item)) && !item.pk.startsWith("ERASURE#");
@@ -275,6 +288,31 @@ export const accountRepoSuite = (
             expect(yield* claim("usr_ada", "ada-old")).toBeInstanceOf(AliasRepo.AliasTaken);
             expect(yield* aliases.isDeleted("alias.test", "ada-halfway")).toBe(true);
             expect(yield* aliases.listByUser("usr_ada")).toEqual([]);
+            // Her custom domain is free again, with every address on it.
+            const domains = yield* DomainRepo.DomainRepo;
+            expect(yield* domains.find("ada.example")).toEqual(Option.none());
+            yield* domains.claim(
+              {
+                domain: "ada.example",
+                userId: "usr_grace",
+                verificationToken: "t",
+                createdAt: at(2),
+              },
+              3,
+            );
+            yield* Effect.forEach(
+              ["shop", "old"],
+              (localPart) =>
+                aliases.insert({
+                  id: `al_${localPart}`,
+                  userId: "usr_grace",
+                  domain: "ada.example",
+                  localPart,
+                  mode: "forward",
+                  createdAt: 2,
+                }),
+              { concurrency: 1, discard: true },
+            );
           }),
         ),
       );

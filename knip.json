@@ -7,7 +7,7 @@
       "entry": ["scripts/*.ts!"]
     },
     "apps/api": {
-      "entry": ["src/handler.ts!", "bin/*.ts"]
+      "entry": ["src/handler.ts!", "src/verifyHandler.ts!", "bin/*.ts"]
     },
     "apps/image-proxy": {
       "entry": ["src/handler.ts!", "bin/*.ts"]
@@ -23,6 +23,9 @@
     },
     "apps/webhooks": {
       "entry": ["src/handler.ts!", "bin/*.ts"]
+    },
+    "tools/doh-emulator": {
+      "entry": ["bin/*.ts"]
     }
   },
   "includeEntryExports": true

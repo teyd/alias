@@ -27,6 +27,7 @@ jobs:
         package:
           - "@alias/core"
           - "@alias/aws"
+          - "@alias/dns"
           - "@alias/db"
           - "@alias/api"
           - "@alias/inbound"
@@ -36,6 +37,7 @@ jobs:
           - "@alias/ses-emulator"
           - "@alias/aws-emulators"
           - "@alias/lambda-emulator"
+          - "@alias/doh-emulator"
           - "@alias/e2e"
     steps:
       - uses: actions/checkout@v5

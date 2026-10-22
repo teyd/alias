@@ -1,4 +1,4 @@
-import { Transport } from "@alias/aws";
+import { Identities, Transport } from "@alias/aws";
 import { SharedDomains, Username } from "@alias/core";
 import {
   Api,
@@ -10,6 +10,7 @@ import {
 import {
   AccountRepo,
   ChallengeRepo,
+  DomainRepo,
   PasskeyRepo,
   RecipientRepo,
   type SessionRepo,
@@ -209,12 +210,20 @@ const erase = Effect.fn("auth.erase")(function* (payload: {
     concurrency: 4,
     discard: true,
   }).pipe(Effect.orDie);
+  // Custom domains' SES identities first: the sweep deletes the claims that name them.
+  const domains = yield* Effect.orDie((yield* DomainRepo.DomainRepo).listByUser(user.userId));
+  const identities = yield* Identities.Identities;
+  yield* Effect.forEach(domains, (domain) => identities.delete(domain.domain), {
+    concurrency: 4,
+    discard: true,
+  }).pipe(Effect.orDie);
   const shared = yield* SharedDomains.SharedDomains;
   yield* Effect.orDie(
     (yield* AccountRepo.AccountRepo).erase({
       userId: user.userId,
       username: user.username,
       subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
+      customDomains: Arr.map(domains, (domain) => domain.domain),
       sessionId: yield* Effect.orDie(Sessions.currentId()),
     }),
   );
@@ -239,6 +248,8 @@ type AccountServices =
   | AuthServices
   | RecipientRepo.RecipientRepo
   | AccountRepo.AccountRepo
+  | DomainRepo.DomainRepo
+  | Identities.Identities
   | Transport.Transport
   | SharedDomains.SharedDomains;
 

@@ -4,6 +4,7 @@ import {
   AliasRepo,
   ChallengeRepo,
   ContactRepo,
+  DomainRepo,
   type Dynamo,
   PasskeyRepo,
   RecipientRepo,
@@ -18,11 +19,13 @@ import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
-import type { MessageQueue, Transport } from "@alias/aws";
+import type { Identities, MessageQueue, Transport } from "@alias/aws";
 import type { SharedDomains } from "@alias/core";
+import type { Doh } from "@alias/dns";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
 import { ContactsLive } from "./contacts.ts";
+import { DomainsLive } from "./domains.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
@@ -46,11 +49,12 @@ const Repositories = Layer.mergeAll(
   RecipientRepo.layer,
   TokenRepo.layer,
   WebhookRepo.layer,
+  DomainRepo.layer,
 );
 
 /**
  * What callers provide: the database, the WebAuthn relying party, the shared domains, outgoing
- * mail, and the webhook queue and URL policy.
+ * mail, the webhook queue and URL policy, SES identities and a DNS resolver (custom domains).
  */
 export type Services =
   | Dynamo.Database
@@ -59,7 +63,9 @@ export type Services =
   | Transport.Transport
   | MailSettings
   | MessageQueue.MessageQueue
-  | UrlPolicy.UrlPolicy;
+  | UrlPolicy.UrlPolicy
+  | Identities.Identities
+  | Doh.Resolver;
 
 /**
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
@@ -76,6 +82,7 @@ const ApiLive = HttpApiBuilder.layer(Api).pipe(
     SettingsLive,
     TokensLive,
     WebhooksLive,
+    DomainsLive,
   ]),
   Layer.provide(authenticationLayer),
   Layer.provide(Layer.merge(Repositories, Publisher.layer)),

@@ -1,6 +1,7 @@
 export * as AwsClient from "./Client.ts";
 export * as FunctionUrl from "./FunctionUrl.ts";
 export type { LambdaContext, LambdaHandler } from "./Handler.ts";
+export * as Identities from "./Identities.ts";
 export * as Inbound from "./Inbound.ts";
 export * as Parameters from "./Parameters.ts";
 export * as MessageQueue from "./MessageQueue.ts";

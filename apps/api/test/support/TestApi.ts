@@ -1,9 +1,11 @@
-import { AwsClient, Transport } from "@alias/aws";
+import { AwsClient, Identities, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
 import { UrlPolicy } from "@alias/webhooks";
 import { freshQueue } from "@alias/webhooks/testing";
+import { Doh } from "@alias/dns";
+import { DohServer } from "@alias/doh-emulator";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -20,10 +22,16 @@ const fakecloudClient = Layer.unwrap(
 /** The dev setup's shared domain, verified as an SES identity before the API sends from it. */
 const sharedDomain = "alias.test";
 
+/** The production DoH client, pointed at the emulator. */
+const resolver = Layer.unwrap(
+  Effect.map(Effect.service(DohServer.DohServer), (server) => Doh.layer(server.url)),
+);
+
 /**
- * The API Lambda in its own fakecloud: a fresh table for DynamoDB, and SES sending, verified for
- * the shared domain. `context` reaches the same fakecloud, e.g. for `FakeCloud.sentEmails`. The
- * handler reads the test's clock, so `TestClock.adjust` moves time for it too.
+ * The API Lambda in its own fakecloud: a fresh table for DynamoDB, SES sending (verified for the
+ * shared domain) and identities, and its own DoH emulator. `context` reaches the same fakecloud
+ * and DoH emulator, e.g. for `FakeCloud.sentEmails` or `DohServer.setZone`. The handler reads the
+ * test's clock, so `TestClock.adjust` moves time for it too.
  */
 export const make = Effect.acquireRelease(
   Effect.gen(function* () {
@@ -32,7 +40,9 @@ export const make = Effect.acquireRelease(
         freshTable(),
         freshQueue(),
         Transport.ses.pipe(Layer.provide(fakecloudClient)),
-      ).pipe(Layer.provideMerge(FakeCloud.layer())),
+        Identities.layer.pipe(Layer.provide(fakecloudClient)),
+        resolver,
+      ).pipe(Layer.provideMerge(Layer.merge(FakeCloud.layer(), DohServer.layer()))),
     );
     yield* Transport.ensureIdentity(sharedDomain).pipe(
       Effect.provide(fakecloudClient),

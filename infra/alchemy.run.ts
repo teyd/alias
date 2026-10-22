@@ -21,6 +21,8 @@ const appDomain = sharedDomains[0] ?? "alias.test";
 // Must be on a shared domain (checked at cold start); those are the verified SES identities.
 const confirmationSender = `no-reply@${appDomain}`;
 const spoolBucketName = `alias-spool-${stage}`;
+/** Custom-domain DNS checks resolve through Cloudflare's DoH JSON API (`Doh.cloudflare`). */
+const dohUrl = "https://cloudflare-dns.com/dns-query";
 const tableName = `alias-${stage}`;
 /** Every send names it, so SES reports its bounces and complaints (PLAN.md §20.11). */
 const configurationSetName = `alias-events-${stage}`;
@@ -93,6 +95,34 @@ export default Alchemy.Stack(
     // both name it, and SES checks both when the rule is created, before it exists. The format is
     // the one the SES receiving docs give for these conditions.
     const receiptRuleArn = `arn:aws:ses:eu-west-1:${accountId}:receipt-rule-set/${receiptRuleSetName}:receipt-rule/${receiptRuleName}`;
+
+    const identityArn = (name: string) => `arn:aws:ses:eu-west-1:${accountId}:identity/${name}`;
+    const domainIdentityStatements = [
+      {
+        Effect: "Allow" as const,
+        Action: [
+          "ses:CreateEmailIdentity",
+          "ses:GetEmailIdentity",
+          "ses:DeleteEmailIdentity",
+          "ses:PutEmailIdentityMailFromAttributes",
+          "ses:PutEmailIdentityFeedbackAttributes",
+        ],
+        Resource: identityArn("*"),
+      },
+      {
+        Effect: "Deny" as const,
+        Action: [
+          "ses:CreateEmailIdentity",
+          "ses:DeleteEmailIdentity",
+          "ses:PutEmailIdentityMailFromAttributes",
+          "ses:PutEmailIdentityFeedbackAttributes",
+        ],
+        Resource: sharedDomains.flatMap((domain) => [
+          identityArn(domain),
+          identityArn(`*.${domain}`),
+        ]),
+      },
+    ];
 
     const table = yield* AWS.DynamoDB.Table("Data", {
       tableName,
@@ -195,6 +225,7 @@ export default Alchemy.Stack(
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
         // No ALIAS_WEBHOOK_ALLOW_LOOPBACK: webhook URLs must be https on public addresses.
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
+        ALIAS_DOH_URL: dohUrl,
       },
     });
     yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
@@ -231,6 +262,12 @@ export default Alchemy.Stack(
         },
       ],
     });
+
+    // Custom domains (PLAN.md §20.18): the API creates, reads and deletes their SES identities, and
+    // the verification cron reads them (and recreates one an interrupted claim left without).
+    // Identities are created at run time, so the grant names every identity in this account; the
+    // deny keeps both Lambdas from touching the shared domains' identities (Get stays allowed).
+    yield* api.bind("DomainIdentities", { policyStatements: domainIdentityStatements });
 
     // What `Transport.ses` (`@alias/aws`) needs: SESv2 `SendEmail` with raw content, from the shared
     // domains only. Both actions, as Alchemy's own `SES.SendEmail` binding grants for raw sends.
@@ -465,6 +502,35 @@ export default Alchemy.Stack(
       endpoint: snsInvoke.functionName,
     });
 
+    // The custom-domain verification cron (PLAN.md §20.18): every ten minutes it checks the
+    // domains that are due (pending ones every ten minutes, verified ones daily) over DoH and SES.
+    const verifyDomains = yield* AWS.Lambda.Function("VerifyDomains", {
+      main: new URL("../apps/api/src/verifyHandler.ts", import.meta.url).pathname,
+      runtime: "nodejs24.x",
+      architecture: "arm64",
+      memorySize: 256,
+      timeout: Duration.seconds(120),
+      functionUrl: false,
+      env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_DOH_URL: dohUrl },
+    });
+    // Due domains come from the index; a check updates the domain item, and releasing an expired
+    // claim is one TransactWriteItems (authorized per item through DeleteItem and UpdateItem).
+    yield* verifyDomains.bind("DataAccess", {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"],
+          Resource: [tableArn],
+        },
+        { Effect: "Allow", Action: ["dynamodb:Query"], Resource: [`${tableArn}/index/gsi1`] },
+      ],
+    });
+    yield* verifyDomains.bind("DomainIdentities", { policyStatements: domainIdentityStatements });
+    // Scheduler's role may invoke only this function. A run that fails is retried by Scheduler.
+    yield* AWS.Scheduler.every("10 minutes", {
+      description: "Check custom domains that are due (PLAN.md §20.18)",
+    }).toLambda(verifyDomains);
+
     // Events reach the feedback Lambda, so SES needn't also mail bounces to the sender, which
     // would be a reverse alias (the inbound pipeline drops them as `bounce` anyway).
     yield* Effect.forEach(sharedDomains, (domain) =>
@@ -585,6 +651,7 @@ export default Alchemy.Stack(
       feedbackFunction: feedback.functionName,
       webhookDeliveryFunction: delivery.functionName,
       imageProxyUrl: Output.interpolate`https://${images.domainName}`,
+      verifyDomainsFunction: verifyDomains.functionName,
     };
   }),
 );

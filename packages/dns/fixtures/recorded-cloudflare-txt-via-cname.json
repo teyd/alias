@@ -1,0 +1,136 @@
+{
+  "Status": 0,
+  "TC": false,
+  "RD": true,
+  "RA": true,
+  "AD": false,
+  "CD": false,
+  "Question": [{ "name": "www.github.com", "type": 16 }],
+  "Answer": [
+    { "name": "www.github.com", "type": 5, "TTL": 3600, "data": "github.com." },
+    { "name": "github.com", "type": 16, "TTL": 300, "data": "\"00Dd0000000hHE0=1TBKg000000TN2r\"" },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"MS=6BF03E6AF5CB689E315FB6199603BABF2C88D805\""
+    },
+    { "name": "github.com", "type": 16, "TTL": 300, "data": "\"MS=ms44452932\"" },
+    { "name": "github.com", "type": 16, "TTL": 300, "data": "\"MS=ms58704441\"" },
+    { "name": "github.com", "type": 16, "TTL": 300, "data": "\"TAILSCALE-xOzoDvFUzZr5YYVCQFuD\"" },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"adobe-idp-site-verification=b92c9e999aef825edc36e0a3d847d2dbad5b2fc0e05c79ddd7a16139b48ecf4b\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"anthropic-domain-verification-4az7qn=if8YWuRRqwLycGJDooumzHtxm\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"apple-domain-verification=RyQhdzTl6Z6x8ZP4\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"atlassian-domain-verification=jjgw98AKv2aeoYFxiL/VFaoyPkn3undEssTRuMg6C/3Fp/iqhkV4HVV7WjYlVeF8\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"calendly-site-verification=at0DQARi7IZvJtXQAWhMqpmIzpvoBNF7aam5VKKxP\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"cursor-domain-verification-gtfwmt=1rfLOtiTngX5QSxD5HvNKTvm3\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"docusign=087098e3-3d46-47b7-9b4e-8a23028154cd\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"facebook-domain-verification=39xu4jzl7roi7x0n93ldkxjiaarx50\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"google-site-verification=82Le34Flgtd15ojYhHlGF_6g72muSjamlMVThBOJpks\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"google-site-verification=UTM-3akMgubp6tQtgEuAkYNYLyYAvpTnnSrDMWoDR3o\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"jamf-site-verification=XtaPNIYghF_e_xRDI8CjgQ\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"krisp-domain-verification=ZlyiK7XLhnaoUQb2hpak1PLY7dFkl1WE\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"loom-site-verification=f3787154f1154b7880e720a511ea664d\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"miro-verification=d2e174fdb00c71e0bcf58f8e58c3da2dd80dcfa9\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"openai-domain-verification=dv-3nh33eQwdkotMIAzLrIDVZo1\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"serval-domain-verification-ydryhj=qbkiEakpwEpTvHh5fIiCqtaue\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"shopify-verification-code=t1YPwcmvnxZyBycaCpk1MPyWoFs72o\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"stripe-verification=f88ef17321660a01bab1660454192e014defa29ba7b8de9633c69d6b4912217f\""
+    },
+    {
+      "name": "github.com",
+      "type": 16,
+      "TTL": 300,
+      "data": "\"v=spf1 ip4:192.30.252.0/22 include:spf.protection.outlook.com include:_netblocks.google.com include:_netblocks2.google.com include:mail.zendesk.com include:_spf.salesforce.com include:servers.mcsv.net include:mktomail.com include:sendgrid.net ip4:62.253.2\" \"27.114 ip4:166.78.69.169 ip4:166.78.69.170 ip4:166.78.71.131 ~all\""
+    }
+  ]
+}

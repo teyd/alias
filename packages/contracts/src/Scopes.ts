@@ -15,6 +15,8 @@ export const Scope = Schema.Literals([
   "aliases:write",
   "contacts:read",
   "contacts:write",
+  "domains:read",
+  "domains:write",
   "recipients:read",
   "recipients:write",
   "settings:read",

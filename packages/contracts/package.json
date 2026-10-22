@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@alias/core": "workspace:*",
+    "@alias/dns": "workspace:*",
     "effect": "catalog:"
   }
 }

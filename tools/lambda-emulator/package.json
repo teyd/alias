@@ -13,9 +13,11 @@
   },
   "dependencies": {
     "@alias/aws": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alias/aws-emulators": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",

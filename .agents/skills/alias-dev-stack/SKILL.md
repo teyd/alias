@@ -19,6 +19,8 @@ On start, the api creates the table from `Table.spec` and seeds `shop@alias.test
 
 fakecloud accepts a sender only on an exactly verified domain, while AWS also accepts its subdomains (PLAN.md §20.5). So, in dev only, `apps/api/bin/dev.ts` verifies `<username>.<shared domain>` as an SES identity whenever someone signs up. Users created before that hook existed (or seeded straight into the table) still get their subdomain mail dropped as `rejected` until you verify it: `aws sesv2 create-email-identity --email-identity ada.alias.test --endpoint-url http://localhost:$ALIAS_FAKECLOUD_PORT --region eu-west-1`.
 
+Bounces and complaints: both dev bins send through the `alias-events` configuration set; inbound creates it with an SNS destination and feeds every notification to the feedback handler (log lines `feedback bounce` / `feedback complaint`). Add `bounce@simulator.amazonses.com` as a forwarding address to watch a confirmation bounce, the recipient get `bouncedAt`, and later forwards drop as `recipient-bounced`.
+
 On-the-fly aliases: turn them on with `PATCH /v1/settings {"isOnTheFlyEnabled": true}` (signed in), then mail any new address on your subdomain; the inbound log shows `inbound alias created on the fly` before `inbound forwarded`.
 
 ## Common tasks

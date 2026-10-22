@@ -1,3 +1,4 @@
+import { Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { Dynamo } from "@alias/db";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
@@ -280,15 +281,16 @@ describe("forwarding addresses (recipients) on the API handler, fakecloud Dynamo
     Effect.gen(function* () {
       const api = yield* TestApi.make;
       const { browser } = yield* signedIn(api, "margaret");
-      yield* SESV2.putSuppressedDestination({
-        EmailAddress: "bounced@example.com",
-        Reason: "BOUNCE",
-      }).pipe(Effect.provide(api.context));
-      expect(yield* add(browser, "bounced@example.com")).toMatchObject({
+      // SES refuses to send as an identity that isn't verified (any more).
+      yield* SESV2.deleteEmailIdentity({ EmailIdentity: "alias.test" }).pipe(
+        Effect.provide(api.context),
+      );
+      expect(yield* add(browser, "margaret@example.com")).toMatchObject({
         status: 422,
-        body: { _tag: "ConfirmationUndeliverable", address: "bounced@example.com" },
+        body: { _tag: "ConfirmationUndeliverable", address: "margaret@example.com" },
       });
 
+      yield* Transport.ensureIdentity("alias.test").pipe(Effect.provide(api.context));
       yield* SESV2.putAccountSendingAttributes({ SendingEnabled: false }).pipe(
         Effect.provide(api.context),
       );
@@ -297,6 +299,25 @@ describe("forwarding addresses (recipients) on the API handler, fakecloud Dynamo
         body: { _tag: "MailUnavailable" },
       });
       expect(yield* list(browser)).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("takes a bounced address off the suppression list when it is added again", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.make;
+      const { browser } = yield* signedIn(api, "grace");
+      yield* SESV2.putSuppressedDestination({
+        EmailAddress: "bounced@example.com",
+        Reason: "BOUNCE",
+      }).pipe(Effect.provide(api.context));
+
+      expect(yield* add(browser, "bounced@example.com")).toMatchObject({ status: 201 });
+      const gone = yield* Effect.flip(
+        SESV2.getSuppressedDestination({ EmailAddress: "bounced@example.com" }),
+      ).pipe(Effect.provide(api.context));
+      expect(gone._tag).toBe("NotFoundException");
+      const [listed] = yield* list(browser);
+      expect(listed).not.toHaveProperty("bouncedAt");
     }).pipe(Effect.scoped),
   );
 

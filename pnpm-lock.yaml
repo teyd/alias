@@ -355,6 +355,9 @@ importers:
       '@alias/aws-emulators':
         specifier: workspace:*
         version: link:../../tools/aws-emulators
+      '@alias/lambda-emulator':
+        specifier: workspace:*
+        version: link:../../tools/lambda-emulator
       '@alias/ses-emulator':
         specifier: workspace:*
         version: link:../../tools/ses-emulator
@@ -467,6 +470,9 @@ importers:
       '@alias/ses-emulator':
         specifier: workspace:*
         version: link:../tools/ses-emulator
+      '@distilled.cloud/aws':
+        specifier: 'catalog:'
+        version: 1.0.0-rc.15(effect@4.0.5)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
@@ -628,10 +634,16 @@ importers:
       '@alias/aws':
         specifier: workspace:*
         version: link:../../packages/aws
+      '@distilled.cloud/aws':
+        specifier: 'catalog:'
+        version: 1.0.0-rc.15(effect@4.0.5)
       effect:
         specifier: 'catalog:'
         version: 4.0.5
     devDependencies:
+      '@alias/aws-emulators':
+        specifier: workspace:*
+        version: link:../aws-emulators
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)

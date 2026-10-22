@@ -117,7 +117,10 @@ describe("SES sending on fakecloud (SESv2 SendEmail, Content.Raw)", () => {
       }),
     );
 
-    it.effect("rejects a suppressed recipient", () =>
+    // A known divergence (PLAN.md §20.11): AWS documents that SES accepts mail to a suppressed
+    // address and doesn't send it (a bounce event follows); fakecloud refuses it. The pipeline
+    // relies on neither: it stops forwarding to a hard-bounced recipient itself.
+    it.effect("fakecloud refuses a suppressed recipient (AWS accepts and drops it)", () =>
       Effect.gen(function* () {
         const rawMessage = yield* readRawMessage;
         yield* Transport.ensureIdentity("example.com");
@@ -130,6 +133,42 @@ describe("SES sending on fakecloud (SESv2 SendEmail, Content.Raw)", () => {
         expect(error._tag).toBe("TransportRejected");
         expect(error.code).toBe("MessageRejected");
         yield* send(rawMessage, { ...envelope, to: [address] });
+      }),
+    );
+
+    it.effect("puts addresses on the suppression list and takes them off, idempotently", () =>
+      Effect.gen(function* () {
+        const transport = yield* Transport.Transport;
+        const address = "gone@elsewhere.test";
+        yield* transport.suppress(address);
+        yield* transport.suppress(address);
+        const listed = yield* SESV2.getSuppressedDestination({ EmailAddress: address });
+        expect(listed.SuppressedDestination).toMatchObject({
+          EmailAddress: address,
+          Reason: "BOUNCE",
+        });
+        yield* transport.unsuppress(address);
+        yield* transport.unsuppress(address);
+        const gone = yield* Effect.flip(SESV2.getSuppressedDestination({ EmailAddress: address }));
+        expect(gone._tag).toBe("NotFoundException");
+      }),
+    );
+
+    it.effect("sends through a configuration set with message tags", () =>
+      Effect.gen(function* () {
+        const rawMessage = yield* readRawMessage;
+        yield* Transport.ensureIdentity("example.com");
+        yield* SESV2.createConfigurationSet({ ConfigurationSetName: "events" });
+        const tagged = Transport.layer({ configurationSet: Option.some("events") });
+        const messageId = yield* Effect.flatMap(Transport.Transport, (transport) =>
+          transport.send(rawMessage, {
+            ...envelope,
+            tags: [{ name: "alias-kind", value: "forward" }],
+          }),
+        ).pipe(Effect.provide(tagged.pipe(Layer.provide(client))));
+        expect(messageId).not.toBe("");
+        // That the event destination sees the tags is checked end to end in apps/inbound
+        // (feedback.test.ts), where the events arrive.
       }),
     );
 

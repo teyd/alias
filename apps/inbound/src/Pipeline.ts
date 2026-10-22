@@ -1,4 +1,4 @@
-import { type Inbound, type SesEvent, Transport } from "@alias/aws";
+import { type Inbound, SendingEvent, type SesEvent, Transport } from "@alias/aws";
 import { Address, Mail, ReverseToken, SharedDomains } from "@alias/core";
 import {
   AliasRepo,
@@ -162,6 +162,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
   const target = Policy.forwardTarget(recipients);
   if (Option.isNone(target)) return Plan.Drop({ reason: "no-recipient" });
+  if (Option.isSome(target.value.bouncedAt)) return Plan.Drop({ reason: "recipient-bounced" });
   const sender = Policy.sender(record.ses.mail);
   if (Option.isNone(sender)) return Plan.Drop({ reason: "no-sender" });
   if (!Policy.isStorableAddress(sender.value.address)) {
@@ -201,6 +202,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     envelope: {
       from: Address.format(Address.reverseAddress(address, token.value)),
       to: [target.value.address],
+      tags: SendingEvent.tags(alias.userId, "forward"),
     },
   });
 });
@@ -239,7 +241,11 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
         ),
       ),
     rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId, owner }),
-    envelope: { from: Address.format(address), to: [contact] },
+    envelope: {
+      from: Address.format(address),
+      to: [contact],
+      tags: SendingEvent.tags(alias.userId, "reply"),
+    },
   });
 });
 

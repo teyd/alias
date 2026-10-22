@@ -1,4 +1,4 @@
-import { Transport } from "@alias/aws";
+import { SendingEvent, Transport } from "@alias/aws";
 import {
   Api,
   ConfirmationRateLimited,
@@ -46,6 +46,8 @@ const view = (recipient: RecipientRepo.Recipient) => ({
   isVerified: Option.isSome(recipient.verifiedAt),
   isDefault: recipient.isDefault,
   createdAt: recipient.createdAt,
+  bouncedAt: recipient.bouncedAt,
+  complainedAt: recipient.complainedAt,
 });
 
 const rateLimited = (now: DateTime.Utc, until: DateTime.Utc) =>
@@ -106,17 +108,32 @@ const sendConfirmation = Effect.fn("recipients.sendConfirmation")(function* (
     validFor: CONFIRMATION_LIFETIME,
     date: now,
   });
-  yield* transport.send(raw, { from: settings.sender, to: [recipient.address] }).pipe(
-    Effect.catchTags({
-      TransportRejected: () =>
-        Effect.fail(new ConfirmationUndeliverable({ address: recipient.address })),
-      // The code says what went wrong without logging the address.
-      TransportRetryable: (error) =>
-        Effect.logWarning("confirmation mail not sent", error.code).pipe(
-          Effect.andThen(Effect.fail(new MailUnavailable())),
-        ),
-    }),
-  );
+  // The owner asked to (re)confirm this address, so an earlier bounce shouldn't keep SES from
+  // trying it once more. If it bounces again, the feedback Lambda suppresses it again.
+  yield* transport
+    .unsuppress(recipient.address)
+    .pipe(
+      Effect.catchTag("SuppressionError", (error) =>
+        Effect.logWarning("suppression list not updated", error.reason),
+      ),
+    );
+  yield* transport
+    .send(raw, {
+      from: settings.sender,
+      to: [recipient.address],
+      tags: SendingEvent.tags(user.userId, "confirmation"),
+    })
+    .pipe(
+      Effect.catchTags({
+        TransportRejected: () =>
+          Effect.fail(new ConfirmationUndeliverable({ address: recipient.address })),
+        // The code says what went wrong without logging the address.
+        TransportRetryable: (error) =>
+          Effect.logWarning("confirmation mail not sent", error.code).pipe(
+            Effect.andThen(Effect.fail(new MailUnavailable())),
+          ),
+      }),
+    );
 });
 
 const list = Effect.fn("recipients.list")(function* () {
@@ -164,7 +181,14 @@ const add = Effect.fn("recipients.add")(function* (requested: string) {
       ),
     ),
   );
-  return view({ ...recipient, verifiedAt: Option.none(), lastSentAt: now, isDefault: false });
+  return view({
+    ...recipient,
+    verifiedAt: Option.none(),
+    lastSentAt: now,
+    isDefault: false,
+    bouncedAt: Option.none(),
+    complainedAt: Option.none(),
+  });
 });
 
 const confirm = Effect.fn("recipients.confirm")(function* (recipientId: string, token: string) {

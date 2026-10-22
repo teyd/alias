@@ -10,7 +10,7 @@
       "entry": ["src/handler.ts!", "bin/*.ts"]
     },
     "apps/inbound": {
-      "entry": ["src/handler.ts!", "bin/*.ts"]
+      "entry": ["src/handler.ts!", "src/feedbackHandler.ts!", "bin/*.ts"]
     },
     "infra": {
       "entry": ["alchemy.run.ts!"]

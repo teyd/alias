@@ -1,0 +1,27 @@
+Return-Path: <bounce-mc.us1_123.456-shop=ada.alias.test@mx.club.example>
+Received: from mx.club.example (mx.club.example [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+X-SES-Spam-Verdict: PASS
+X-SES-Virus-Verdict: PASS
+Authentication-Results: amazonses.com;
+ spf=pass smtp.mailfrom=mx.club.example;
+ dkim=pass header.i=@store.example;
+ dmarc=pass header.from=store.example;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=store.example; s=k1;
+	h=from:to:subject:date:message-id; bh=fZ3w8p0yvB1q8Hk0JQyZ8Yw9V4nC2Yt5u1oQe2kLq6c=;
+	b=c2lnbmVkIGJ5IHRoZSBzdG9yZQ==
+From: Book Club <hello@club.example>
+To: shop@ada.alias.test
+Subject: Friday
+Date: Wed, 21 Oct 2026 16:20:00 +0000
+Message-ID: <friday@club.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><p>Hi Ada,</p><p>see you on Friday! <a href=3D"https://club.exa=
+mple/events/42">Details</a></p>
+<p><img src=3D"https://club.example/map.png" width=3D"400" height=3D"300" a=
+lt=3D"Map"></p></body></html>
+

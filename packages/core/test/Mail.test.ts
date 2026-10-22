@@ -18,8 +18,11 @@ const cafe: Mail.Sender = { name: Option.some("Café Müller"), address: "news@c
 /** The alias owner of the `ownerReply` fixture. */
 const owner: Mail.Owner = { addresses: ["jane.doe@gmail.example"], name: Option.some("Jane Doe") };
 
+/** Tracker protection off: forwarding changes header fields only. */
+const unprotected: Mail.Protection = { images: "off", isLinkCleaningEnabled: false };
+
 const forwardWith = (raw: Uint8Array, sender: Mail.Sender = cafe) =>
-  Mail.forward(raw, { alias, sender, token });
+  Mail.forward(raw, { alias, sender, token, protection: unprotected });
 
 /** Right-to-left override and pop directional formatting, written out so they stay visible. */
 const RLO = String.fromCodePoint(0x202e);
@@ -419,6 +422,7 @@ layer(NodeCrypto.layer)((it) => {
         alias,
         sender: cafe,
         token: minted,
+        protection: unprotected,
       });
 
       // The owner's client replies to the Reply-To address; the inbound side parses it back.

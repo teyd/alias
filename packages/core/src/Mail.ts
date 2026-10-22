@@ -2,6 +2,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import * as Str from "effect/String";
 import * as Address from "./Address.ts";
 import { decode as decodeWords } from "./internal/encodedWords.ts";
@@ -9,11 +10,12 @@ import * as Headers from "./internal/headers.ts";
 import * as Mime from "./internal/mime.ts";
 import { mailboxField, sanitize } from "./internal/phrase.ts";
 import { scrub } from "./internal/scrub.ts";
+import * as Trackers from "./internal/trackers.ts";
 
 /**
  * Rewrites for the two mail paths (PLAN.md §3.2). Both work on raw RFC 5322 bytes. Forwarding
- * changes header fields only. Replying also takes the owner's identity out of their text parts;
- * the subject, the MIME structure and every other body byte go out as they came in.
+ * changes header fields and takes trackers out of text parts; replying takes the owner's identity
+ * out of them. The subject, the MIME structure and every other body byte go out as they came in.
  */
 
 /** Who sent the mail being forwarded: the display name and address from its `From`. */
@@ -102,6 +104,16 @@ const isAlwaysRemoved = ({ name }: Headers.Field) =>
  */
 const FORWARD_MARKER = "X-Alias-Forwarded";
 
+/**
+ * Fields {@link forward} adds when tracker protection changed the body, with how many trackers
+ * or links it changed. Incoming ones are removed: they describe this hop only.
+ */
+const TRACKERS_REMOVED = "X-Alias-Trackers-Removed";
+const LINKS_CLEANED = "X-Alias-Links-Cleaned";
+const PROTECTION_FIELDS = HashSet.make(TRACKERS_REMOVED.toLowerCase(), LINKS_CLEANED.toLowerCase());
+
+export type Protection = Trackers.Protection;
+
 /** The first token of a structured value, without `;` parameters or `(comments)`, lowercased. */
 const token = (value: string) =>
   value
@@ -135,6 +147,10 @@ const isReplyRemoved = (field: Headers.Field) =>
  * back through the reverse alias. The token comes from `ReverseToken.mint`. An
  * `X-Alias-Forwarded: <alias>` field marks the copy, and markers from other aliases stay, so a
  * loop through several aliases is still caught when it comes back to one of them.
+ *
+ * `protection` takes tracking images and, if asked, click-tracking parameters out of the text
+ * parts (PLAN.md §20.19). Only parts that change are re-encoded (in their own transfer encoding),
+ * and `X-Alias-Trackers-Removed: <n>` / `X-Alias-Links-Cleaned: <n>` say what changed.
  */
 export const forward = Effect.fn("Mail.forward")(function* (
   raw: Uint8Array,
@@ -142,9 +158,21 @@ export const forward = Effect.fn("Mail.forward")(function* (
     readonly alias: Address.MailAddress;
     readonly sender: Sender;
     readonly token: string;
+    readonly protection: Protection;
   },
 ) {
-  const message = yield* Headers.parse(raw);
+  const changes = yield* Ref.make(Trackers.noChanges);
+  const message = yield* Mime.rewriteText(yield* Headers.parse(raw), (part) =>
+    Option.match(Trackers.protect(options.protection, part), {
+      onNone: () => Effect.succeedNone,
+      onSome: (rewritten) =>
+        Effect.as(
+          Ref.update(changes, (total) => Trackers.addChanges(total, rewritten.changes)),
+          Option.some(rewritten.text),
+        ),
+    }),
+  );
+  const { trackers, links } = yield* Ref.get(changes);
   const senderAddress = sanitize(options.sender.address);
   const display = options.sender.name.pipe(
     Option.map(sanitize),
@@ -161,11 +189,14 @@ export const forward = Effect.fn("Mail.forward")(function* (
   // The alias's own earlier marker is replaced, so forwarding a forwarded copy changes nothing.
   const isRemoved = (field: Headers.Field) =>
     isAlwaysRemoved(field) ||
+    HashSet.has(PROTECTION_FIELDS, field.name) ||
     (field.name === FORWARD_MARKER.toLowerCase() && token(Headers.value(field)) === alias);
   return Headers.rewrite(message, isRemoved, [
     mailboxField("From", display, reverse, message.lineEnding),
     mailboxField("Reply-To", display, reverse, message.lineEnding),
     `${FORWARD_MARKER}: ${alias}`,
+    ...(trackers > 0 ? [`${TRACKERS_REMOVED}: ${trackers}`] : []),
+    ...(links > 0 ? [`${LINKS_CLEANED}: ${links}`] : []),
   ]);
 });
 
@@ -200,9 +231,8 @@ export const reply = Effect.fn("Mail.reply")(function* (
   },
 ) {
   const alias = Address.format(options.alias);
-  const message = yield* Mime.rewriteText(
-    yield* Headers.parse(raw),
-    scrub({ ...options.owner, replacement: alias }),
+  const message = yield* Mime.rewriteText(yield* Headers.parse(raw), (part) =>
+    Effect.succeed(scrub({ ...options.owner, replacement: alias })(part)),
   );
   return Headers.rewrite(message, isReplyRemoved, [
     `From: ${alias}`,

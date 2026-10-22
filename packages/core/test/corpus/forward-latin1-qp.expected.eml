@@ -1,0 +1,27 @@
+From: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Reply-To: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+X-Alias-Forwarded: shop@ada.alias.test
+X-Alias-Trackers-Removed: 2
+Received: from mx.laden.example (mx.laden.example [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+To: shop@ada.alias.test
+Subject: =?ISO-8859-1?Q?Gr=FC=DFe?=
+Date: Wed, 21 Oct 2026 16:15:00 +0000
+Message-ID: <gruesse-1@laden.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+<html><body>
+<!--[if gte mso 9]><v:image src=3D"https://img.laden.example/kopf.jpg" styl=
+e=3D"width:600px;height:120px" /><![endif]-->
+<table width=3D"600"><tr>
+<td style=3D"background:#fff url(https://img.laden.example/muster.png) repe=
+at">Sch=F6ne Gr=FC=DFe aus K=F6ln, Ihr Laden-Team</td>
+</tr></table>
+
+</body></html>
+

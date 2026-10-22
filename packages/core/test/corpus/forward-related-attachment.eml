@@ -1,0 +1,55 @@
+Return-Path: <bounce-mc.us1_123.456-shop=ada.alias.test@mx.store.example>
+Received: from mx.store.example (mx.store.example [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+X-SES-Spam-Verdict: PASS
+X-SES-Virus-Verdict: PASS
+Authentication-Results: amazonses.com;
+ spf=pass smtp.mailfrom=mx.store.example;
+ dkim=pass header.i=@store.example;
+ dmarc=pass header.from=store.example;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=store.example; s=k1;
+	h=from:to:subject:date:message-id; bh=fZ3w8p0yvB1q8Hk0JQyZ8Yw9V4nC2Yt5u1oQe2kLq6c=;
+	b=c2lnbmVkIGJ5IHRoZSBzdG9yZQ==
+From: Store Billing <billing@store.example>
+To: shop@ada.alias.test
+Subject: Invoice 2026-1042
+Date: Wed, 21 Oct 2026 16:10:00 +0000
+Message-ID: <invoice-1042@store.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-a1"
+
+--mixed-a1
+Content-Type: multipart/related; boundary="related-b2"
+
+--related-b2
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<html><body>
+<p><img src="cid:banner@store.example" width="600" height="200" alt="Banner"></p>
+<p>Your invoice is attached. <a href="https://store.example/account?utm_source=invoice">Your account</a></p>
+<img src="https://analytics.store.example/o/9f8e7d.gif" style="display:none" alt="">
+</body></html>
+
+--related-b2
+Content-Type: image/gif
+Content-ID: <banner@store.example>
+Content-Transfer-Encoding: base64
+Content-Disposition: inline
+
+R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==
+--related-b2--
+
+--mixed-a1
+Content-Type: application/pdf; name="invoice-1042.pdf"
+Content-Disposition: attachment; filename="invoice-1042.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSBpbnZvaWNlCjEgMCBvYmogPDwgL1R5cGUgL0NhdGFsb2cgPj4gZW5kb2JqCnRyYWlsZXIgPDwgL1Jvb3QgMSAwIFIgPj4KJSVFT0YK
+--mixed-a1
+Content-Type: text/html; charset=utf-8; name="terms.html"
+Content-Disposition: attachment; filename="terms.html"
+
+<p>Terms</p><img src="https://u1.ct.sendgrid.net/wf/open?upn=attached" width="1" height="1">
+--mixed-a1--

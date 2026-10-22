@@ -1,0 +1,24 @@
+From: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Reply-To: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+X-Alias-Forwarded: shop@ada.alias.test
+X-Alias-Trackers-Removed: 3
+Received: from o1.ptr4567.sendgrid.net (o1.ptr4567.sendgrid.net [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+To: shop@ada.alias.test
+Subject: Your order has shipped
+Date: Wed, 21 Oct 2026 16:05:00 +0000
+Message-ID: <abc.def@geopod-ismtpd-3>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGhlYWQ+PHN0eWxlPgpAbWVkaWEgcHJpbnQgeyAjX3QgeyBiYWNrZ3JvdW5kLWltYWdl
+OiBub25lIH0gfQouZm9vdGVyIHsgY29sb3I6ICM5OTkgfQo8L3N0eWxlPjwvaGVhZD48Ym9keT4K
+PGRpdiBpZD0iX3QiPjwvZGl2Pgo8cD5Zb3VyIG9yZGVyICMxMDQyIGhhcyBzaGlwcGVkLjwvcD4K
+PHA+PGltZyBzcmM9Imh0dHBzOi8vY2RuLnN0b3JlLmV4YW1wbGUvcGFyY2VsLnBuZyIgYWx0PSJQ
+YXJjZWwiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCI+PC9wPgo8cD48YSBocmVmPSJodHRwczovL3U0
+NTY3LmN0LnNlbmRncmlkLm5ldC9scy9jbGljaz91cG49dHJhY2stYWJjIj5UcmFjayB5b3VyIHBh
+cmNlbDwvYT48L3A+CgoKPC9ib2R5PjwvaHRtbD4K

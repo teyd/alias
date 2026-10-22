@@ -1,0 +1,21 @@
+From: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+Reply-To: "Store (news@store.example)"
+ <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@ada.alias.test>
+X-Alias-Forwarded: shop@ada.alias.test
+Received: from mx.club.example (mx.club.example [198.51.100.23])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 7q1m2x;
+ Wed, 21 Oct 2026 16:02:11 +0000 (UTC)
+To: shop@ada.alias.test
+Subject: Friday
+Date: Wed, 21 Oct 2026 16:20:00 +0000
+Message-ID: <friday@club.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><p>Hi Ada,</p><p>see you on Friday! <a href=3D"https://club.exa=
+mple/events/42">Details</a></p>
+<p><img src=3D"https://club.example/map.png" width=3D"400" height=3D"300" a=
+lt=3D"Map"></p></body></html>
+

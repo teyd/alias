@@ -125,26 +125,61 @@ export const authRepoSuite = (
           ),
         );
 
+        const defaults: UserRepo.UserSettings = {
+          isOnTheFlyEnabled: false,
+          imageProtection: "block-trackers",
+          isLinkCleaningEnabled: false,
+        };
+
         it.effect("starts with on-the-fly aliases off and stores the user's choice", () =>
           withRepos(
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               yield* users.register(yield* user("ada"), passkey());
-              expect(yield* users.settings("usr_1")).toEqual({ isOnTheFlyEnabled: false });
+              expect(yield* users.settings("usr_1")).toEqual(defaults);
 
-              expect(yield* users.updateSettings("usr_1", { isOnTheFlyEnabled: true })).toEqual({
-                isOnTheFlyEnabled: true,
-              });
-              expect(yield* users.updateSettings("usr_1", {})).toEqual({ isOnTheFlyEnabled: true });
-              expect(yield* users.settings("usr_1")).toEqual({ isOnTheFlyEnabled: true });
-              expect(yield* users.settings("usr_2")).toEqual({ isOnTheFlyEnabled: false });
+              const onTheFly = { ...defaults, isOnTheFlyEnabled: true };
+              expect(yield* users.updateSettings("usr_1", { isOnTheFlyEnabled: true })).toEqual(
+                onTheFly,
+              );
+              expect(yield* users.updateSettings("usr_1", {})).toEqual(onTheFly);
+              expect(yield* users.settings("usr_1")).toEqual(onTheFly);
+              expect(yield* users.settings("usr_2")).toEqual(defaults);
 
               yield* users.updateSettings("usr_1", { isOnTheFlyEnabled: false });
-              expect(yield* users.settings("usr_1")).toEqual({ isOnTheFlyEnabled: false });
+              expect(yield* users.settings("usr_1")).toEqual(defaults);
               // Settings sit next to the user without disturbing it.
               expect(yield* users.findById("usr_1")).toEqual(
                 Option.some(expect.objectContaining({ username: "ada" })),
               );
+            }),
+          ),
+        );
+
+        it.effect("blocks trackers until told otherwise, and cleans links only when asked", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const users = yield* UserRepo.UserRepo;
+              yield* users.register(yield* user("ada"), passkey());
+
+              const changed = yield* users.updateSettings("usr_1", {
+                imageProtection: "off",
+                isLinkCleaningEnabled: true,
+              });
+              expect(changed).toEqual({
+                ...defaults,
+                imageProtection: "off",
+                isLinkCleaningEnabled: true,
+              });
+              // Changing one setting keeps the others.
+              expect(yield* users.updateSettings("usr_1", { isOnTheFlyEnabled: true })).toEqual({
+                ...changed,
+                isOnTheFlyEnabled: true,
+              });
+              expect(
+                yield* users.updateSettings("usr_1", { imageProtection: "block-trackers" }),
+              ).toEqual({ ...changed, isOnTheFlyEnabled: true, imageProtection: "block-trackers" });
+              expect(yield* users.settings("usr_2")).toEqual(defaults);
             }),
           ),
         );

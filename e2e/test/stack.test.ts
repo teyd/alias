@@ -650,6 +650,86 @@ describe("emulated stack", () => {
       }),
     );
 
+    it.effect("removes tracking pixels from forwarded mail, and cleans links when asked", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const hana = yield* owner("hana");
+        const newsletter = [
+          "DKIM-Signature: v=1; a=rsa-sha256; d=shop.example; s=k1; h=from:subject; bh=x; b=y",
+          "From: Shop <news@shop.example>",
+          `To: ${hana.alias}`,
+          "Subject: Fall sale",
+          "Message-ID: <fall-sale@shop.example>",
+          "MIME-Version: 1.0",
+          'Content-Type: multipart/alternative; boundary="b1"',
+          "",
+          "--b1",
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          "Sale: https://shop.example/sale?utm_source=mail&id=7",
+          "--b1",
+          "Content-Type: text/html; charset=utf-8",
+          "Content-Transfer-Encoding: quoted-printable",
+          "",
+          '<p>Gr=C3=BC=C3=9Fe! <a href=3D"https://shop.example/sale?utm_source=3Dmail&amp;id=3D7">Sale</a></p>',
+          '<img src=3D"https://img.shop.example/hero.jpg" width=3D"600" height=3D"300">',
+          '<img src=3D"https://shop.us1.list-manage.com/track/open.php?u=3D1" width=3D"1" height=',
+          '=3D"1">',
+          "--b1--",
+          "",
+        ].join("\r\n");
+        const forward = Effect.fn("forward")(function* () {
+          const event = yield* smtpRaw({
+            from: "news@shop.example",
+            to: hana.alias,
+            raw: newsletter,
+          });
+          expect(yield* invoke(event)).toEqual([{ _tag: "Forwarded" }]);
+          return (yield* sentTo(hana.mailbox)).at(-1)?.text ?? "";
+        });
+        /** The HTML part as the mailbox shows it. */
+        const html = (raw: string) =>
+          (raw.split("Content-Transfer-Encoding: quoted-printable\r\n\r\n")[1] ?? "")
+            .split("\r\n--b1--")[0]
+            ?.replace(/=\r\n/g, "")
+            .replace(/=([0-9A-F]{2})/g, (_, hex: string) =>
+              String.fromCharCode(Number.parseInt(hex, 16)),
+            );
+
+        // Tracker blocking is on by default.
+        const blocked = yield* forward();
+        expect(html(blocked)).not.toContain("list-manage.com");
+        expect(html(blocked)).toContain('<img src="https://img.shop.example/hero.jpg"');
+        expect(html(blocked)).toContain("utm_source=mail");
+        expect(field(blocked, "x-alias-trackers-removed")).toEqual(Option.some("1"));
+
+        const changed = yield* call("/v1/settings", {
+          cookie: hana.cookie,
+          method: "PATCH",
+          body: { imageProtection: "off", isLinkCleaningEnabled: true },
+        });
+        expect(changed).toMatchObject({ status: 200, body: { imageProtection: "off" } });
+        const cleaned = yield* forward();
+        expect(html(cleaned)).toContain("list-manage.com/track/open.php");
+        expect(html(cleaned)).toContain('<a href="https://shop.example/sale?id=7">Sale</a>');
+        expect(cleaned).toContain("Sale: https://shop.example/sale?id=7\r\n");
+        expect(field(cleaned, "x-alias-links-cleaned")).toEqual(Option.some("2"));
+
+        // Only the body and the counting fields differ: the sender's signature never travels
+        // (SES signs the forward for the alias domain), and the MIME fields stay as they came.
+        const names = (raw: string) =>
+          Arr.filter(
+            Arr.map(fields(raw), (found) => found.name),
+            (name) => !name.startsWith("x-alias-trackers") && !name.startsWith("x-alias-links"),
+          );
+        expect(names(cleaned)).toEqual(names(blocked));
+        expect(names(blocked)).not.toContain("dkim-signature");
+        Arr.map(["mime-version", "content-type", "message-id", "subject"], (name) =>
+          expect(field(blocked, name)).toEqual(field(newsletter, name)),
+        );
+      }),
+    );
+
     it.effect("forwards the first mail to a new address on my subdomain once I opt in", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");

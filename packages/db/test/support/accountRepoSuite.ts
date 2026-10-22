@@ -129,7 +129,11 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       createdAt: at(1_000),
     }),
   );
-  yield* users.updateSettings(userId, { isOnTheFlyEnabled: true });
+  yield* users.updateSettings(userId, {
+    isOnTheFlyEnabled: true,
+    imageProtection: "off",
+    isLinkCleaningEnabled: true,
+  });
   yield* recipients.add(
     { id: `rcp_${name}`, userId, address: `${name}@mailbox.example`, createdAt: at(1_000) },
     { tokenHash: "hash", expiresAt: at(9_000_000_000_000), sentAt: at(1_000) },
@@ -224,6 +228,12 @@ export const accountRepoSuite = (
             expect(yield* users.isUsernameTaken(username)).toBe(true);
             expect(yield* users.findByUsername("ada")).toEqual(Option.none());
             expect(yield* users.findById("usr_ada")).toEqual(Option.none());
+            // Settings (on the fly, tracker protection) are gone too: only defaults are left.
+            expect(yield* users.settings("usr_ada")).toEqual({
+              isOnTheFlyEnabled: false,
+              imageProtection: "block-trackers",
+              isLinkCleaningEnabled: false,
+            });
           }),
         ),
       );

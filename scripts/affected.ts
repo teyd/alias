@@ -47,11 +47,20 @@ const packages = ["apps", "packages", "tools"]
   )
   .concat(["infra", "e2e"])
   .filter((dir) => existsSync(join(root, dir, "package.json")))
-  .map((dir) => ({
-    dir,
-    name: (JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8")) as { name: string })
-      .name,
-  }));
+  .map((dir) => {
+    const manifest = JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8")) as {
+      name: string;
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    return {
+      dir,
+      name: manifest.name,
+      hasTask: manifest.scripts?.[task] !== undefined,
+      dependsOn: Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }),
+    };
+  });
 
 const hasCommits = (() => {
   try {
@@ -76,8 +85,12 @@ const changed = new Set<string>(
 );
 
 const runAll = base === undefined || [...changed].some((file) => ROOT_FILES.has(file));
-const touched = packages.filter((pkg) =>
-  [...changed].some((file) => !relative(pkg.dir, file).startsWith("..")),
+// A changed package without the task (infra) only matters through its dependents; with none,
+// `vp run` would fail on a selection that has no such task.
+const touched = packages.filter(
+  (pkg) =>
+    [...changed].some((file) => !relative(pkg.dir, file).startsWith("..")) &&
+    (pkg.hasTask || packages.some((other) => other.dependsOn.includes(pkg.name))),
 );
 
 // Every package but the root, whose own scripts wrap this one (`vp run -r` would recurse).
@@ -90,7 +103,7 @@ const args = runAll
     : ["exec", "vp", "run", ...touched.flatMap((pkg) => ["--filter", `...${pkg.name}`]), task];
 
 if (args === undefined) {
-  console.log("No workspace packages changed; nothing to run.");
+  console.log(`No changed workspace package needs "${task}"; nothing to run.`);
   process.exit(0);
 }
 

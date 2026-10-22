@@ -174,6 +174,8 @@ export default Alchemy.Stack(
         recoveryPeriod: Duration.days(7),
       },
       timeToLiveSpecification: { AttributeName: Table.spec.timeToLiveAttribute, Enabled: true },
+      // A deployed stage's table can't be deleted by a mistaken destroy (PLAN.md §20.25).
+      deletionProtectionEnabled: stage !== "local",
     });
 
     // Raw inbound mail. SES writes it and processing deletes it; the lifecycle rule expires anything
@@ -199,6 +201,14 @@ export default Alchemy.Stack(
           Condition: {
             StringEquals: { "aws:SourceAccount": accountId, "aws:SourceArn": receiptRuleArn },
           },
+        },
+        {
+          Effect: "Deny",
+          Sid: "TlsOnly",
+          Principal: "*",
+          Action: ["s3:*"],
+          Resource: [`arn:aws:s3:::${spoolBucketName}`, `arn:aws:s3:::${spoolBucketName}/*`],
+          Condition: { Bool: { "aws:SecureTransport": "false" } },
         },
       ],
     });
@@ -234,6 +244,7 @@ export default Alchemy.Stack(
 
     // Logs carry no addresses or content, but still expire (PLAN.md §20.15): without a retention
     // Lambda's log groups never do.
+    // Every function's logs expire (PLAN.md §20.15); Lambda's default keeps them forever.
     const logging = { retention: Duration.days(14) };
 
     // Webhook jobs: the API, the inbound and the feedback Lambda send one message per event and
@@ -386,6 +397,7 @@ export default Alchemy.Stack(
       runtime: "nodejs24.x",
       architecture: "arm64",
       memorySize: 256,
+      logging,
       // The fetch has a 5 s deadline (`Proxy.limits`).
       timeout: Duration.seconds(10),
       reservedConcurrentExecutions: 10,
@@ -610,6 +622,7 @@ export default Alchemy.Stack(
       runtime: "nodejs24.x",
       architecture: "arm64",
       memorySize: 256,
+      logging,
       timeout: Duration.seconds(120),
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_DOH_URL: dohUrl },
@@ -721,6 +734,7 @@ export default Alchemy.Stack(
       runtime: "nodejs24.x",
       architecture: "arm64",
       memorySize: 256,
+      logging,
       timeout: Duration.seconds(30),
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },

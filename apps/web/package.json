@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@alias/contracts": "workspace:*",
+    "@alias/core": "catalog:",
     "@base-ui/react": "catalog:",
     "@fontsource-variable/geist": "catalog:",
     "@fontsource-variable/geist-mono": "catalog:",

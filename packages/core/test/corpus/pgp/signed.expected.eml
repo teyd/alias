@@ -1,0 +1,28 @@
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; protocol="application/pgp-encrypted";
+ boundary="=_alias_pgp_mime"
+Received: from mail-a1.sender.example (mail-a1.sender.example [192.0.2.10])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 4n2l8k;
+ Tue, 21 Oct 2026 09:14:02 +0000 (UTC)
+From: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+Reply-To: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+X-Alias-Forwarded: shop@alias.test
+To: shop@alias.test
+Subject: Signed quarterly report
+Date: Tue, 21 Oct 2026 09:14:00 +0000
+Message-ID: <signed-1@sender.example>
+
+This is an OpenPGP/MIME encrypted message (RFC 4880 and 3156)
+--=_alias_pgp_mime
+Content-Type: application/pgp-encrypted
+Content-Description: PGP/MIME version identification
+
+Version: 1
+
+--=_alias_pgp_mime
+Content-Type: application/octet-stream; name="encrypted.asc"
+Content-Description: OpenPGP encrypted message
+Content-Disposition: inline; filename="encrypted.asc"
+
+<armored OpenPGP message>
+--=_alias_pgp_mime--

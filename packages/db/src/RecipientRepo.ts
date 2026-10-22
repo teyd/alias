@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import * as Stream from "effect/Stream";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
@@ -39,6 +40,20 @@ export interface Recipient {
   readonly bouncedAt: Option.Option<DateTime.Utc>;
   /** When the owner's mailbox last reported forwarded mail as spam. Recorded, nothing more. */
   readonly complainedAt: Option.Option<DateTime.Utc>;
+  /** Forwarded mail is encrypted to this OpenPGP key (PLAN.md §20.21). None: sent as it is. */
+  readonly encryption: Option.Option<Encryption>;
+}
+
+/** A recipient's OpenPGP public key, as `Pgp.readKey` accepted it, and how to use it. */
+export interface Encryption {
+  /** Armored. */
+  readonly publicKey: string;
+  readonly fingerprint: string;
+  readonly userIds: ReadonlyArray<string>;
+  /** When the key stops encrypting, as of the upload; none if it never expires. */
+  readonly expiresAt: Option.Option<DateTime.Utc>;
+  /** Encrypt the subject too: `[...]` outside, the real one inside (header protection). */
+  readonly isSubjectHidden: boolean;
 }
 
 export interface NewRecipient {
@@ -119,6 +134,15 @@ export class RecipientRepo extends Context.Service<
     readonly setDefault: (
       recipient: Recipient,
     ) => Effect.Effect<void, RecipientChanged | DatabaseError>;
+    /** Sets or replaces the recipient's key, unless the recipient was deleted since the read. */
+    readonly setEncryption: (
+      recipient: Recipient,
+      encryption: Encryption,
+    ) => Effect.Effect<void, RecipientChanged | DatabaseError>;
+    /** Removes the key, if any: mail to the recipient goes out as it is again. */
+    readonly removeEncryption: (
+      recipient: Recipient,
+    ) => Effect.Effect<void, RecipientChanged | DatabaseError>;
     readonly delete: (
       userId: string,
       recipientId: string,
@@ -159,6 +183,30 @@ const mailQuotaKey = (userId: string, day: string) => ({
   sk: { S: `CONFIRMATIONS#${day}` },
 });
 
+const EncryptionFields = Schema.Struct({
+  publicKey: Attribute.S,
+  fingerprint: Attribute.S,
+  userIds: Attribute.StringList,
+  expiresAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
+  isSubjectHidden: Attribute.BOOL,
+});
+
+/** One map attribute (`M`), so setting or removing a key is one attribute, never half of one. */
+const EncryptionAttribute = Schema.Struct({ M: EncryptionFields }).pipe(
+  Schema.decodeTo(
+    Schema.toType(EncryptionFields),
+    SchemaTransformation.transform({
+      decode: (attribute) => attribute.M,
+      encode: (encryption) => ({ M: encryption }),
+    }),
+  ),
+);
+
+const encodeEncryption = (encryption: Encryption) =>
+  Schema.encodeEffect(EncryptionAttribute)(encryption).pipe(
+    Effect.mapError(databaseError("EncodeEncryption")),
+  );
+
 const RecipientItem = Item.codec(
   Schema.Struct({
     id: Attribute.S,
@@ -169,6 +217,7 @@ const RecipientItem = Item.codec(
     verifiedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
     bouncedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
     complainedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
+    encryption: Schema.OptionFromOptionalKey(EncryptionAttribute),
   }),
   "Recipient",
 );
@@ -319,6 +368,7 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
         verifiedAt: Option.none(),
         bouncedAt: Option.none(),
         complainedAt: Option.none(),
+        encryption: Option.none(),
       });
       yield* DynamoDB.transactWriteItems({
         TransactItems: [
@@ -440,6 +490,32 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
       }).pipe(
         Effect.asVoid,
         Effect.mapError(changed("TransactWriteItems", recipient.id)),
+        Effect.provide(client),
+      ),
+
+    setEncryption: Effect.fn("RecipientRepo.setEncryption")(function* (recipient, encryption) {
+      const value = yield* encodeEncryption(encryption);
+      yield* DynamoDB.updateItem({
+        TableName,
+        Key: recipientKey(recipient.userId, recipient.address),
+        UpdateExpression: "SET encryption = :encryption",
+        ConditionExpression: "#id = :id",
+        ExpressionAttributeNames: { "#id": "id" },
+        ExpressionAttributeValues: { ":id": { S: recipient.id }, ":encryption": value },
+      }).pipe(Effect.mapError(changed("UpdateItem", recipient.id)), Effect.provide(client));
+    }),
+
+    removeEncryption: (recipient) =>
+      DynamoDB.updateItem({
+        TableName,
+        Key: recipientKey(recipient.userId, recipient.address),
+        UpdateExpression: "REMOVE encryption",
+        ConditionExpression: "#id = :id",
+        ExpressionAttributeNames: { "#id": "id" },
+        ExpressionAttributeValues: { ":id": { S: recipient.id } },
+      }).pipe(
+        Effect.asVoid,
+        Effect.mapError(changed("UpdateItem", recipient.id)),
         Effect.provide(client),
       ),
 

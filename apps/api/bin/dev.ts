@@ -120,6 +120,7 @@ const seed = Effect.fn("api.dev.seed")(function* () {
         isDefault: false,
         bouncedAt: Option.none(),
         complainedAt: Option.none(),
+        encryption: Option.none(),
       },
       "dev",
       now,

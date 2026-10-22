@@ -6,7 +6,7 @@ import {
   Transport,
 } from "@alias/aws";
 import type { WebhookEvent } from "@alias/contracts";
-import { Address, Mail, ReverseToken, SharedDomains } from "@alias/core";
+import { Address, Mail, Pgp, ReverseToken, SharedDomains } from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
@@ -79,9 +79,10 @@ interface Send {
    * allowance, run once it is read. None means send it.
    */
   readonly admit: (signals: Mail.Signals) => Effect.Effect<Option.Option<Refusal>, DatabaseError>;
+  /** Header rewrite, scrubbing, and for a recipient with a key, encryption last. */
   readonly rewrite: (
     raw: Uint8Array,
-  ) => Effect.Effect<Uint8Array, Effect.Error<ReturnType<typeof Mail.reply>>, Crypto.Crypto>;
+  ) => Effect.Effect<Uint8Array, Effect.Error<ReturnType<typeof Pgp.encrypt>>, Crypto.Crypto>;
   readonly envelope: Transport.Envelope;
 }
 
@@ -190,6 +191,21 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   const imageProxy = yield* ImageProxySigner;
   const aliases = yield* AliasRepo.AliasRepo;
   const { forwardsPerHour } = yield* Limits.Limits;
+  const { encryption } = target.value;
+  // Encryption comes after every other rewrite: what is encrypted is exactly what the owner
+  // would otherwise have received.
+  const encrypt = (forwarded: Uint8Array) =>
+    Option.match(encryption, {
+      onNone: () => Effect.succeed(forwarded),
+      onSome: (key) =>
+        Effect.flatMap(DateTime.now, (now) =>
+          Pgp.encrypt(forwarded, {
+            key: key.publicKey,
+            isSubjectHidden: key.isSubjectHidden,
+            now,
+          }),
+        ),
+    });
   const admit = Effect.fn("Pipeline.admitForward")(function* (signals: Mail.Signals) {
     const loop = Policy.forwardLoop(signals, address, record.ses.mail, recipients);
     if (Option.isSome(loop)) return Option.some(Plan.Block({ alias, reason: loop.value }));
@@ -216,7 +232,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
         protection,
         imageProxy,
         // Signing image URLs needs a working SHA-256; without one nothing can run.
-      }).pipe(Effect.catchTag("PlatformError", Effect.die)),
+      }).pipe(Effect.catchTag("PlatformError", Effect.die), Effect.flatMap(encrypt)),
     envelope: {
       from: Address.format(Address.reverseAddress(address, token.value)),
       to: [target.value.address],
@@ -496,6 +512,8 @@ const execute = Effect.fn("Pipeline.execute")(function* (
       TransportRejected: () => Effect.succeed(dropped("rejected")),
       MessageGone: () => Effect.succeed(dropped("spool-missing")),
       MalformedMessage: () => Effect.succeed(dropped("malformed-message")),
+      InvalidKey: () =>
+        refuse(delivery, Plan.Block({ alias: planned.alias, reason: "key-unusable" })),
       TransportRetryable: (error) => defer(error.code),
       SpoolError: (error) => defer(error._tag),
       DatabaseError: (error) => defer(error._tag),

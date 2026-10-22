@@ -5,6 +5,7 @@ import {
   ConfirmationRejected,
   ConfirmationUndeliverable,
   CurrentUser,
+  InvalidPublicKey,
   InvalidRecipientAddress,
   MailUnavailable,
   RecipientAlreadyVerified,
@@ -13,7 +14,7 @@ import {
   RecipientNotVerified,
   TooManyPendingRecipients,
 } from "@alias/contracts";
-import { Address, SharedDomains } from "@alias/core";
+import { Address, Pgp, SharedDomains } from "@alias/core";
 import { RecipientRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -40,7 +41,7 @@ const RESEND_COOLDOWN = Duration.minutes(1);
 export const CONFIRMATION_MAILS_PER_DAY = 10;
 const CONFIRMATION_LIFETIME = Duration.hours(24);
 
-const view = (recipient: RecipientRepo.Recipient) => ({
+const view = (recipient: RecipientRepo.Recipient, now: DateTime.Utc) => ({
   id: recipient.id,
   address: recipient.address,
   isVerified: Option.isSome(recipient.verifiedAt),
@@ -48,6 +49,14 @@ const view = (recipient: RecipientRepo.Recipient) => ({
   createdAt: recipient.createdAt,
   bouncedAt: recipient.bouncedAt,
   complainedAt: recipient.complainedAt,
+  encryption: Option.map(recipient.encryption, (encryption) => ({
+    publicKey: encryption.publicKey,
+    fingerprint: encryption.fingerprint,
+    userIds: encryption.userIds,
+    expiresAt: encryption.expiresAt,
+    isUsable: !Option.exists(encryption.expiresAt, (at) => DateTime.isLessThanOrEqualTo(at, now)),
+    isSubjectHidden: encryption.isSubjectHidden,
+  })),
 });
 
 const rateLimited = (now: DateTime.Utc, until: DateTime.Utc) =>
@@ -139,7 +148,8 @@ const sendConfirmation = Effect.fn("recipients.sendConfirmation")(function* (
 const list = Effect.fn("recipients.list")(function* () {
   const user = yield* CurrentUser;
   const repo = yield* RecipientRepo.RecipientRepo;
-  return Arr.map(yield* Effect.orDie(repo.list(user.userId)), view);
+  const now = yield* DateTime.now;
+  return Arr.map(yield* Effect.orDie(repo.list(user.userId)), (recipient) => view(recipient, now));
 });
 
 const add = Effect.fn("recipients.add")(function* (requested: string) {
@@ -181,14 +191,18 @@ const add = Effect.fn("recipients.add")(function* (requested: string) {
       ),
     ),
   );
-  return view({
-    ...recipient,
-    verifiedAt: Option.none(),
-    lastSentAt: now,
-    isDefault: false,
-    bouncedAt: Option.none(),
-    complainedAt: Option.none(),
-  });
+  return view(
+    {
+      ...recipient,
+      verifiedAt: Option.none(),
+      lastSentAt: now,
+      isDefault: false,
+      bouncedAt: Option.none(),
+      complainedAt: Option.none(),
+      encryption: Option.none(),
+    },
+    now,
+  );
 });
 
 const confirm = Effect.fn("recipients.confirm")(function* (recipientId: string, token: string) {
@@ -196,14 +210,15 @@ const confirm = Effect.fn("recipients.confirm")(function* (recipientId: string, 
   const repo = yield* RecipientRepo.RecipientRepo;
   const crypto = yield* Crypto.Crypto;
   const tokenHash = yield* Effect.orDie(hashToken(crypto, token));
-  yield* repo.confirm(recipient, tokenHash, yield* DateTime.now).pipe(
+  const now = yield* DateTime.now;
+  yield* repo.confirm(recipient, tokenHash, now).pipe(
     Effect.catchTags({
       ConfirmationMismatch: () => Effect.fail(new ConfirmationRejected({ recipientId })),
       DatabaseError: Effect.die,
     }),
   );
   // Read again: confirming may have made it the default.
-  return view(yield* findOwned(recipientId));
+  return view(yield* findOwned(recipientId), now);
 });
 
 const resend = Effect.fn("recipients.resend")(function* (recipientId: string) {
@@ -243,6 +258,50 @@ const makeDefault = Effect.fn("recipients.makeDefault")(function* (recipientId: 
   );
 });
 
+/**
+ * Stores the recipient's OpenPGP key once it proves it can encrypt now (PLAN.md §20.21), or
+ * replaces the one it has. Only the re-armored key is kept, never the text around it.
+ */
+const setEncryption = Effect.fn("recipients.setEncryption")(function* (
+  recipientId: string,
+  publicKey: string,
+  isSubjectHidden: boolean,
+) {
+  const recipient = yield* findOwned(recipientId);
+  const repo = yield* RecipientRepo.RecipientRepo;
+  const now = yield* DateTime.now;
+  const key = yield* Pgp.readKey(publicKey, now).pipe(
+    Effect.mapError((error) => new InvalidPublicKey({ reason: error.reason })),
+  );
+  yield* repo
+    .setEncryption(recipient, {
+      publicKey: key.armored,
+      fingerprint: key.fingerprint,
+      userIds: key.userIds,
+      expiresAt: key.expiresAt,
+      isSubjectHidden,
+    })
+    .pipe(
+      Effect.catchTags({
+        RecipientChanged: () => Effect.fail(new RecipientNotFound({ recipientId })),
+        DatabaseError: Effect.die,
+      }),
+    );
+  return view(yield* findOwned(recipientId), now);
+});
+
+const removeEncryption = Effect.fn("recipients.removeEncryption")(function* (recipientId: string) {
+  const recipient = yield* findOwned(recipientId);
+  const repo = yield* RecipientRepo.RecipientRepo;
+  yield* repo.removeEncryption(recipient).pipe(
+    Effect.catchTags({
+      RecipientChanged: () => Effect.fail(new RecipientNotFound({ recipientId })),
+      DatabaseError: Effect.die,
+    }),
+  );
+  return view(yield* findOwned(recipientId), yield* DateTime.now);
+});
+
 const remove = Effect.fn("recipients.remove")(function* (recipientId: string) {
   const user = yield* CurrentUser;
   const repo = yield* RecipientRepo.RecipientRepo;
@@ -274,6 +333,15 @@ export const RecipientsLive = HttpApiBuilder.group(Api, "recipients", (handlers)
       .handle("resend", ({ params }) => Effect.provide(resend(params.recipientId), services))
       .handle("makeDefault", ({ params }) =>
         Effect.provide(makeDefault(params.recipientId), services),
+      )
+      .handle("setEncryption", ({ params, payload }) =>
+        Effect.provide(
+          setEncryption(params.recipientId, payload.publicKey, payload.isSubjectHidden),
+          services,
+        ),
+      )
+      .handle("removeEncryption", ({ params }) =>
+        Effect.provide(removeEncryption(params.recipientId), services),
       )
       .handle("remove", ({ params }) => Effect.provide(remove(params.recipientId), services)),
   ),

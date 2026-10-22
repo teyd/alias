@@ -2168,6 +2168,40 @@
                       },
                       "complainedAt": {
                         "type": "string"
+                      },
+                      "encryption": {
+                        "type": "object",
+                        "properties": {
+                          "publicKey": {
+                            "type": "string"
+                          },
+                          "fingerprint": {
+                            "type": "string"
+                          },
+                          "userIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "isUsable": {
+                            "type": "boolean"
+                          },
+                          "isSubjectHidden": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "publicKey",
+                          "fingerprint",
+                          "userIds",
+                          "isUsable",
+                          "isSubjectHidden"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2261,6 +2295,40 @@
                     },
                     "complainedAt": {
                       "type": "string"
+                    },
+                    "encryption": {
+                      "type": "object",
+                      "properties": {
+                        "publicKey": {
+                          "type": "string"
+                        },
+                        "fingerprint": {
+                          "type": "string"
+                        },
+                        "userIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "isUsable": {
+                          "type": "boolean"
+                        },
+                        "isSubjectHidden": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "publicKey",
+                        "fingerprint",
+                        "userIds",
+                        "isUsable",
+                        "isSubjectHidden"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -2437,6 +2505,40 @@
                     },
                     "complainedAt": {
                       "type": "string"
+                    },
+                    "encryption": {
+                      "type": "object",
+                      "properties": {
+                        "publicKey": {
+                          "type": "string"
+                        },
+                        "fingerprint": {
+                          "type": "string"
+                        },
+                        "userIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "isUsable": {
+                          "type": "boolean"
+                        },
+                        "isSubjectHidden": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "publicKey",
+                        "fingerprint",
+                        "userIds",
+                        "isUsable",
+                        "isSubjectHidden"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -2719,6 +2821,331 @@
           }
         },
         "summary": "Make a verified address the default",
+        "description": "API tokens need the `recipients:write` scope."
+      }
+    },
+    "/v1/recipients/{recipientId}/encryption": {
+      "put": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.setEncryption",
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "isVerified": {
+                      "type": "boolean"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "bouncedAt": {
+                      "type": "string"
+                    },
+                    "complainedAt": {
+                      "type": "string"
+                    },
+                    "encryption": {
+                      "type": "object",
+                      "properties": {
+                        "publicKey": {
+                          "type": "string"
+                        },
+                        "fingerprint": {
+                          "type": "string"
+                        },
+                        "userIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "isUsable": {
+                          "type": "boolean"
+                        },
+                        "isSubjectHidden": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "publicKey",
+                        "fingerprint",
+                        "userIds",
+                        "isUsable",
+                        "isSubjectHidden"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "isVerified",
+                    "isDefault",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidPublicKey",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidPublicKeyEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "publicKey": {
+                    "type": "string"
+                  },
+                  "isSubjectHidden": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "publicKey",
+                  "isSubjectHidden"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Encrypt mail to this address to an OpenPGP public key",
+        "description": "API tokens need the `recipients:write` scope."
+      },
+      "delete": {
+        "tags": [
+          "recipients"
+        ],
+        "operationId": "recipients.removeEncryption",
+        "parameters": [
+          {
+            "name": "recipientId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "recipients:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "isVerified": {
+                      "type": "boolean"
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "bouncedAt": {
+                      "type": "string"
+                    },
+                    "complainedAt": {
+                      "type": "string"
+                    },
+                    "encryption": {
+                      "type": "object",
+                      "properties": {
+                        "publicKey": {
+                          "type": "string"
+                        },
+                        "fingerprint": {
+                          "type": "string"
+                        },
+                        "userIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "isUsable": {
+                          "type": "boolean"
+                        },
+                        "isSubjectHidden": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "publicKey",
+                        "fingerprint",
+                        "userIds",
+                        "isUsable",
+                        "isSubjectHidden"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "isVerified",
+                    "isDefault",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stop encrypting mail to this address",
         "description": "API tokens need the `recipients:write` scope."
       }
     },
@@ -5796,6 +6223,34 @@
         "required": [
           "_tag",
           "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidPublicKeyEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidPublicKey"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "too-large",
+              "malformed",
+              "multiple-keys",
+              "private-key",
+              "revoked",
+              "expired",
+              "no-encryption-key"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
         ],
         "additionalProperties": false
       },

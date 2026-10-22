@@ -61,6 +61,9 @@ export const DropReason = Schema.Literals([
   "rate-limited",
   // Bigger than the pipeline loads into memory.
   "too-large",
+  // The forwarding address's OpenPGP key no longer encrypts (expired, revoked since the
+  // upload, or below OpenPGP.js's minimums): never sent in the clear instead (PLAN.md §20.21).
+  "key-unusable",
 ]);
 export type DropReason = typeof DropReason.Type;
 

@@ -4,6 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./Username": "./src/Username.ts"
@@ -13,7 +14,8 @@
     "test:unit": "vp test"
   },
   "dependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "openpgp": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

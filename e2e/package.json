@@ -31,6 +31,7 @@
     "@types/nodemailer": "catalog:",
     "effect": "catalog:",
     "nodemailer": "catalog:",
+    "openpgp": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
   }

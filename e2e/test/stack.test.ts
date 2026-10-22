@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import { apiHandler, layer, sentTo, smtp, smtpRaw, spoolBucket } from "./support/stack.ts";
+import * as openpgp from "openpgp";
 
 const origin = "https://alias.test";
 
@@ -36,7 +37,7 @@ const call = (
     readonly body?: Schema.Json;
     readonly cookie?: string;
     readonly bearer?: string;
-    readonly method?: "GET" | "POST" | "PATCH" | "DELETE";
+    readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -737,6 +738,92 @@ describe("emulated stack", () => {
         });
         expect(yield* invoke(forward)).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
         expect(yield* sentTo(bounce)).toHaveLength(1);
+      }),
+    );
+
+    it.effect("encrypts forwarded mail to the mailbox's OpenPGP key, set over the API", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const pia = yield* owner("pia");
+        // Dated at the epoch, so the key is valid whatever time the stack's clock shows.
+        const { publicKey, privateKey } = yield* Effect.promise(() =>
+          openpgp.generateKey({
+            userIDs: [{ email: pia.mailbox }],
+            type: "curve25519",
+            date: DateTime.toDate(DateTime.makeUnsafe(0)),
+            format: "object",
+          }),
+        );
+        const [destination] = (yield* call("/v1/recipients", { cookie: pia.cookie })).body;
+        const stored = yield* call(`/v1/recipients/${destination.id}/encryption`, {
+          cookie: pia.cookie,
+          method: "PUT",
+          body: { publicKey: publicKey.armor(), isSubjectHidden: true },
+        });
+        expect(stored.status).toBe(200);
+        expect(stored.body.encryption.fingerprint).toBe(publicKey.getFingerprint().toUpperCase());
+
+        const event = yield* smtp({
+          from: '"Store" <orders@store.example>',
+          to: pia.alias,
+          subject: "Your invoice 2026-118",
+          text: "Total: 42 EUR. Thanks for shopping!",
+        });
+        expect(yield* invoke(event)).toEqual([{ _tag: "Forwarded" }]);
+        const forwarded = (yield* sentTo(pia.mailbox)).at(-1);
+        const raw = forwarded?.text ?? "";
+        // What SES sent is PGP/MIME; routing is outside, the content and the subject are not.
+        expect(field(raw, "content-type")).toEqual(
+          Option.some(
+            'multipart/encrypted; protocol="application/pgp-encrypted"; boundary="=_alias_pgp_mime"',
+          ),
+        );
+        expect(field(raw, "subject")).toEqual(Option.some("[...]"));
+        expect(field(raw, "x-alias-forwarded")).toEqual(Option.some(pia.alias));
+        expect(Option.getOrElse(field(raw, "from"), () => "")).toContain(forwarded?.from ?? "-");
+        expect(raw).not.toContain("42 EUR");
+        expect(raw).not.toContain("invoice");
+
+        const armored = /-----BEGIN PGP MESSAGE-----[\s\S]*-----END PGP MESSAGE-----/.exec(raw);
+        const { data } = yield* Effect.promise(() =>
+          openpgp
+            .readMessage({ armoredMessage: armored?.[0] ?? "" })
+            .then((message) =>
+              openpgp.decrypt({ message, decryptionKeys: privateKey, format: "binary" }),
+            ),
+        );
+        const inner = new TextDecoder().decode(data);
+        expect(field(inner, "subject")).toEqual(Option.some("Your invoice 2026-118"));
+        expect(inner).toContain("Total: 42 EUR. Thanks for shopping!");
+
+        // The owner's reply from the mailbox goes to the store as written, unencrypted.
+        const reply = yield* smtp({
+          from: pia.mailbox,
+          to: forwarded?.from ?? "",
+          subject: "Re: Your invoice",
+          text: "Thanks!",
+        });
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Replied" }]);
+        const answer = (yield* sentTo("orders@store.example")).at(-1);
+        expect(answer?.text).toContain("Thanks!");
+        expect(field(answer?.text ?? "", "content-type")).not.toEqual(
+          Option.some(expect.stringContaining("multipart/encrypted")),
+        );
+
+        // Removing the key forwards in the clear again.
+        yield* call(`/v1/recipients/${destination.id}/encryption`, {
+          cookie: pia.cookie,
+          method: "DELETE",
+        });
+        yield* invoke(
+          yield* smtp({
+            from: "orders@store.example",
+            to: pia.alias,
+            subject: "Hi",
+            text: "Plain",
+          }),
+        );
+        expect((yield* sentTo(pia.mailbox)).at(-1)?.text).toContain("Plain");
       }),
     );
 

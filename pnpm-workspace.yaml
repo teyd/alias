@@ -40,6 +40,7 @@ catalog:
   "@simplewebauthn/server": 14.0.3
   "@simplewebauthn/browser": 14.0.0
   # mail
+  openpgp: 6.3.2
   smtp-server: 3.20.2
   nodemailer: 10.1.7
   # browser tests (Chromium only; `playwright install` fetches the matching build)
@@ -56,6 +57,7 @@ catalog:
   lucide-react: ^1.61.0
   "@fontsource-variable/geist": ^5.3.0
   "@fontsource-variable/geist-mono": ^5.3.0
+  "@alias/core": workspace:*
 
 overrides:
   vite@*: "catalog:"

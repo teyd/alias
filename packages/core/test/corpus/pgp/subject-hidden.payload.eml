@@ -1,0 +1,32 @@
+From: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+Reply-To: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+To: shop@alias.test,
+ other-list@lists.example
+Cc: team@sender.example
+Subject: =?UTF-8?B?8J+UkiBTZWNyZXQ=?= project
+ status
+Keywords: confidential, roadmap
+Comments: sent from the planning tool
+Date: Tue, 21 Oct 2026 09:14:00 +0000
+Message-ID: <hidden-1@sender.example>
+HP-Outer: From: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+HP-Outer: Reply-To: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+HP-Outer: To: shop@alias.test,
+ other-list@lists.example
+HP-Outer: Cc: team@sender.example
+HP-Outer: Subject: [...]
+HP-Outer: Date: Tue, 21 Oct 2026 09:14:00 +0000
+HP-Outer: Message-ID: <hidden-1@sender.example>
+Content-Type: multipart/alternative; boundary="alt_7";
+ protected-headers="v1"; hp="cipher"
+Content-Language: en
+
+--alt_7
+Content-Type: text/plain; charset=utf-8
+
+The plan is on page two.
+--alt_7
+Content-Type: text/html; charset=utf-8
+
+<p>The plan is on page <b>two</b>.</p>
+--alt_7--

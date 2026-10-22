@@ -32,6 +32,7 @@
     "@effect/vitest": "catalog:",
     "@seriousme/openapi-schema-validator": "catalog:",
     "@types/node": "catalog:",
+    "openpgp": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
   }

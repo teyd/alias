@@ -1,12 +1,15 @@
 import type { Recipient } from "@alias/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
   CircleCheckIcon,
   CircleXIcon,
   ClockIcon,
   EllipsisIcon,
+  LockIcon,
+  LockOpenIcon,
   SendIcon,
   StarIcon,
   Trash2Icon,
@@ -27,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { callRecipients, recipientsQuery } from "@/lib/recipients";
+import { formatFingerprint } from "./EncryptionDialog";
 
 /** One call per row action; each settles to nothing. */
 const rowActions = {
@@ -36,6 +40,10 @@ const rowActions = {
     callRecipients((api) => api.recipients.makeDefault({ params: { recipientId } })),
   remove: (recipientId: string) =>
     callRecipients((api) => api.recipients.remove({ params: { recipientId } })),
+  removeEncryption: (recipientId: string) =>
+    callRecipients((api) =>
+      Effect.asVoid(api.recipients.removeEncryption({ params: { recipientId } })),
+    ),
 } as const;
 
 const date = (at: DateTime.Utc) => DateTime.format(at, { dateStyle: "medium" });
@@ -84,7 +92,45 @@ const Note = ({ recipient }: { readonly recipient: Recipient }) =>
       }),
   });
 
-export const RecipientRow = ({ recipient }: { readonly recipient: Recipient }) => {
+/** The OpenPGP key mail to this destination is encrypted to, if any (PLAN.md §20.21). */
+const Encryption = ({ recipient }: { readonly recipient: Recipient }) =>
+  Option.match(recipient.encryption, {
+    onNone: () => null,
+    onSome: (key) => (
+      <div className="flex flex-col items-start gap-0.5 text-xs text-muted-foreground">
+        <Badge variant={key.isUsable ? "outline" : "destructive"}>
+          <LockIcon />
+          {key.isUsable ? "Encrypted" : "Key expired"}
+        </Badge>
+        <span className="data" title="Key fingerprint">
+          {formatFingerprint(key.fingerprint)}
+        </span>
+        {key.isUsable ? (
+          <span>
+            {key.isSubjectHidden ? "Subject encrypted too. " : ""}
+            {Option.match(key.expiresAt, {
+              onNone: () => "",
+              onSome: (at) => `Key expires on ${date(at)}.`,
+            })}
+          </span>
+        ) : (
+          <span className="whitespace-normal text-destructive">
+            Nothing is forwarded here until you upload a renewed key or remove it: mail is never
+            sent unencrypted instead.
+          </span>
+        )}
+      </div>
+    ),
+  });
+
+export const RecipientRow = ({
+  recipient,
+  onEncryption,
+}: {
+  readonly recipient: Recipient;
+  /** Opens the encryption dialog for this destination. */
+  readonly onEncryption: () => void;
+}) => {
   const queryClient = useQueryClient();
   const action = useMutation({
     mutationFn: (kind: keyof typeof rowActions) => rowActions[kind](recipient.id),
@@ -109,6 +155,7 @@ export const RecipientRow = ({ recipient }: { readonly recipient: Recipient }) =
           {action.isSuccess && action.variables === "resend" && (
             <span className="text-xs text-muted-foreground">A new link is on its way.</span>
           )}
+          <Encryption recipient={recipient} />
           <Problem error={action.error} />
         </div>
       </TableCell>
@@ -149,6 +196,20 @@ export const RecipientRow = ({ recipient }: { readonly recipient: Recipient }) =
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="data">{recipient.address}</DropdownMenuLabel>
               </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onEncryption}>
+                <LockIcon />
+                {Option.isSome(recipient.encryption) ? "Change encryption" : "Set up encryption"}
+              </DropdownMenuItem>
+              {Option.isSome(recipient.encryption) && (
+                <DropdownMenuItem
+                  disabled={action.isPending}
+                  onClick={() => action.mutate("removeEncryption")}
+                >
+                  <LockOpenIcon />
+                  Remove key
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"

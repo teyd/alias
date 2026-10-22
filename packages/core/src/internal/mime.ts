@@ -35,7 +35,7 @@ interface ContentType {
 }
 
 /** `type/subtype; name=value; name="quoted value"`, names lowercased. */
-const parseContentType = (value: string): ContentType => {
+export const parseContentType = (value: string): ContentType => {
   const [media = "", ...rest] = value.match(/(?:[^;"]|"(?:[^"\\]|\\.)*")+/g) ?? [];
   const [type = "", subtype = ""] = media.trim().toLowerCase().split("/");
   const parameters = R.fromEntries(

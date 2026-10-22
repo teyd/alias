@@ -147,6 +147,16 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     { tokenHash: "hash", expiresAt: at(9_000_000_000_000), sentAt: at(1_000) },
     3,
   );
+  // An OpenPGP key on the recipient item (PLAN.md §20.21).
+  yield* Effect.flatMap(Effect.fromOption(yield* recipients.find(userId, `rcp_${name}`)), (found) =>
+    recipients.setEncryption(found, {
+      publicKey: `-----BEGIN PGP PUBLIC KEY BLOCK-----\n\n${name}\n-----END PGP PUBLIC KEY BLOCK-----\n`,
+      fingerprint: "6E2F1B0C5A0D4E9B8C7A6F5E4D3C2B1A09F8E7D6",
+      userIds: [`${name} <${name}@mailbox.example>`],
+      expiresAt: Option.none(),
+      isSubjectHidden: true,
+    }),
+  );
   yield* aliases.reserveCreation(userId, at(1_000), 20);
 
   const subdomain = `${name}.alias.test`;
@@ -248,6 +258,17 @@ export const accountRepoSuite = (
               { pk: journal, sk: "ERASURE", attributes: ["expiresAt", "pk", "sk"] },
             ]);
             expect(after).toHaveLength(graces.length + 5);
+            // Her OpenPGP key went with her recipient item; Grace's is still there.
+            const keys = Arr.filter(before, (item) => item.attributes.includes("encryption"));
+            expect(Arr.map(keys, (item) => item.sk)).toEqual([
+              "RECIPIENT#ada@mailbox.example",
+              "RECIPIENT#grace@mailbox.example",
+            ]);
+            expect(
+              Arr.filter(after, (item) => item.attributes.includes("encryption")).map(
+                (item) => item.sk,
+              ),
+            ).toEqual(["RECIPIENT#grace@mailbox.example"]);
 
             // The username is never given out again, and nobody owns it.
             const username = yield* Username.parse("ada");

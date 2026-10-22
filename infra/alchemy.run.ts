@@ -15,6 +15,8 @@ const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
 // Passkeys are bound to the first shared domain, which serves the web app.
 const appDomain = sharedDomains[0] ?? "alias.test";
+// Must be on a shared domain (checked at cold start); those are the verified SES identities.
+const confirmationSender = `no-reply@${appDomain}`;
 const spoolBucketName = `alias-spool-${stage}`;
 const tableName = `alias-${stage}`;
 // Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
@@ -78,20 +80,33 @@ export default Alchemy.Stack(
         ALIAS_RP_ID: appDomain,
         ALIAS_WEB_ORIGIN: `https://${appDomain}`,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
+        ALIAS_CONFIRMATION_FROM: confirmationSender,
       },
     });
     yield* api.bind("DataAccess", {
       policyStatements: [
         {
           Effect: "Allow",
+          // TransactWriteItems is authorized per item through these actions.
           Action: [
             "dynamodb:GetItem",
             "dynamodb:PutItem",
             "dynamodb:UpdateItem",
             "dynamodb:DeleteItem",
+            "dynamodb:ConditionCheckItem",
             "dynamodb:Query",
           ],
           Resource: [tableArn, `${tableArn}/index/*`],
+        },
+      ],
+    });
+    // Forwarding-address confirmations, sent from the app domain's verified identity only.
+    yield* api.bind("SendConfirmations", {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["ses:SendEmail", "ses:SendRawEmail"],
+          Resource: `arn:aws:ses:eu-west-1:*:identity/${appDomain}`,
         },
       ],
     });

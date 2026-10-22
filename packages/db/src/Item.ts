@@ -15,14 +15,16 @@ export const codec = <A, I extends Readonly<Record<string, DynamoDB.AttributeVal
 ) => {
   const encode = Schema.encodeEffect(schema);
   const decode = Schema.decodeUnknownEffect(schema);
+  const decodeItem = (item: DynamoDB.AttributeMap) =>
+    decode(item).pipe(Effect.mapError(databaseError(`Decode${name}`)));
   return {
     encode: (value: A) => encode(value).pipe(Effect.mapError(databaseError(`Encode${name}`))),
+    decode: decodeItem,
     /** None when the read found no item. */
     decodeOption: (item: Option.Option<DynamoDB.AttributeMap>) =>
       Option.match(item, {
         onNone: () => Effect.succeedNone,
-        onSome: (present) =>
-          Effect.asSome(decode(present).pipe(Effect.mapError(databaseError(`Decode${name}`)))),
+        onSome: (present) => Effect.asSome(decodeItem(present)),
       }),
   };
 };

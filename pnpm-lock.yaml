@@ -318,6 +318,9 @@ importers:
       '@alias/lambda-emulator':
         specifier: workspace:*
         version: link:../../tools/lambda-emulator
+      '@distilled.cloud/aws':
+        specifier: 'catalog:'
+        version: 1.0.0-rc.15(effect@4.0.5)
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.5)

@@ -20,6 +20,8 @@ interface Response {
   readonly setCookies: ReadonlyArray<string>;
 }
 
+export type Client = ReturnType<typeof make>;
+
 /**
  * Calls a function URL handler the way a browser on {@link origin} would: payload-2.0 events
  * with JSON bodies, and a cookie jar that honours `Set-Cookie` (including `Max-Age=0`).

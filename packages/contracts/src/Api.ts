@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { AccountGroup, AuthGroup, Authentication } from "./Auth.ts";
+import { RecipientsGroup } from "./Recipients.ts";
 
 const Health = Schema.Struct({
   status: Schema.Literal("ok"),
@@ -114,4 +115,5 @@ export const Api = HttpApi.make("alias")
   .add(SystemGroup)
   .add(AuthGroup)
   .add(AccountGroup)
-  .add(AliasesGroup);
+  .add(AliasesGroup)
+  .add(RecipientsGroup);

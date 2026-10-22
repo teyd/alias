@@ -1,6 +1,5 @@
 import { Username } from "@alias/core";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
-import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -13,6 +12,7 @@ import { type DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Item from "./Item.ts";
 import { type Passkey, passkeyItem } from "./PasskeyRepo.ts";
+import { conditionFailedAt } from "./Transaction.ts";
 
 export interface User {
   readonly id: string;
@@ -73,20 +73,6 @@ const UsernameItem = Item.codec(
   "Username",
 );
 
-/** DynamoDB lists one reason per transaction item, in request order. */
-const CancellationReasons = Schema.Array(
-  Schema.Struct({ Code: Schema.optionalKey(Schema.String) }),
-);
-const decodeReasons = Schema.decodeUnknownOption(CancellationReasons);
-
-const failedAt = (
-  reasons: Option.Option<typeof CancellationReasons.Type>,
-  index: number,
-): boolean =>
-  Option.exists(reasons, (decoded) =>
-    Option.exists(Arr.get(decoded, index), (reason) => reason.Code === "ConditionalCheckFailed"),
-  );
-
 const mustNotExist = "attribute_not_exists(pk)";
 
 const make = Effect.fn("UserRepo.make")(function* () {
@@ -121,14 +107,11 @@ const make = Effect.fn("UserRepo.make")(function* () {
         ],
       }).pipe(
         Effect.mapError((error) => {
-          if (P.isTagged(error, "TransactionCanceledException")) {
-            const reasons = decodeReasons(error.CancellationReasons);
-            if (failedAt(reasons, 1)) {
-              return new UsernameTaken({ username: user.username });
-            }
-            if (failedAt(reasons, 2)) {
-              return new CredentialTaken({ credentialId: passkey.id });
-            }
+          if (conditionFailedAt(error, 1)) {
+            return new UsernameTaken({ username: user.username });
+          }
+          if (conditionFailedAt(error, 2)) {
+            return new CredentialTaken({ credentialId: passkey.id });
           }
           return databaseError("TransactWriteItems")(error);
         }),

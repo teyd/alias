@@ -31,6 +31,9 @@ const Account = () => {
     ),
     onSome: (user) => (
       <div className="flex items-center gap-3 text-sm">
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/forwarding">Forwarding</Link>
+        </Button>
         <span className="text-muted-foreground">{user.username}</span>
         <Button
           variant="outline"

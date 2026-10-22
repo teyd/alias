@@ -1,8 +1,8 @@
-import { RelyingParty, makeFunctionUrlHandler } from "@alias/api";
+import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
 import { AliasRepo, type Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
-import { AwsClient, Inbound, SesEvent } from "@alias/aws";
+import { AwsClient, Inbound, SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { SesEmulator } from "@alias/ses-emulator";
@@ -33,10 +33,13 @@ const api = Layer.merge(
   Layer.unwrap(
     Effect.gen(function* () {
       const context = yield* Effect.context<Dynamo.Database>();
+      const fakecloud = yield* FakeCloud.FakeCloud;
       const { handle, dispose } = makeFunctionUrlHandler(
-        Layer.merge(
+        Layer.mergeAll(
           Layer.succeedContext(context),
           RelyingParty.layer({ id: "alias.test", origin }),
+          Transport.ses.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
+          MailSettings.layer({ sender: "no-reply@alias.test", aliasDomains: ["alias.test"] }),
         ),
       );
       yield* Effect.addFinalizer(() => Effect.promise(dispose));

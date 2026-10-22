@@ -4,12 +4,12 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import { Base64Url, Hex } from "effect/encoding";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
+import { hashToken, newToken } from "./Secrets.ts";
 
 const SESSION_LIFETIME = Duration.days(30);
 
@@ -17,11 +17,7 @@ const SESSION_LIFETIME = Duration.days(30);
 const cookieOptions = { path: "/", sameSite: "strict", secure: true, httpOnly: true } as const;
 
 /** Sessions are stored under a hash of the token, so the table never holds a usable cookie. */
-const sessionId = (crypto: Crypto.Crypto, token: string) =>
-  crypto.digest("SHA-256", new TextEncoder().encode(token)).pipe(Effect.map(Hex.encode));
-
-/** 256 random bits; the cookie value. */
-const newToken = (crypto: Crypto.Crypto) => Effect.map(crypto.randomBytes(32), Base64Url.encode);
+const sessionId = hashToken;
 
 /** Creates a session for the user and sets its cookie on the response being built. */
 export const start = Effect.fn("Sessions.start")(function* (user: UserRepo.User) {

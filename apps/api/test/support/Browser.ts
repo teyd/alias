@@ -20,6 +20,8 @@ interface Response {
   readonly setCookies: ReadonlyArray<string>;
 }
 
+export type Client = ReturnType<typeof make>;
+
 /**
  * Calls a function URL handler the way a browser on {@link origin} would: payload-2.0 events
  * with JSON bodies, and a cookie jar that honours `Set-Cookie` (including `Max-Age=0`).
@@ -40,7 +42,7 @@ export const make = (handle: Handle) => {
   };
 
   const request = Effect.fn("Browser.request")(function* (
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     body: Option.Option<Schema.Json>,
   ) {
@@ -81,6 +83,7 @@ export const make = (handle: Handle) => {
   return {
     get: (path: string) => request("GET", path, Option.none()),
     post: (path: string, body: Schema.Json = {}) => request("POST", path, Option.some(body)),
+    delete: (path: string) => request("DELETE", path, Option.none()),
     cookie: (name: string) => HashMap.get(jar, name),
     /** Sets a cookie by hand, e.g. to replay a logged-out session. */
     setCookie: (name: string, value: string) => {

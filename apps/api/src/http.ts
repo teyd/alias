@@ -4,6 +4,7 @@ import {
   ChallengeRepo,
   type Dynamo,
   PasskeyRepo,
+  RecipientRepo,
   SessionRepo,
   UserRepo,
 } from "@alias/db";
@@ -13,7 +14,10 @@ import { HttpRouter, HttpServer } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type { Transport } from "@alias/aws";
 import { AccountLive, AuthLive } from "./auth.ts";
+import type { MailSettings } from "./MailSettings.ts";
+import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Sessions.ts";
 
@@ -53,18 +57,22 @@ const Repositories = Layer.mergeAll(
   PasskeyRepo.layer,
   SessionRepo.layer,
   ChallengeRepo.layer,
+  RecipientRepo.layer,
 );
 
+/** What callers provide: the database, the WebAuthn relying party, and outgoing mail. */
+export type Services = Dynamo.Database | RelyingParty | Transport.Transport | MailSettings;
+
 /**
- * The full HTTP app. Callers provide the database (real DynamoDB in Lambda, an emulator elsewhere)
- * and the WebAuthn relying party.
+ * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
+ * elsewhere.
  */
 const ApiLive = HttpApiBuilder.layer(Api).pipe(
-  Layer.provide([SystemLive, AuthLive, AccountLive, AliasesLive]),
+  Layer.provide([SystemLive, AuthLive, AccountLive, AliasesLive, RecipientsLive]),
   Layer.provide(authenticationLayer),
   Layer.provide(Repositories),
   Layer.provide([HttpServer.layerServices, NodeCrypto.layer]),
 );
 
-export const webHandler = (services: Layer.Layer<Dynamo.Database | RelyingParty>) =>
+export const webHandler = <E>(services: Layer.Layer<Services, E>) =>
   HttpRouter.toWebHandler(ApiLive.pipe(Layer.provide(services)), { disableLogger: true });

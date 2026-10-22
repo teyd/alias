@@ -1,44 +1,25 @@
 import { AliasRepo } from "@alias/db";
-import { freshTable } from "@alias/db/testing";
-import { FakeCloud } from "@alias/aws-emulators";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { RelyingParty, makeFunctionUrlHandler } from "../src/index.ts";
 import * as Browser from "./support/Browser.ts";
 import { TestAuthenticator } from "./support/index.ts";
+import * as TestApi from "./support/TestApi.ts";
+
+const { RegistrationChallenge, signUp } = TestApi;
 
 const SESSION = "__Host-alias_session";
 
-const relyingParty = RelyingParty.layer({ id: "alias.test", origin: Browser.origin });
-
 /** The API Lambda on a fresh table in its own fakecloud, plus a way to seed aliases. */
-const api = Effect.acquireRelease(
-  Effect.gen(function* () {
-    const context = yield* Layer.build(freshTable().pipe(Layer.provide(FakeCloud.layer())));
-    const handler = makeFunctionUrlHandler(
-      Layer.merge(Layer.succeedContext(context), relyingParty),
-    );
-    const seedAlias = (alias: AliasRepo.NewAlias) =>
-      AliasRepo.make().pipe(
-        Effect.flatMap((repo) => repo.insert(alias)),
-        Effect.provide(context),
-      );
-    return { ...handler, browser: () => Browser.make(handler.handle), seedAlias };
-  }),
-  (handler) => Effect.promise(() => handler.dispose()),
-);
-
-const RegistrationChallenge = Schema.Struct({
-  challengeId: Schema.String,
-  options: Schema.Struct({
-    challenge: Schema.String,
-    rp: Schema.Struct({ id: Schema.optionalKey(Schema.String) }),
-    user: Schema.Struct({ id: Schema.String }),
-  }),
-});
+const api = Effect.map(TestApi.make, (handler) => ({
+  ...handler,
+  seedAlias: (alias: AliasRepo.NewAlias) =>
+    AliasRepo.make().pipe(
+      Effect.flatMap((repo) => repo.insert(alias)),
+      Effect.provide(handler.context),
+    ),
+}));
 
 const AuthenticationChallenge = Schema.Struct({
   challengeId: Schema.String,
@@ -47,23 +28,8 @@ const AuthenticationChallenge = Schema.Struct({
 
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
 
-type Client = ReturnType<typeof Browser.make>;
-
-const signUp = Effect.fn("signUp")(function* (
-  browser: Client,
-  authenticator: TestAuthenticator.TestAuthenticator,
-  username: string,
-) {
-  const started = yield* browser.post("/v1/auth/register/options", { username });
-  const { challengeId, options } = Schema.decodeUnknownSync(RegistrationChallenge)(started.body);
-  return yield* browser.post("/v1/auth/register", {
-    challengeId,
-    credential: authenticator.create(options),
-  });
-});
-
 const logIn = Effect.fn("logIn")(function* (
-  browser: Client,
+  browser: Browser.Client,
   authenticator: TestAuthenticator.TestAuthenticator,
 ) {
   const started = yield* browser.post("/v1/auth/login/options");
@@ -201,7 +167,7 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
     Effect.gen(function* () {
       const { browser: open } = yield* api;
       const [first, second] = [open(), open()];
-      const start = (browser: Client) =>
+      const start = (browser: Browser.Client) =>
         browser
           .post("/v1/auth/register/options", { username: "linus" })
           .pipe(
@@ -211,7 +177,7 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
           );
       const a = yield* start(first);
       const b = yield* start(second);
-      const finish = (browser: Client, started: typeof a) =>
+      const finish = (browser: Browser.Client, started: TestApi.RegistrationChallenge) =>
         browser.post("/v1/auth/register", {
           challengeId: started.challengeId,
           credential: TestAuthenticator.make(Browser.origin).create(started.options),

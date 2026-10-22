@@ -10,14 +10,17 @@ import { DynamoTable } from "./Dynamo.ts";
  * Single-table design. This spec is the one source of truth. `infra/alchemy.run.ts` deploys it and
  * the emulators create it with {@link ensure}, so tests run against the table production gets.
  *
- * | Item      | pk                           | sk          | gsi1pk          | gsi1sk                   | TTL         |
- * | --------- | ---------------------------- | ----------- | --------------- | ------------------------ | ----------- |
- * | Alias     | `ALIAS#<domain>#<localPart>` | `ALIAS`     | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |             |
- * | User      | `USER#<userId>`              | `USER`      |                 |                          |             |
- * | Username  | `USERNAME#<skeleton>`        | `USERNAME`  |                 |                          |             |
- * | Passkey   | `PASSKEY#<credentialId>`     | `PASSKEY`   |                 |                          |             |
- * | Session   | `SESSION#<sha256(token)>`    | `SESSION`   |                 |                          | `expiresAt` |
- * | Challenge | `CHALLENGE#<id>`             | `CHALLENGE` |                 |                          | `expiresAt` |
+ * | Item              | pk                           | sk                     | gsi1pk          | gsi1sk                   | TTL         |
+ * | ----------------- | ---------------------------- | ---------------------- | --------------- | ------------------------ | ----------- |
+ * | Alias             | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |             |
+ * | User              | `USER#<userId>`              | `USER`                 |                 |                          |             |
+ * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                 |                          |             |
+ * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                 |                          |             |
+ * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                 |                          | `expiresAt` |
+ * | Username          | `USERNAME#<skeleton>`        | `USERNAME`             |                 |                          |             |
+ * | Passkey           | `PASSKEY#<credentialId>`     | `PASSKEY`              |                 |                          |             |
+ * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              |                 |                          | `expiresAt` |
+ * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                 |                          | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -25,6 +28,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * Username item is the claim, written in the same transaction as the User and their first Passkey.
  * Logins look a passkey up by credential ID and a session by the hash of its cookie token.
  * Challenges are deleted when answered (single use).
+ *
+ * Recipients (forwarding addresses) live in their user's partition: listing them is one strongly
+ * consistent Query on `USER#<userId>` with `begins_with(sk, "RECIPIENT#")`, and the address in the
+ * sort key makes each address unique per user. A pending recipient also holds the SHA-256 of its
+ * mailed confirmation token and the token's expiry; confirming removes both (single use).
+ * RecipientSettings counts pending recipients (changed in the same transaction as the recipient,
+ * so the cap is atomic) and names the default recipient. MailQuota counts confirmation mails per
+ * user and UTC day.
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

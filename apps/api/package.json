@@ -25,6 +25,7 @@
   "devDependencies": {
     "@alias/aws-emulators": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "vite-plus": "catalog:",

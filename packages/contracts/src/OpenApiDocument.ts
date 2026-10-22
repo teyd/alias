@@ -26,6 +26,10 @@ const groups = {
     "Personal API tokens (`alias_pat_…`). Session-only: a token can't mint, list or revoke tokens.",
   webhooks:
     "Webhook endpoints, signed per Standard Webhooks. Session-only: an endpoint is a standing data sink.",
+  oauth:
+    "The device side of a device login (OAuth 2.0 device authorization grant, RFC 8628) and token revocation (RFC 7009). Form-encoded requests, no credentials.",
+  device:
+    "The signed-in person's side of a device login: look up the code a device shows, then approve or deny it. Session-only.",
 } satisfies Record<string, string>;
 
 const schemes = {
@@ -69,6 +73,12 @@ const summaries = {
   "webhooks.update": "Pause, resume or resubscribe a webhook endpoint",
   "webhooks.rotateSecret": "Rotate a webhook signing secret",
   "webhooks.remove": "Delete a webhook endpoint",
+  "oauth.deviceAuthorization": "Start a device login: get a device code and a user code",
+  "oauth.token": "Poll for the token a device login issues",
+  "oauth.revoke": "Revoke a token (RFC 7009)",
+  "device.lookup": "Look up a device login by its user code",
+  "device.approve": "Approve a device login: the device gets a token with the requested scopes",
+  "device.deny": "Deny a device login",
 } satisfies Record<string, string>;
 
 /** A text by name; None when there is none. */

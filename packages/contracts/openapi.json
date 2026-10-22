@@ -4938,25 +4938,534 @@
         "summary": "Rotate a webhook signing secret",
         "description": "Session only: API tokens are refused."
       }
+    },
+    "/v1/oauth/device_authorization": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "operationId": "oauth.deviceAuthorization",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "device_code": {
+                      "type": "string"
+                    },
+                    "user_code": {
+                      "type": "string"
+                    },
+                    "verification_uri": {
+                      "type": "string"
+                    },
+                    "verification_uri_complete": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "interval": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "device_code",
+                    "user_code",
+                    "verification_uri",
+                    "verification_uri_complete",
+                    "expires_in",
+                    "interval"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OAuthError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": "string"
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "scope"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Start a device login: get a device code and a user code"
+      }
+    },
+    "/v1/oauth/token": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "operationId": "oauth.token",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "type": "string",
+                      "enum": [
+                        "Bearer"
+                      ]
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OAuthError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "grant_type": {
+                    "type": "string"
+                  },
+                  "device_code": {
+                    "type": "string"
+                  },
+                  "client_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "grant_type",
+                  "device_code",
+                  "client_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Poll for the token a device login issues"
+      }
+    },
+    "/v1/oauth/revoke": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "operationId": "oauth.revoke",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "<No Content>"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "token_type_hint": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Revoke a token (RFC 7009)"
+      }
+    },
+    "/v1/device/lookup": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "operationId": "device.lookup",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "userCode": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientName": {
+                      "type": "string"
+                    },
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "aliases:read",
+                          "aliases:write",
+                          "contacts:read",
+                          "contacts:write",
+                          "domains:read",
+                          "domains:write",
+                          "recipients:read",
+                          "recipients:write",
+                          "settings:read",
+                          "settings:write"
+                        ]
+                      }
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "userCode",
+                    "clientId",
+                    "clientName",
+                    "scopes",
+                    "createdAt",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DeviceCodeNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCodeNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userCode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Look up a device login by its user code",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/device/approve": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "operationId": "device.approve",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DeviceCodeNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCodeNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userCode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Approve a device login: the device gets a token with the requested scopes",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/device/deny": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "operationId": "device.deny",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "DeviceCodeNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCodeNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userCode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Deny a device login",
+        "description": "Session only: API tokens are refused."
+      }
     }
   },
   "components": {
     "schemas": {
-      "TooManyAttemptsEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "TooManyAttempts"
-            ]
-          }
-        },
-        "required": [
-          "_tag"
-        ],
-        "additionalProperties": false
-      },
       "ForbiddenEncoded": {
         "type": "object",
         "properties": {
@@ -4999,6 +5508,69 @@
         },
         "required": [
           "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "TooManyAttemptsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyAttempts"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "DeviceCodeNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "DeviceCodeNotFound"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "OAuthErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "OAuthError"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "invalid_client",
+              "invalid_grant",
+              "invalid_scope",
+              "unsupported_grant_type",
+              "authorization_pending",
+              "slow_down",
+              "access_denied",
+              "expired_token"
+            ]
+          },
+          "error_description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "error"
         ],
         "additionalProperties": false
       },
@@ -5644,6 +6216,14 @@
     {
       "name": "webhooks",
       "description": "Webhook endpoints, signed per Standard Webhooks. Session-only: an endpoint is a standing data sink."
+    },
+    {
+      "name": "oauth",
+      "description": "The device side of a device login (OAuth 2.0 device authorization grant, RFC 8628) and token revocation (RFC 7009). Form-encoded requests, no credentials."
+    },
+    {
+      "name": "device",
+      "description": "The signed-in person's side of a device login: look up the code a device shows, then approve or deny it. Session-only."
     }
   ]
 }

@@ -21,19 +21,20 @@ const view = (token: TokenRepo.Token): Token => ({
 });
 
 /**
- * Mints a token: `alias_pat_` and 256 random bits. Only the SHA-256 is stored. A slow password
- * hash (argon2, scrypt) defends low-entropy secrets against offline guessing and would cost every
- * request tens of milliseconds; a 256-bit random secret can't be guessed offline, and its plain
- * hash is a lookup key, so a request costs one GetItem.
+ * Mints a token for `user`: `alias_pat_` and 256 random bits, and the item that stores only its
+ * SHA-256. A slow password hash (argon2, scrypt) defends low-entropy secrets against offline
+ * guessing and would cost every request tens of milliseconds; a 256-bit random secret can't be
+ * guessed offline, and its plain hash is a lookup key, so a request costs one GetItem.
  */
-const create = Effect.fn("tokens.create")(function* (payload: {
-  readonly name: string;
-  readonly scopes: ReadonlyArray<Token["scopes"][number]>;
-  readonly expiresInDays?: number;
-}) {
-  const user = yield* CurrentUser;
+export const mint = Effect.fn("tokens.mint")(function* (
+  user: { readonly userId: string; readonly username: string },
+  request: {
+    readonly name: string;
+    readonly scopes: ReadonlyArray<Token["scopes"][number]>;
+    readonly expiresInDays?: number;
+  },
+) {
   const crypto = yield* Crypto.Crypto;
-  const tokens = yield* TokenRepo.TokenRepo;
   const secret = `${TOKEN_PREFIX}${yield* newToken(crypto)}`;
   const now = yield* DateTime.now;
   const token: TokenRepo.NewToken = {
@@ -41,14 +42,21 @@ const create = Effect.fn("tokens.create")(function* (payload: {
     hash: yield* hashToken(crypto, secret),
     userId: user.userId,
     username: user.username,
-    name: payload.name,
-    scopes: Arr.dedupe(payload.scopes),
+    name: request.name,
+    scopes: Arr.dedupe(request.scopes),
     hint: secret.slice(-4),
     createdAt: now,
-    expiresAt: Option.map(Option.fromUndefinedOr(payload.expiresInDays), (days) =>
+    expiresAt: Option.map(Option.fromUndefinedOr(request.expiresInDays), (days) =>
       DateTime.addDuration(now, Duration.days(days)),
     ),
   };
+  return { token, secret };
+});
+
+const create = Effect.fn("tokens.create")(function* (payload: Parameters<typeof mint>[1]) {
+  const user = yield* CurrentUser;
+  const tokens = yield* TokenRepo.TokenRepo;
+  const { token, secret } = yield* mint(user, payload);
   yield* tokens.create(token);
   return { ...view({ ...token, lastUsedAt: Option.none() }), token: secret };
 });

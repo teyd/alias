@@ -1,4 +1,3 @@
-import { FunctionUrl } from "@alias/aws";
 import {
   Authentication,
   CurrentUser,
@@ -15,11 +14,11 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
+import { clientSource } from "./ClientSource.ts";
 import { hashToken } from "./Secrets.ts";
 import { sessionId } from "./Sessions.ts";
 
@@ -52,16 +51,6 @@ export const authenticationLayer = Layer.effect(
     const isLiveUser = (userId: string) =>
       Effect.map(Effect.orDie(users.findById(userId)), Option.isSome);
 
-    /** The client's address, hashed: the failure counter's key holds no IP. */
-    const clientSource = Effect.fn("Authentication.clientSource")(function* () {
-      const request = yield* HttpServerRequest.HttpServerRequest;
-      const address = Option.getOrElse(
-        Option.fromUndefinedOr(request.headers[FunctionUrl.SOURCE_IP_HEADER]),
-        () => "unknown",
-      );
-      return yield* Effect.orDie(hashToken(crypto, address));
-    });
-
     return Authentication.of({
       session: Effect.fn("Authentication.session")(function* (httpEffect, { credential }) {
         const token = Redacted.value(credential);
@@ -79,7 +68,7 @@ export const authenticationLayer = Layer.effect(
       token: Effect.fn("Authentication.token")(function* (httpEffect, { credential, endpoint }) {
         const secret = Redacted.value(credential);
         if (Str.isEmpty(secret)) return yield* new Unauthenticated();
-        const source = yield* clientSource();
+        const source = yield* Effect.provideService(clientSource(), Crypto.Crypto, crypto);
         const now = yield* DateTime.now;
         if ((yield* Effect.orDie(tokens.failures(source, now))) >= MAX_FAILURES_PER_HOUR) {
           return yield* new TooManyAttempts();

@@ -35,6 +35,10 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                            |                           | `expiresAt` |
  * | Token             | `TOKEN#<sha256(secret)>`     | `TOKEN`                | `TOKENS#<userId>`          | `TOKEN#<id>`              | `expiresAt` |
  * | AuthFailures      | `AUTHFAIL#<sha256(ip)>`      | `FAILURES#<hour>`      |                            |                           | `expiresAt` |
+ * | DeviceGrant       | `DEVICE#<sha256(deviceCode)>` | `DEVICE`              |                            |                           | `expiresAt` |
+ * | UserCode          | `USERCODE#<userCode>`        | `USERCODE`             |                            |                           | `expiresAt` |
+ * | DeviceRequests    | `DEVICEAUTH#<sha256(ip)>`    | `REQUESTS#<hour>`      |                            |                           | `expiresAt` |
+ * | DeviceMisses      | `USER#<userId>`              | `DEVICE-MISSES#<hour>` |                            |                           | `expiresAt` |
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
@@ -102,6 +106,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * A Webhook is one of the user's webhook endpoints, in their partition: every published event
  * lists the user's webhooks with one strongly consistent Query (`begins_with(sk, "WEBHOOK#")`),
  * and a delivery reads its endpoint (URL, secrets) with one GetItem.
+ *
+ * A DeviceGrant is a device login in progress (OAuth 2.0 device authorization grant, PLAN.md
+ * §20.23), stored under the SHA-256 of its device code, so each poll costs one strongly
+ * consistent GetItem. The UserCode item points from the code a person types to it; both are
+ * written in one transaction (a taken code fails it) and deleted together when the grant is
+ * redeemed, in the same transaction that creates the token. DeviceRequests counts device
+ * authorization requests per hashed client address and hour; DeviceMisses counts unknown user
+ * codes a signed-in user tried, in their partition so erasing the account removes it.
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

@@ -15,6 +15,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAliasesRouteImport } from './routes/_app/aliases'
 import { Route as AppDestinationsRouteImport } from './routes/_app/destinations'
+import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as AppDomainsRouteImport } from './routes/_app/domains'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 
@@ -47,6 +48,11 @@ const AppDestinationsRoute = AppDestinationsRouteImport.update({
   path: '/destinations',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDeviceRoute = AppDeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDomainsRoute = AppDomainsRouteImport.update({
   id: '/domains',
   path: '/domains',
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/aliases': typeof AppAliasesRoute
   '/destinations': typeof AppDestinationsRoute
+  '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
   '/settings': typeof AppSettingsRoute
 }
@@ -72,6 +79,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/aliases': typeof AppAliasesRoute
   '/destinations': typeof AppDestinationsRoute
+  '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
   '/settings': typeof AppSettingsRoute
   '/': typeof AppIndexRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/_app/aliases': typeof AppAliasesRoute
   '/_app/destinations': typeof AppDestinationsRoute
+  '/_app/device': typeof AppDeviceRoute
   '/_app/domains': typeof AppDomainsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/': typeof AppIndexRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/aliases'
     | '/destinations'
+    | '/device'
     | '/domains'
     | '/settings'
   fileRoutesByTo: FileRoutesByTo
@@ -103,6 +113,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/aliases'
     | '/destinations'
+    | '/device'
     | '/domains'
     | '/settings'
     | '/'
@@ -113,6 +124,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/_app/aliases'
     | '/_app/destinations'
+    | '/_app/device'
     | '/_app/domains'
     | '/_app/settings'
     | '/_app/'
@@ -168,6 +180,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDestinationsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/device': {
+      id: '/_app/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof AppDeviceRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/domains': {
       id: '/_app/domains'
       path: '/domains'
@@ -188,6 +207,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAliasesRoute: typeof AppAliasesRoute
   AppDestinationsRoute: typeof AppDestinationsRoute
+  AppDeviceRoute: typeof AppDeviceRoute
   AppDomainsRoute: typeof AppDomainsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -196,6 +216,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAliasesRoute: AppAliasesRoute,
   AppDestinationsRoute: AppDestinationsRoute,
+  AppDeviceRoute: AppDeviceRoute,
   AppDomainsRoute: AppDomainsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,

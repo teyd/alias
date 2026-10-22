@@ -4,6 +4,7 @@ export * as ChallengeRepo from "./ChallengeRepo.ts";
 export * as ContactRepo from "./ContactRepo.ts";
 export * from "./DatabaseError.ts";
 export * as DeliveryRepo from "./DeliveryRepo.ts";
+export * as DeviceRepo from "./DeviceRepo.ts";
 export * as DomainRepo from "./DomainRepo.ts";
 export * as Dynamo from "./Dynamo.ts";
 export * as PasskeyRepo from "./PasskeyRepo.ts";

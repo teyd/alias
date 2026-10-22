@@ -56,6 +56,25 @@ const call = (
     };
   });
 
+/** An OAuth-style call (RFC 8628, RFC 7009): a form-encoded POST, as `alias login` sends it. */
+const postForm = (path: string, fields: Readonly<Record<string, string>>) =>
+  Effect.gen(function* () {
+    const { url } = yield* FunctionUrlServer.FunctionUrlServer;
+    const response = yield* Effect.promise(() =>
+      fetch(`${url}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(fields),
+      }),
+    );
+    const text = yield* Effect.promise(() => response.text());
+    return {
+      status: response.status,
+      body: text === "" ? null : JSON.parse(text),
+      cacheControl: response.headers.get("cache-control"),
+    };
+  });
+
 /** Signs up with a fresh software passkey and returns the session cookie and user ID. */
 const signUp = (username: string) =>
   Effect.gen(function* () {
@@ -163,6 +182,48 @@ describe("emulated stack", () => {
         expect(revoked.status).toBe(204);
         expect((yield* call("/v1/aliases", { bearer })).status).toBe(401);
       }),
+    );
+
+    it.effect(
+      "signs a device in with the device authorization grant, and lets it revoke its token",
+      () =>
+        Effect.gen(function* () {
+          const { cookie } = yield* signUp("device-user");
+          const started = yield* postForm("/v1/oauth/device_authorization", {
+            client_id: "alias-cli",
+            scope: "aliases:read",
+          });
+          expect(started.status).toBe(200);
+          expect(started.body.verification_uri).toBe(`${origin}/device`);
+          const userCode = String(started.body.user_code);
+          const poll = () =>
+            postForm("/v1/oauth/token", {
+              grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+              device_code: String(started.body.device_code),
+              client_id: "alias-cli",
+            });
+
+          const looked = yield* call("/v1/device/lookup", { cookie, body: { userCode } });
+          expect(looked.body).toMatchObject({ clientName: "Alias CLI", scopes: ["aliases:read"] });
+          expect((yield* call("/v1/device/approve", { cookie, body: { userCode } })).status).toBe(
+            204,
+          );
+
+          const issued = yield* poll();
+          expect(issued).toMatchObject({
+            status: 200,
+            body: { token_type: "Bearer", scope: "aliases:read" },
+            cacheControl: "no-store",
+          });
+          const bearer = String(issued.body.access_token);
+          expect((yield* call("/v1/me", { bearer })).body).toMatchObject({
+            username: "device-user",
+          });
+          expect((yield* poll()).body).toMatchObject({ error: "invalid_grant" });
+
+          expect((yield* postForm("/v1/oauth/revoke", { token: bearer })).status).toBe(200);
+          expect((yield* call("/v1/me", { bearer })).status).toBe(401);
+        }),
     );
 
     it.effect("posts a signed mail.forwarded event to the owner's webhook endpoint", () =>

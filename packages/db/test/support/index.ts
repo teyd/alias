@@ -7,5 +7,6 @@ export { recipientRepoSuite } from "./recipientRepoSuite.ts";
 export { contactRepoSuite } from "./contactRepoSuite.ts";
 export { tokenRepoSuite } from "./tokenRepoSuite.ts";
 export { webhookRepoSuite } from "./webhookRepoSuite.ts";
+export { deviceRepoSuite } from "./deviceRepoSuite.ts";
 
 export { domainRepoSuite } from "./domainRepoSuite.ts";

@@ -14,6 +14,7 @@ const aliasProblems = {
   "invalid-address": "That isn't a valid address.",
   "unknown-domain": "Aliases can only live on the domains listed here.",
   "not-your-subdomain": "You can only pick addresses on your own subdomain.",
+  "domain-not-verified": "That domain isn't verified. Check its DNS records first.",
   "random-only-on-shared-domain": "Shared domains only get random addresses.",
   "reserved-local-part": "Addresses can't contain “+r.”, replies use it.",
 } as const;

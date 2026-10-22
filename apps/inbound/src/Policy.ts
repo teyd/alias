@@ -12,8 +12,12 @@ import * as Schema from "effect/Schema";
 
 /** Why mail to a recipient was not passed on. Logged without any address or content. */
 export const DropReason = Schema.Literals([
-  // Not a valid address, or a domain we don't serve yet.
+  // Not a valid address.
   "unroutable",
+  // Not a shared domain, and nobody added it as a custom domain.
+  "unknown-domain",
+  // A custom domain that isn't verified (yet, or any more): pending or failed.
+  "unverified-domain",
   // No alias at this address, or only the tombstone of a deleted one.
   "unknown-alias",
   // Past the owner's daily allowance of aliases created on the fly.

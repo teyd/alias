@@ -28,7 +28,8 @@ export type AliasView = typeof AliasView.Type;
 
 /**
  * `Random` picks a fresh local part on a shared domain (`k7m2qx9pzr@alias.example`). `Address`
- * claims a full address on the caller's own subdomain (`shop@ada.alias.example`).
+ * claims a full address on the caller's own subdomain (`shop@ada.alias.example`) or on one of
+ * their verified custom domains (`shop@ada.example`).
  */
 const NewAlias = Schema.Union([
   Schema.TaggedStruct("Random", { domain: Schema.String, mode: AliasMode }),
@@ -41,10 +42,14 @@ const AliasChanges = Schema.Struct({
   isActive: Schema.optionalKey(Schema.Boolean),
 });
 
-/** Where the caller may create aliases: random ones on `shared`, any on `subdomains`. */
+/**
+ * Where the caller may create aliases: random ones on `shared`, any on `subdomains` and on their
+ * verified `custom` domains.
+ */
 const AliasDomains = Schema.Struct({
   shared: Schema.Array(Schema.String),
   subdomains: Schema.Array(Schema.String),
+  custom: Schema.Array(Schema.String),
 });
 
 /** The address is already taken, by the caller or by someone else. */
@@ -63,6 +68,8 @@ export class InvalidAlias extends Schema.TaggedError<InvalidAlias>()(
       "invalid-address",
       "unknown-domain",
       "not-your-subdomain",
+      // One of the caller's custom domains, but not verified (yet, or any more).
+      "domain-not-verified",
       "random-only-on-shared-domain",
       "reserved-local-part",
     ]),

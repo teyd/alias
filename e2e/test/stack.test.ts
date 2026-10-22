@@ -179,8 +179,15 @@ const passing: Verdicts = { spam: "PASS", virus: "PASS", spf: "PASS", dkim: "PAS
 /** What SES will stamp on the next received message; a test sets it before sending. */
 const verdicts = { next: passing };
 
+/** The shared domain's SES identity, which SES receives for and sends from. */
+const sharedIdentity = Layer.effectDiscard(Transport.ensureIdentity("alias.test")).pipe(
+  Layer.provide(aws),
+);
+
+// Like SES, receives for the account's verified domain identities: the shared domain and each
+// custom domain once the API created its identity.
 const ses = SesEmulator.layer({
-  verifiedDomains: ["alias.test"],
+  verifiedDomains: "identities",
   rules: [
     {
       name: "all-verified",
@@ -195,7 +202,7 @@ const ses = SesEmulator.layer({
     },
   ],
   verdicts: () => verdicts.next,
-}).pipe(Layer.provide([aws, spool]));
+}).pipe(Layer.provide([aws, spool, sharedIdentity]));
 
 /** The feedback Lambda on the same table and SES. */
 const feedback = Feedback.layer(Layer.mergeAll(database, sending, webhookQueue));
@@ -1060,6 +1067,97 @@ describe("emulated stack", () => {
           },
         ]);
       }),
+    );
+
+    it.effect(
+      "a custom domain: added, records published, verified, mail forwarded and replied to as the domain",
+      () =>
+        Effect.gen(function* () {
+          const { cookie, mailbox } = yield* owner("cora");
+          const added = yield* call("/v1/domains", { cookie, body: { domain: "Cora.Example" } });
+          expect(added).toMatchObject({
+            status: 201,
+            body: { domain: "cora.example", status: "pending" },
+          });
+          const records = Schema.decodeUnknownSync(
+            Schema.Array(
+              Schema.Struct({
+                type: Schema.Literals(["TXT", "MX", "CNAME"]),
+                name: Schema.String,
+                value: Schema.String,
+                priority: Schema.optionalKey(Schema.Number),
+              }),
+            ),
+          )(added.body.records);
+
+          // SES receives for the new identity at once; the pipeline drops it until verified.
+          const early = yield* smtp({
+            from: "orders@store.example",
+            to: "shop@cora.example",
+            subject: "Too early",
+            text: "Nobody verified this yet.",
+          });
+          expect(yield* invoke(early)).toEqual([{ _tag: "Dropped", reason: "unverified-domain" }]);
+
+          // The owner publishes every record the wizard lists, then asks for a check.
+          const dns = yield* DohServer.DohServer;
+          yield* dns.setZone(
+            "cora.example",
+            Arr.map(records, (record) => ({
+              name: record.name,
+              type: record.type,
+              data:
+                record.type === "MX" ? `${record.priority ?? 10} ${record.value}` : record.value,
+            })),
+          );
+          const checked = yield* call("/v1/domains/cora.example/check", { cookie, body: {} });
+          expect(checked).toMatchObject({ status: 200, body: { status: "verified" } });
+          const states = Schema.decodeUnknownSync(
+            Schema.Struct({ records: Schema.Array(Schema.Struct({ state: Schema.String })) }),
+          )(checked.body);
+          expect(Arr.dedupe(Arr.map(states.records, (record) => record.state))).toEqual(["ok"]);
+
+          const created = yield* call("/v1/aliases", {
+            cookie,
+            body: { _tag: "Address", address: "shop@cora.example", mode: "forward" },
+          });
+          expect(created.status).toBe(201);
+
+          const event = yield* smtp({
+            from: '"Store" <orders@store.example>',
+            to: "shop@cora.example",
+            subject: "Your order",
+            text: "Shipped.",
+          });
+          expect(yield* invoke(event)).toEqual([{ _tag: "Forwarded" }]);
+          const forwarded = Arr.last(yield* sentTo(mailbox));
+          const reverse = Option.getOrElse(
+            Option.map(forwarded, (email) => email.from),
+            () => "",
+          );
+          expect(reverse).toMatch(/^shop\+r\.[a-z2-7]+@cora\.example$/);
+          expect(Option.flatMap(forwarded, (email) => field(email.text, "subject"))).toEqual(
+            Option.some("Your order"),
+          );
+
+          const reply = yield* smtp({
+            from: mailbox,
+            to: reverse,
+            subject: "Re: Your order",
+            text: "Thanks!",
+          });
+          expect(yield* invoke(reply)).toEqual([{ _tag: "Replied" }]);
+          const replied = Arr.last(yield* sentTo("orders@store.example"));
+          expect(Option.map(replied, (email) => email.from)).toEqual(
+            Option.some("shop@cora.example"),
+          );
+          expect(Option.flatMap(replied, (email) => field(email.text, "from"))).toEqual(
+            Option.some("shop@cora.example"),
+          );
+          expect(Option.map(replied, (email) => email.text.includes(mailbox))).toEqual(
+            Option.some(false),
+          );
+        }),
     );
   });
 });

@@ -269,22 +269,19 @@ export default Alchemy.Stack(
     // deny keeps both Lambdas from touching the shared domains' identities (Get stays allowed).
     yield* api.bind("DomainIdentities", { policyStatements: domainIdentityStatements });
 
-    // What `Transport.ses` (`@alias/aws`) needs: SESv2 `SendEmail` with raw content, from the shared
-    // domains only. Both actions, as Alchemy's own `SES.SendEmail` binding grants for raw sends.
-    // Forwarded mail goes out from `alias+r.<token>@<user>.<shared domain>`: SES lets the shared
-    // domain's identity cover its subdomains, and the wildcard covers subdomain identities should
-    // one ever be created on its own. Custom domains (phase 5) add their identity ARNs.
-    const sendFromSharedDomains = {
+    // What `Transport.ses` (`@alias/aws`) needs: SESv2 `SendEmail` with raw content. Both actions,
+    // as Alchemy's own `SES.SendEmail` binding grants for raw sends. Forwarded mail and replies go
+    // out from aliases on the shared domains, users' subdomains (covered by the shared domain's
+    // identity) and verified custom domains (PLAN.md §20.18.2). Custom identities are created at
+    // run time, so the resource is every identity of this account: all of them are the service's
+    // own, SES refuses unverified ones, and the pipeline sends only from aliases on a domain that
+    // is verified and owned by the alias's owner. IAM can't narrow it further without naming the
+    // domains (identity tags would need SendEmail to support `aws:ResourceTag`, unverified).
+    const sendFromAliasDomains = {
       Effect: "Allow" as const,
-      Sid: "SendFromSharedDomains",
+      Sid: "SendFromAliasDomains",
       Action: ["ses:SendEmail", "ses:SendRawEmail"],
-      Resource: [
-        ...sharedDomains.flatMap((domain) => [
-          `arn:aws:ses:eu-west-1:${accountId}:identity/${domain}`,
-          `arn:aws:ses:eu-west-1:${accountId}:identity/*.${domain}`,
-        ]),
-        configurationSetArn,
-      ],
+      Resource: [identityArn("*"), configurationSetArn],
     };
 
     // The image proxy (`apps/image-proxy`, PLAN.md §20.19): its own function and role, because it
@@ -411,7 +408,7 @@ export default Alchemy.Stack(
         { Effect: "Allow", Action: ["s3:ListBucket"], Resource: `arn:aws:s3:::${spoolBucketName}` },
       ],
     });
-    yield* inbound.bind("SendMail", { policyStatements: [sendFromSharedDomains] });
+    yield* inbound.bind("SendMail", { policyStatements: [sendFromAliasDomains] });
     yield* inbound.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
     // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
     // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of

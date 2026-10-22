@@ -8,7 +8,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Policy from "../src/Policy.ts";
-import { route } from "../src/Route.ts";
+import { Route, route } from "../src/Route.ts";
 
 const shared = ["alias.test", "alias2.test"];
 
@@ -96,13 +96,37 @@ describe("route", () => {
     }),
   );
 
-  it.effect.each<readonly [string, string]>([
-    ["not an address", "invalid-address"],
-    ["shop@custom.example", "custom-domain"],
-    ["shop@deep.user1.alias.test", "custom-domain"],
-  ])("leaves %j unroutable (%s)", ([address, reason]) =>
+  it.effect("leaves an invalid address unroutable", () =>
     Effect.gen(function* () {
-      expect(yield* route(address, shared)).toMatchObject({ _tag: "Unroutable", reason });
+      expect(yield* route("not an address", shared)).toMatchObject({
+        _tag: "Unroutable",
+        reason: "invalid-address",
+      });
+    }),
+  );
+
+  it.effect("routes any other domain as a custom domain, forward and reply", () =>
+    Effect.gen(function* () {
+      expect(yield* route("Shop@Custom.Example", shared)).toEqual(
+        Route.Forward({
+          alias: { local: "shop", domain: "custom.example" },
+          username: Option.none(),
+          isCustomDomain: true,
+        }),
+      );
+      expect(yield* route("shop+r.abc234@custom.example", shared)).toEqual(
+        Route.Reply({
+          alias: { local: "shop", domain: "custom.example" },
+          token: "abc234",
+          isCustomDomain: true,
+        }),
+      );
+      // Deeper than a user subdomain: not ours, so it can only be someone's custom domain.
+      expect(yield* route("shop@deep.user1.alias.test", shared)).toMatchObject({
+        _tag: "Forward",
+        isCustomDomain: true,
+      });
+      expect(yield* route("shop@alias.test", shared)).toMatchObject({ isCustomDomain: false });
     }),
   );
 });

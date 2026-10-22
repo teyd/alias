@@ -27,6 +27,15 @@ const spoolPrefix = "inbound/";
 /** Fixed names, so policies can name the receipt rule before it exists (`receiptRuleArn`). */
 const receiptRuleSetName = `alias-inbound-${stage}`;
 const receiptRuleName = "all-verified";
+/** Fixed names, so the alarms and the topic policy can name each other as plain strings. */
+const alertTopicName = `alias-alerts-${stage}`;
+const alarmPrefix = `alias-${stage}-ses-`;
+/**
+ * Who gets the SES reputation alarms (PLAN.md §20.13). Optional: without it the topic and alarms
+ * still exist (alarm state and history show in CloudWatch), but nobody is mailed. SNS sends a
+ * confirmation mail first, and nothing is delivered until the link in it is followed.
+ */
+const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
 
 /**
  * Reverse-alias signing keys for the inbound Lambda: `<version>:<base64url secret>` entries, the
@@ -294,6 +303,69 @@ export default Alchemy.Stack(
       AWS.SES.EmailIdentity(`Shared-${domain}`, {
         emailIdentity: domain,
         feedbackForwardingEnabled: false,
+      }),
+    );
+
+    // SES reputation alarms (PLAN.md §20.13). SES reviews the account at a 5% bounce or 0.1%
+    // complaint rate and may pause sending at 10% / 0.5%; these warn at half the review level and
+    // again at 80% of it. Account-level metrics: every send goes through the one configuration
+    // set, so per-set metrics would repeat them. CloudWatch publishes to the topic only for alarms
+    // of this stack in this account (the confused-deputy policy from the CloudWatch docs).
+    const alertTopicArn = `arn:aws:sns:eu-west-1:${accountId}:${alertTopicName}`;
+    const alertTopic = yield* AWS.SNS.Topic("Alerts", {
+      topicName: alertTopicName,
+      attributes: {
+        Policy: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Sid: "AllowReputationAlarms",
+              Effect: "Allow",
+              Principal: { Service: "cloudwatch.amazonaws.com" },
+              Action: "SNS:Publish",
+              Resource: alertTopicArn,
+              Condition: {
+                ArnLike: {
+                  "aws:SourceArn": `arn:aws:cloudwatch:eu-west-1:${accountId}:alarm:${alarmPrefix}*`,
+                },
+                StringEquals: { "aws:SourceAccount": accountId },
+              },
+            },
+          ],
+        }),
+      },
+    });
+    if (alertEmail !== undefined) {
+      yield* AWS.SNS.Subscription("AlertEmail", {
+        topicArn: alertTopic.topicArn,
+        protocol: "email",
+        endpoint: alertEmail,
+      });
+    }
+    const reputationAlarms = [
+      { name: "bounce-warning", metric: "Reputation.BounceRate", threshold: 0.025 },
+      { name: "bounce-critical", metric: "Reputation.BounceRate", threshold: 0.04 },
+      { name: "complaint-warning", metric: "Reputation.ComplaintRate", threshold: 0.0005 },
+      { name: "complaint-critical", metric: "Reputation.ComplaintRate", threshold: 0.0008 },
+    ] as const;
+    yield* Effect.forEach(reputationAlarms, (alarm) =>
+      AWS.CloudWatch.Alarm(`Ses-${alarm.name}`, {
+        name: `${alarmPrefix}${alarm.name}`,
+        AlarmDescription: `SES ${alarm.metric} >= ${alarm.threshold * 100}%. Runbook: PLAN.md §20.13.`,
+        Namespace: "AWS/SES",
+        MetricName: alarm.metric,
+        // The rate is SES's own running figure over a representative volume, not a count: the
+        // highest value in an hour is the current rate, and one datapoint is enough.
+        Statistic: "Maximum",
+        Period: 3600,
+        EvaluationPeriods: 1,
+        Threshold: alarm.threshold,
+        ComparisonOperator: "GreaterThanOrEqualToThreshold",
+        // No sends, no datapoint: keep the last state, as the SES docs recommend.
+        TreatMissingData: "ignore",
+        // The topic's Output, not the built ARN: the alarms wait for the topic and its policy.
+        AlarmActions: [alertTopic.topicArn],
+        OKActions: [alertTopic.topicArn],
       }),
     );
 

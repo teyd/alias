@@ -256,7 +256,33 @@ describe("Policy.rejectReply", () => {
   );
 });
 
-const person: Mail.Signals = { forwardedBy: [], hops: 3, isAutomated: false, isReport: false };
+describe("Policy.rejectAmbiguousSender", () => {
+  const ada = Option.some("ada@mail.example");
+  const withFrom = (...from: ReadonlyArray<string>): Mail.Signals => ({ ...person, from });
+
+  it("accepts one From field of one mailbox, the one SES listed", () => {
+    expect(Policy.rejectAmbiguousSender(withFrom('"Ada, L." <Ada@Mail.example>'), ada)).toEqual(
+      Option.none(),
+    );
+  });
+
+  it.each([
+    ["two From fields", withFrom("ada@mail.example", "mallory@evil.example")],
+    ["two mailboxes in one", withFrom("ada@mail.example, mallory@evil.example")],
+    ["a mailbox other than SES's", withFrom("mallory@evil.example")],
+    ["no From field", withFrom()],
+  ])("refuses %s", (_, signals) => {
+    expect(Policy.rejectAmbiguousSender(signals, ada)).toEqual(Option.some("foreign-reply-sender"));
+  });
+});
+
+const person: Mail.Signals = {
+  forwardedBy: [],
+  hops: 3,
+  isAutomated: false,
+  isReport: false,
+  from: ["Ada <ada@mail.example>"],
+};
 const automated: Mail.Signals = { ...person, isAutomated: true };
 
 describe("Policy.forwardLoop", () => {

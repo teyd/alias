@@ -79,8 +79,11 @@ export const parseSender = (value: string): Option.Option<Sender> => {
  * - `Authentication-Results`, `Received-SPF`, `X-SES-*`: our inbound SES verdicts for the
  *   original sender. Downstream they would describe a different From, and `X-SES-*` carries SES
  *   receipt internals.
- * - `Disposition-Notification-To`, `Return-Receipt-To`: a read receipt goes straight to that
- *   address from the user's real mailbox, bypassing the alias.
+ * - `Disposition-Notification-To`, `Return-Receipt-To`, `X-Confirm-Reading-To`: a read receipt
+ *   goes straight to that address from the user's real mailbox, bypassing the alias.
+ * - `Mail-Followup-To`, `Mail-Reply-To`, `Errors-To`: clients (Thunderbird, mutt) answer to
+ *   them instead of `Reply-To`, so a sender could make the user's reply skip the reverse alias
+ *   and leave from their real address (PLAN.md §20.25).
  */
 const ALWAYS_REMOVED = HashSet.make(
   "from",
@@ -97,6 +100,10 @@ const ALWAYS_REMOVED = HashSet.make(
   "received-spf",
   "disposition-notification-to",
   "return-receipt-to",
+  "x-confirm-reading-to",
+  "mail-followup-to",
+  "mail-reply-to",
+  "errors-to",
 );
 
 const isAlwaysRemoved = ({ name }: Headers.Field) =>
@@ -156,21 +163,28 @@ const token = (value: string) =>
 /**
  * Replies also lose what identifies the user's own machine and mail client (PLAN.md §3.4), `To`,
  * which held the reverse alias, `Message-ID`, whose domain names the user's mail provider, and
- * our forward marker, which names the alias the contact may not know. `Received` is kept on
- * forwarded mail: it is the sender's trace, not the user's, and hop counting depends on it.
+ * our forward marker, which names the alias the contact may not know. `Autocrypt` and `OpenPGP`
+ * carry the user's real address and key, and `Resent-*` fields the user's mailbox (PLAN.md
+ * §20.25). `Received` is kept on forwarded mail: it is the sender's trace, not the user's, and hop
+ * counting depends on it.
  */
 const REPLY_REMOVED = HashSet.make(
   "received",
   "x-originating-ip",
+  "x-originating-email",
   "user-agent",
   "x-mailer",
   "to",
   "message-id",
+  "autocrypt",
+  "openpgp",
   FORWARD_MARKER.toLowerCase(),
 );
 
 const isReplyRemoved = (field: Headers.Field) =>
-  isAlwaysRemoved(field) || HashSet.has(REPLY_REMOVED, field.name);
+  isAlwaysRemoved(field) ||
+  HashSet.has(REPLY_REMOVED, field.name) ||
+  field.name.startsWith("resent-");
 
 /**
  * Prepares inbound mail for the alias owner. `From` and `Reply-To` become
@@ -323,7 +337,19 @@ export interface Signals {
   readonly isAutomated: boolean;
   /** A report about other mail (RFC 6522 `multipart/report`): delivery status, read receipts. */
   readonly isReport: boolean;
+  /** Every `From` field's value, unfolded: a reply must have exactly one, of one mailbox. */
+  readonly from: ReadonlyArray<string>;
 }
+
+/**
+ * A `From` value naming exactly one mailbox: one `@` and no list separator outside quoted
+ * strings and comments. `From: owner@x, mallory@y` or a second `From` field leave it open which
+ * address SES judged DMARC on, so the reply path refuses them (PLAN.md §20.25).
+ */
+export const isSingleMailbox = (value: string): boolean => {
+  const bare = value.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/\([^()]*\)/g, " ");
+  return !bare.includes(",") && !bare.includes(";") && bare.split("@").length === 2;
+};
 
 const BULK_PRECEDENCE = HashSet.make("bulk", "junk", "list");
 
@@ -339,6 +365,7 @@ export const signals = Effect.fn("Mail.signals")(function* (raw: Uint8Array) {
       Arr.some(tokens("auto-submitted"), (value) => value !== "no") ||
       Arr.some(tokens("precedence"), (value) => HashSet.has(BULK_PRECEDENCE, value)),
     isReport: Arr.some(tokens("content-type"), (value) => value === "multipart/report"),
+    from: Headers.values(message, "from"),
   };
   return result;
 });

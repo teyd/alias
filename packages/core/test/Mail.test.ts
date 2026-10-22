@@ -61,6 +61,25 @@ describe("Mail.forward", () => {
       }),
     );
 
+    it.effect("removes fields that would send the owner's reply around the reverse alias", () =>
+      Effect.gen(function* () {
+        const out = yield* forwardWith(
+          bytes(
+            [
+              "Mail-Followup-To: list@lists.example, someone@else.example",
+              "Mail-Reply-To: someone@else.example",
+              "X-Confirm-Reading-To: tracker@else.example",
+              "Errors-To: bounces@else.example",
+              "Subject: x",
+              "",
+              "body",
+            ].join(eol),
+          ),
+        );
+        expect(names(out)).toEqual(["from", "reply-to", "x-alias-forwarded", "subject"]);
+      }),
+    );
+
     it.effect("removes signatures, verdicts, bounce and receipt addresses", () =>
       Effect.gen(function* () {
         const out = yield* forwardWith(newsletter(eol));
@@ -335,6 +354,27 @@ describe("Mail.reply", () => {
     }),
   );
 
+  it.effect("drops fields that carry the owner's address or key, Resent-* included", () =>
+    Effect.gen(function* () {
+      const raw = Uint8Array.from([
+        ...bytes(
+          [
+            "Autocrypt: addr=jane.doe@gmail.example; keydata=mQINBF",
+            "OpenPGP: id=0123456789ABCDEF; url=https://keys.example/jane",
+            "Resent-From: Jane Doe <jane.doe@gmail.example>",
+            "Resent-Sender: jane.doe@gmail.example",
+            "X-Originating-Email: [jane.doe@gmail.example]",
+            "Mail-Followup-To: jane.doe@gmail.example",
+            "",
+          ].join("\r\n"),
+        ),
+        ...ownerReply("\r\n", reverse),
+      ]);
+      const out = yield* Mail.reply(raw, { alias, to: contact, messageId, owner });
+      expect(binary(out)).not.toMatch(/jane\.doe|autocrypt|openpgp|resent-|followup/i);
+    }),
+  );
+
   it.effect("drops the forward marker, which names the alias", () =>
     Effect.gen(function* () {
       const forwarded = yield* forwardWith(newsletter("\r\n"));
@@ -533,9 +573,20 @@ describe("Mail.signals", () => {
         hops: 2,
         isAutomated: false,
         isReport: false,
+        from: ['"Jane Doe" <jane.doe@gmail.example>'],
       });
     }),
   );
+
+  it("tells a From of one mailbox from a list", () => {
+    expect(Mail.isSingleMailbox('"Doe, Jane (home)" <jane@mail.example>')).toBe(true);
+    expect(Mail.isSingleMailbox("jane@mail.example (Jane, at home)")).toBe(true);
+    expect(Mail.isSingleMailbox("=?UTF-8?Q?Jane?= <jane@mail.example>")).toBe(true);
+    expect(Mail.isSingleMailbox("jane@mail.example, mallory@evil.example")).toBe(false);
+    expect(Mail.isSingleMailbox('"x" <jane@mail.example>, <mallory@evil.example>')).toBe(false);
+    expect(Mail.isSingleMailbox("friends: jane@mail.example;")).toBe(false);
+    expect(Mail.isSingleMailbox("jane@mail.example@evil.example")).toBe(false);
+  });
 
   it.effect("counts Received hops and lists the aliases that forwarded the message", () =>
     Effect.gen(function* () {

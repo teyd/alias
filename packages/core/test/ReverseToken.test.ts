@@ -18,11 +18,6 @@ const key = (version: number, fill: number): Keyring.Key => ({
   secret: Redacted.make(new Uint8Array(32).fill(fill)),
 });
 
-const sender = (address: string): ReverseToken.Subject => ({
-  sender: Option.some(address),
-  contactId: Option.none(),
-});
-
 const alias: Address.MailAddress = { local: "k7m2qx9p", domain: "alias.test" };
 
 /** The tagged error's reason (or tag); fails the test if the effect succeeds. */
@@ -76,14 +71,11 @@ layer(NodeCrypto.layer)((it) => {
         });
         const alias = { local: "shop", domain: "alias.test" };
         const contactId = ids[0] ?? "";
-        const token = yield* ReverseToken.mint(keys, alias, {
-          sender: Option.none(),
-          contactId: Option.some(contactId),
-        });
-        expect(token).toHaveLength(47);
+        const token = yield* ReverseToken.mint(keys, alias, contactId);
+        // 1 header + 1 key version + 16 id + 10 MAC = 28 bytes = 45 base32 characters.
+        expect(token).toHaveLength(45);
         expect(yield* ReverseToken.verify(keys, alias, token)).toEqual({
-          sender: Option.none(),
-          contactId: Option.some(contactId),
+          contactId,
           keyVersion: 1,
         });
       }),
@@ -119,11 +111,13 @@ layer(NodeCrypto.layer)((it) => {
   });
 
   describe("ReverseToken", () => {
-    it.effect("round-trips a sender and fits the inbound address rules", () =>
+    it.effect("round-trips a contact id and fits the inbound address rules", () =>
       Effect.gen(function* () {
         const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
-        const token = yield* ReverseToken.mint(keys, alias, sender("Billing@Shop.example"));
+        const token = yield* ReverseToken.mint(keys, alias, "ct_01jb7");
         expect(token).toMatch(/^[a-z2-7]+$/);
+        // 1 header + 1 key version + 8 id + 10 MAC = 20 bytes = 32 base32 characters.
+        expect(token).toHaveLength(32);
 
         const inbound = yield* Address.parse(
           Address.format(Address.reverseAddress(alias, token)).toUpperCase(),
@@ -134,35 +128,14 @@ layer(NodeCrypto.layer)((it) => {
           { local: split.aliasLocal, domain: inbound.domain },
           split.token,
         );
-        expect(claims).toEqual({
-          keyVersion: 1,
-          sender: Option.some("Billing@Shop.example"),
-          contactId: Option.none(),
-        });
-      }),
-    );
-
-    it.effect("carries a contact id instead of, or next to, the sender", () =>
-      Effect.gen(function* () {
-        const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
-        const contactOnly = { sender: Option.none(), contactId: Option.some("ct_01jb7") };
-        const both = { sender: Option.some("a@b.example"), contactId: Option.some("ct_01jb7") };
-        const short = yield* ReverseToken.mint(keys, alias, contactOnly);
-        expect(yield* ReverseToken.verify(keys, alias, short)).toEqual({
-          ...contactOnly,
-          keyVersion: 1,
-        });
-        const long = yield* ReverseToken.mint(keys, alias, both);
-        expect(yield* ReverseToken.verify(keys, alias, long)).toEqual({ ...both, keyVersion: 1 });
-        // 1 header + 1 key version + 1 length + 8 id + 10 MAC = 21 bytes = 34 base32 characters.
-        expect(short).toHaveLength(34);
+        expect(claims).toEqual({ keyVersion: 1, contactId: "ct_01jb7" });
       }),
     );
 
     it.effect("is bound to the alias it was minted for", () =>
       Effect.gen(function* () {
         const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
-        const token = yield* ReverseToken.mint(keys, alias, sender("a@b.example"));
+        const token = yield* ReverseToken.mint(keys, alias, "c1");
         const otherLocal = yield* failureReason(
           ReverseToken.verify(keys, { ...alias, local: "other" }, token),
         );
@@ -177,14 +150,14 @@ layer(NodeCrypto.layer)((it) => {
     it.effect("keeps verifying retired keys after rotation and rejects removed ones", () =>
       Effect.gen(function* () {
         const before = yield* Keyring.make({ current: key(1, 7), retired: [] });
-        const token = yield* ReverseToken.mint(before, alias, sender("a@b.example"));
+        const token = yield* ReverseToken.mint(before, alias, "c1");
         const rotated = yield* Keyring.make({ current: key(2, 9), retired: [key(1, 7)] });
         expect((yield* ReverseToken.verify(rotated, alias, token)).keyVersion).toBe(1);
         expect(
           (yield* ReverseToken.verify(
             rotated,
             alias,
-            yield* ReverseToken.mint(rotated, alias, sender("a@b.example")),
+            yield* ReverseToken.mint(rotated, alias, "c1"),
           )).keyVersion,
         ).toBe(2);
         const dropped = yield* Keyring.make({ current: key(2, 9), retired: [] });
@@ -202,21 +175,21 @@ layer(NodeCrypto.layer)((it) => {
     it.effect("rejects garbage, truncation and unknown formats", () =>
       Effect.gen(function* () {
         const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
-        const token = yield* ReverseToken.mint(keys, alias, sender("a@b.example"));
+        const token = yield* ReverseToken.mint(keys, alias, "c1");
         const reason = (candidate: string) =>
           failureReason(ReverseToken.verify(keys, alias, candidate));
         const decoded = yield* Effect.fromOption(Base32.decode(token));
         expect(yield* reason("not base32!")).toBe("malformed");
         expect(yield* reason("")).toBe("malformed");
         expect(yield* reason(token.slice(0, 16))).toBe("malformed");
-        // Format version 2, same everything else.
-        const bumped = Base32.encode(
-          Uint8Array.from(decoded, (byte, i) => (i === 0 ? (2 << 4) | (byte & 0x0f) : byte)),
-        );
-        expect(yield* reason(bumped)).toBe("malformed");
-        // A field bit nobody defined yet.
+        // Format version 1 (it could carry a sender; never deployed) or 3, same everything else.
+        const versioned = (version: number) =>
+          Base32.encode(Uint8Array.from(decoded, (byte, i) => (i === 0 ? version << 4 : byte)));
+        expect(yield* reason(versioned(1))).toBe("malformed");
+        expect(yield* reason(versioned(3))).toBe("malformed");
+        // A reserved bit set.
         const extraBit = Base32.encode(
-          Uint8Array.from(decoded, (byte, i) => (i === 0 ? byte | 0b0100 : byte)),
+          Uint8Array.from(decoded, (byte, i) => (i === 0 ? byte | 0b0001 : byte)),
         );
         expect(yield* reason(extraBit)).toBe("malformed");
       }),
@@ -228,7 +201,7 @@ layer(NodeCrypto.layer)((it) => {
       ([seed]) =>
         Effect.gen(function* () {
           const keys = yield* Keyring.make({ current: key(3, 1), retired: [] });
-          const token = yield* ReverseToken.mint(keys, alias, sender("news@letters.example"));
+          const token = yield* ReverseToken.mint(keys, alias, "c1aaaaaaaaaaaaaa");
           const position = seed % token.length;
           const original = token.charAt(position);
           const replacement = "abcdefghijklmnopqrstuvwxyz234567".charAt(
@@ -242,39 +215,39 @@ layer(NodeCrypto.layer)((it) => {
     );
 
     it.effect.prop(
-      "round-trips any short sender address, including non-ASCII",
+      "round-trips any contact id up to 64 bytes, including non-ASCII",
       [
         Arbitrary.schema(
           Schema.String.check(
             Schema.isMinLength(1),
-            Schema.isMaxLength(40),
+            Schema.isMaxLength(16),
             Schema.isPattern(/^[^\p{Surrogate}]*$/u),
           ),
         ),
       ],
-      ([text]) =>
+      ([contactId]) =>
         Effect.gen(function* () {
           const keys = yield* Keyring.make({ current: key(0, 5), retired: [] });
-          const address = `${text}@x.example`;
-          const token = yield* ReverseToken.mint(keys, alias, sender(address));
-          const claims = yield* ReverseToken.verify(keys, alias, token);
-          expect(claims.sender).toEqual(Option.some(address.trim()));
+          const token = yield* ReverseToken.mint(keys, alias, contactId);
+          expect((yield* ReverseToken.verify(keys, alias, token)).contactId).toBe(contactId);
         }),
     );
 
-    it.effect("refuses subjects it cannot encode", () =>
+    it.effect("refuses contact ids it cannot encode", () =>
       Effect.gen(function* () {
         const keys = yield* Keyring.make({ current: key(1, 7), retired: [] });
-        const reason = (subject: ReverseToken.Subject) =>
-          failureReason(ReverseToken.mint(keys, alias, subject));
-        expect(yield* reason({ sender: Option.none(), contactId: Option.none() })).toMatch(/needs/);
-        expect(yield* reason(sender("   "))).toMatch(/empty/);
-        expect(yield* reason(sender("a\ud800@b.example"))).toMatch(/Unicode/);
-        expect(
-          yield* reason({ sender: Option.none(), contactId: Option.some("x".repeat(65)) }),
-        ).toMatch(/contact id/);
+        const reason = (contactId: string) =>
+          failureReason(ReverseToken.mint(keys, alias, contactId));
+        expect(yield* reason("")).toMatch(/contact id/);
+        expect(yield* reason("x".repeat(65))).toMatch(/contact id/);
+        expect(yield* reason("a\ud800")).toMatch(/Unicode/);
         // The reverse address would pass the 254-character address limit.
-        expect(yield* reason(sender(`${"v".repeat(130)}@bounces.example`))).toMatch(/too long/);
+        const longDomain = `${"a".repeat(60)}.${"b".repeat(40)}.test`;
+        expect(
+          yield* failureReason(
+            ReverseToken.mint(keys, { local: "l".repeat(40), domain: longDomain }, "x".repeat(64)),
+          ),
+        ).toMatch(/too long/);
       }),
     );
 

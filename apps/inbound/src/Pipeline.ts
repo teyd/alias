@@ -139,33 +139,18 @@ const contactFor = Effect.fn("Pipeline.contactFor")(function* (
 });
 
 /**
- * Who a verified reverse alias stands for. Tokens name a contact, which must still exist and not
- * be blocked. Tokens minted before contacts existed name the sender's address; they keep
- * working, unless the alias has since blocked a contact with that address.
+ * Who a verified reverse alias stands for: the contact its token names, which must still exist on
+ * this alias and not be blocked.
  */
 const replyTarget = Effect.fn("Pipeline.replyTarget")(function* (
   alias: AliasRepo.Alias,
   claims: ReverseToken.Claims,
 ) {
   const contacts = yield* ContactRepo.ContactRepo;
-  const contact = Option.isSome(claims.contactId)
-    ? yield* contacts.findById(alias.id, claims.contactId.value)
-    : Option.isSome(claims.sender)
-      ? yield* contacts.findByAddress(alias.id, claims.sender.value)
-      : Option.none();
-  if (Option.exists(contact, (found) => found.isBlocked)) {
-    return Result.fail<Policy.DropReason>("blocked-contact");
-  }
-  return Option.match(
-    Option.orElse(
-      Option.map(contact, (found) => found.address),
-      () => claims.sender,
-    ),
-    {
-      onNone: () => Result.fail<Policy.DropReason>("unknown-contact"),
-      onSome: Result.succeed,
-    },
-  );
+  const contact = yield* contacts.findById(alias.id, claims.contactId);
+  if (Option.isNone(contact)) return Result.fail<Policy.DropReason>("unknown-contact");
+  if (contact.value.isBlocked) return Result.fail<Policy.DropReason>("blocked-contact");
+  return Result.succeed(contact.value.address);
 });
 
 const planForward = Effect.fn("Pipeline.planForward")(function* (
@@ -192,10 +177,9 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   const address = aliasAddress(alias);
   // The token names the contact, not the sender: short whatever the address, and revoked with
   // the contact.
-  const token = yield* ReverseToken.mint(yield* ReverseKeys, address, {
-    sender: Option.none(),
-    contactId: Option.some(contact.id),
-  }).pipe(Effect.option);
+  const token = yield* ReverseToken.mint(yield* ReverseKeys, address, contact.id).pipe(
+    Effect.option,
+  );
   if (Option.isNone(token)) return Plan.Drop({ reason: "unencodable-sender" });
   const settings = yield* (yield* UserRepo.UserRepo).settings(alias.userId);
   const protection: Mail.Protection = {

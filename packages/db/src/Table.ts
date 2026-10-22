@@ -31,6 +31,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                            |                           | `expiresAt` |
  * | Token             | `TOKEN#<sha256(secret)>`     | `TOKEN`                | `TOKENS#<userId>`          | `TOKEN#<id>`              | `expiresAt` |
  * | AuthFailures      | `AUTHFAIL#<sha256(ip)>`      | `FAILURES#<hour>`      |                            |                           | `expiresAt` |
+ * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -60,7 +61,9 @@ import { DynamoTable } from "./Dynamo.ts";
  * everything of the user's except tombstones: shared-domain AliasTombstones lose `userId` and
  * their index keys, subdomain ones go entirely, and the Username item becomes a tombstone too
  * (`deletedAt`, no owner), so nobody registers the username or its lookalikes again. gsi1 lists a
- * user's passkeys and sessions for that sweep (`AccountRepo.erase`).
+ * user's passkeys and sessions for that sweep (`AccountRepo.erase`). Its last transaction writes
+ * an Erasure journal item, only a hash of the random user ID, expiring a day after the 7-day
+ * point-in-time recovery window, so erasures can be re-applied after a restore.
  *
  * A Contact is someone who wrote to an alias, keyed by the alias's id (not its address, so an
  * alias recreated at the same address starts without contacts) and the sender's lowercased

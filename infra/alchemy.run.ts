@@ -106,7 +106,13 @@ export default Alchemy.Stack(
         projection: { ProjectionType: "ALL" as const },
       })),
       billingMode: "PAY_PER_REQUEST",
-      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      // 7 days, not the default 35: erased accounts stay restorable only that long. After a
+      // restore, the erasure journal (`AccountRepo`, TTL 8 days) names whose erasure to re-apply
+      // (PLAN.md §20.15).
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true,
+        recoveryPeriod: Duration.days(7),
+      },
       timeToLiveSpecification: { AttributeName: Table.spec.timeToLiveAttribute, Enabled: true },
     });
 

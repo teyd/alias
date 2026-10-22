@@ -417,10 +417,7 @@ layer(NodeCrypto.layer)((it) => {
         current: { version: 1, secret: Redacted.make(new Uint8Array(32).fill(3)) },
         retired: [],
       });
-      const minted = yield* ReverseToken.mint(keys, alias, {
-        sender: Option.some(cafe.address),
-        contactId: Option.none(),
-      });
+      const minted = yield* ReverseToken.mint(keys, alias, "c1aaaaaaaaaaaaaa");
       const forwarded = yield* Mail.forward(newsletter("\r\n"), {
         alias,
         sender: cafe,
@@ -435,7 +432,9 @@ layer(NodeCrypto.layer)((it) => {
       const parts = yield* Effect.fromOption(Address.reverseToken(recipient));
       const aliasAddress = { local: parts.aliasLocal, domain: recipient.domain };
       const claims = yield* ReverseToken.verify(keys, aliasAddress, parts.token);
-      const to = yield* Effect.fromOption(claims.sender);
+      expect(claims.contactId).toBe("c1aaaaaaaaaaaaaa");
+      // The pipeline looks the contact up by that id; here it is the newsletter's sender.
+      const to = cafe.address;
 
       const sent = yield* Mail.reply(ownerReply("\r\n", replyTo), {
         alias: aliasAddress,

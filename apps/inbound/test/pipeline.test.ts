@@ -1,6 +1,6 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { Keyring, ReverseToken, SharedDomains, Username } from "@alias/core";
+import { SharedDomains, Username } from "@alias/core";
 import { AliasRepo, ContactRepo, RecipientRepo, UserRepo, WebhookRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { freshQueue, TestQueue } from "@alias/webhooks/testing";
@@ -901,37 +901,6 @@ describe("inbound pipeline (fakecloud)", () => {
         expect(absurd.outcomes).toEqual([{ _tag: "Dropped", reason: "unencodable-sender" }]);
       }),
     ),
-  );
-
-  it.effect(
-    "keeps verifying reverse aliases minted before contacts, unless the sender is blocked",
-    () =>
-      withPipeline(
-        Effect.gen(function* () {
-          yield* alias();
-          yield* recipient("ada@mail.example");
-          const keyring = yield* Keyring.parse(keys);
-          const legacy = yield* ReverseToken.mint(
-            keyring,
-            { local: "shop", domain: "alias.test" },
-            { sender: Option.some("old@store.example"), contactId: Option.none() },
-          );
-          const reverse = `shop+r.${legacy}@alias.test`;
-
-          expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
-          expect(Arr.last(yield* sent).pipe(Option.map((email) => email.to))).toEqual(
-            Option.some(["old@store.example"]),
-          );
-
-          // The same sender writes again, becomes a contact, and the owner blocks it.
-          yield* forwardFrom("old@store.example");
-          const [contact] = yield* contacts;
-          yield* ContactRepo.ContactRepo.use((repo) =>
-            repo.setBlocked("al_shop", contact?.id ?? "", true),
-          );
-          expect(yield* replyTo(reverse)).toEqual([{ _tag: "Dropped", reason: "blocked-contact" }]);
-        }),
-      ),
   );
 
   it.effect("scrubs every one of the owner's addresses and their name from quoted text", () =>

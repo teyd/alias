@@ -1,5 +1,5 @@
 import type { SesEvent } from "@alias/aws";
-import { Mail } from "@alias/core";
+import { Address, Mail } from "@alias/core";
 import type { AliasRepo, RecipientRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
@@ -37,6 +37,17 @@ export const DropReason = Schema.Literals([
   "malformed-message",
   // SES refused the rewritten message itself; sending it again would fail the same way.
   "rejected",
+  // Mail that already went through this alias, or made more hops than any real path needs.
+  "loop",
+  // Machine-sent mail to a reverse alias (RFC 3834): an out-of-office reply or a read receipt
+  // from the owner's mailbox. The contact only gets what the owner writes.
+  "auto-reply",
+  // A delivery report with an empty envelope sender, sent to a reverse alias.
+  "bounce",
+  // Past the alias's hourly forward cap.
+  "rate-limited",
+  // Bigger than the pipeline loads into memory.
+  "too-large",
 ]);
 export type DropReason = typeof DropReason.Type;
 
@@ -101,4 +112,72 @@ export const rejectReply = (
     Arr.some(verified, (recipient) => recipient.address === address.toLowerCase()),
   );
   return isOwner ? Option.none() : Option.some("foreign-reply-sender");
+};
+
+/**
+ * More `Received` fields than this is a loop. RFC 5321 §6.3 recommends counting them; 50 is
+ * Postfix's `hopcount_limit`. Real mail crosses a handful of hops.
+ */
+export const MAX_HOPS = 50;
+
+/** RFC 5321 §4.5.5: only notifications (bounces and the like) use the null reverse-path `<>`. */
+const isNullSender = (source: string) => source === "" || source === "<>";
+
+const DAEMONS = ["mailer-daemon", "postmaster"];
+
+const fromDaemon = (mail: SesEvent.SesMail) =>
+  Option.exists(sender(mail), ({ address }) =>
+    Arr.contains(DAEMONS, address.slice(0, address.lastIndexOf("@")).toLowerCase()),
+  );
+
+const isOwnerAddress = (
+  recipients: ReadonlyArray<RecipientRepo.Recipient>,
+  address: Option.Option<string>,
+) =>
+  Option.exists(address, (value) =>
+    Arr.some(recipients, (recipient) => recipient.address === value.toLowerCase()),
+  );
+
+/**
+ * Loop detection on the forward path, once the message's header block is read:
+ * - it carries our own forward marker for this alias (`Mail.forward` adds it);
+ * - it made more than {@link MAX_HOPS} hops;
+ * - it is machine-sent (`Auto-Submitted`, `Precedence: bulk|junk|list`) by the owner's own
+ *   mailbox, i.e. an auto-forward or auto-reply rule feeding mail back into the alias.
+ *
+ * Automated mail from anyone else forwards as usual: newsletters and notifications are what
+ * many aliases exist for.
+ */
+export const forwardLoop = (
+  signals: Mail.Signals,
+  alias: Address.MailAddress,
+  mail: SesEvent.SesMail,
+  recipients: ReadonlyArray<RecipientRepo.Recipient>,
+): Option.Option<Extract<DropReason, "loop">> => {
+  const fromOwner =
+    isOwnerAddress(
+      recipients,
+      Option.map(sender(mail), (found) => found.address),
+    ) || isOwnerAddress(recipients, Option.some(mail.source));
+  return Arr.contains(signals.forwardedBy, Address.format(alias)) ||
+    signals.hops > MAX_HOPS ||
+    (signals.isAutomated && fromOwner)
+    ? Option.some("loop")
+    : Option.none();
+};
+
+/**
+ * What a reverse alias refuses before a reply is authenticated: bounces (an empty envelope
+ * sender on a report, an automated message or one from a mailer daemon), then any other
+ * machine-sent mail (RFC 3834 §2: automatic responses must not go to automated mail's sender,
+ * and our contacts should only ever hear from the owner).
+ */
+export const automatedReply = (
+  signals: Mail.Signals,
+  mail: SesEvent.SesMail,
+): Option.Option<Extract<DropReason, "bounce" | "auto-reply">> => {
+  if (isNullSender(mail.source) && (signals.isReport || signals.isAutomated || fromDaemon(mail))) {
+    return Option.some("bounce");
+  }
+  return signals.isAutomated || signals.isReport ? Option.some("auto-reply") : Option.none();
 };

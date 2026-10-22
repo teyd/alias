@@ -57,6 +57,7 @@ describe("Mail.forward", () => {
         expect(names(out)).toEqual([
           "from",
           "reply-to",
+          "x-alias-forwarded",
           "received",
           "to",
           "subject",
@@ -93,6 +94,19 @@ describe("Mail.forward", () => {
       }),
     );
 
+    it.effect("marks the copy with the alias, keeping other aliases' marks", () =>
+      Effect.gen(function* () {
+        const raw = bytes(
+          ["X-Alias-Forwarded: other@alias.test", "Subject: x", "", "body"].join(eol),
+        );
+        const out = yield* forwardWith(raw);
+        expect(values(out, "X-Alias-Forwarded")).toEqual([
+          "k7m2qx9p@alias.test",
+          "other@alias.test",
+        ]);
+      }),
+    );
+
     it.effect("is idempotent: forwarding the output again changes nothing", () =>
       Effect.gen(function* () {
         const once = yield* forwardWith(newsletter(eol));
@@ -118,7 +132,7 @@ describe("Mail.forward", () => {
   it.effect("accepts a message with no body and no blank line", () =>
     Effect.gen(function* () {
       const out = yield* forwardWith(bytes("From: a@b.example\r\nSubject: hi"));
-      expect(names(out)).toEqual(["from", "reply-to", "subject"]);
+      expect(names(out)).toEqual(["from", "reply-to", "x-alias-forwarded", "subject"]);
       expect(binary(out).endsWith("\r\nSubject: hi")).toBe(true);
     }),
   );
@@ -310,6 +324,19 @@ describe("Mail.reply", () => {
     }),
   );
 
+  it.effect("drops the forward marker, which names the alias", () =>
+    Effect.gen(function* () {
+      const forwarded = yield* forwardWith(newsletter("\r\n"));
+      const raw = Uint8Array.from([
+        ...bytes(`X-Alias-Forwarded: ${Address.format(alias)}\r\n`),
+        ...ownerReply("\r\n", reverse),
+      ]);
+      expect(values(forwarded, "X-Alias-Forwarded")).toEqual(["k7m2qx9p@alias.test"]);
+      const out = yield* Mail.reply(raw, { alias, to: contact, messageId });
+      expect(values(out, "X-Alias-Forwarded")).toEqual([]);
+    }),
+  );
+
   it.effect("keeps the body and the threading fields byte for byte", () =>
     Effect.gen(function* () {
       const raw = ownerReply("\n", reverse);
@@ -353,6 +380,65 @@ layer(NodeCrypto.layer)((it) => {
       });
       expect(values(sent, "From")).toEqual(["k7m2qx9p@alias.test"]);
       expect(values(sent, "To")).toEqual(["news@cafe.example"]);
+    }),
+  );
+});
+
+describe("Mail.signals", () => {
+  const signalsOf = (...fields: ReadonlyArray<string>) =>
+    Mail.signals(bytes([...fields, "", "body"].join("\r\n")));
+
+  it.effect("reads nothing special from a person's mail", () =>
+    Effect.gen(function* () {
+      expect(yield* Mail.signals(ownerReply("\r\n", reverse))).toEqual({
+        forwardedBy: [],
+        hops: 2,
+        isAutomated: false,
+        isReport: false,
+      });
+    }),
+  );
+
+  it.effect("counts Received hops and lists the aliases that forwarded the message", () =>
+    Effect.gen(function* () {
+      const forwarded = yield* forwardWith(newsletter("\n"));
+      expect(yield* Mail.signals(forwarded)).toMatchObject({
+        forwardedBy: ["k7m2qx9p@alias.test"],
+        hops: 1,
+      });
+      expect(
+        yield* signalsOf(
+          "X-Alias-Forwarded: Shop@Alias.test",
+          "x-alias-forwarded:\r\n b@alias.test",
+        ),
+      ).toMatchObject({ forwardedBy: ["shop@alias.test", "b@alias.test"] });
+    }),
+  );
+
+  it.effect.each([
+    ["Auto-Submitted: auto-replied", true],
+    ["Auto-Submitted: Auto-Generated; owner-email=x@y.example", true],
+    ["Auto-Submitted: auto-notified (sieve)", true],
+    ["Auto-Submitted: no", false],
+    ["Auto-Submitted: No (a person wrote this)", false],
+    ["Precedence: bulk", true],
+    ["Precedence: Junk", true],
+    ["precedence:\r\n list", true],
+    ["Precedence: first-class", false],
+    ["X-Auto-Response-Suppress: All", false],
+  ] as const)("reads %j as automated: %s", ([field, isAutomated]) =>
+    Effect.gen(function* () {
+      expect((yield* signalsOf("From: a@b.example", field)).isAutomated).toBe(isAutomated);
+    }),
+  );
+
+  it.effect("recognises delivery and disposition reports", () =>
+    Effect.gen(function* () {
+      const report = yield* signalsOf(
+        'Content-Type: multipart/report; report-type=delivery-status;\r\n boundary="b"',
+      );
+      expect(report.isReport).toBe(true);
+      expect((yield* signalsOf("Content-Type: multipart/mixed")).isReport).toBe(false);
     }),
   );
 });

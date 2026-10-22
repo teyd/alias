@@ -1,5 +1,6 @@
 import event from "@alias/aws/fixtures/ses-lambda-event.json" with { type: "json" };
 import { SesEvent } from "@alias/aws";
+import type { Mail } from "@alias/core";
 import type { AliasRepo, RecipientRepo } from "@alias/db";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
@@ -202,6 +203,112 @@ describe("Policy.rejectReply", () => {
       );
       expect(Policy.rejectReply(receipt, Option.none(), owner)).toEqual(
         Option.some("foreign-reply-sender"),
+      );
+    }),
+  );
+});
+
+const person: Mail.Signals = { forwardedBy: [], hops: 3, isAutomated: false, isReport: false };
+const automated: Mail.Signals = { ...person, isAutomated: true };
+
+describe("Policy.forwardLoop", () => {
+  const address = { local: "shop", domain: "alias.test" };
+  const owner = [recipient("ada@mail.example")];
+
+  it.effect("forwards newsletters and other automated mail from anyone but the owner", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      expect(Policy.forwardLoop(automated, address, mail, owner)).toEqual(Option.none());
+      expect(Policy.forwardLoop({ ...automated, isReport: true }, address, mail, owner)).toEqual(
+        Option.none(),
+      );
+    }),
+  );
+
+  it.effect("catches mail this alias already forwarded, but not other aliases' copies", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      const marked = (forwardedBy: ReadonlyArray<string>) =>
+        Policy.forwardLoop({ ...person, forwardedBy }, address, mail, owner);
+      expect(marked(["news@alias.test", "shop@alias.test"])).toEqual(Option.some("loop"));
+      expect(marked(["shop@user1.alias.test", "news@alias.test"])).toEqual(Option.none());
+    }),
+  );
+
+  it.effect("catches mail with more than the hop limit of Received fields", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      const hops = (count: number) =>
+        Policy.forwardLoop({ ...person, hops: count }, address, mail, owner);
+      expect(hops(Policy.MAX_HOPS)).toEqual(Option.none());
+      expect(hops(Policy.MAX_HOPS + 1)).toEqual(Option.some("loop"));
+    }),
+  );
+
+  it.effect("catches the owner's own mailbox auto-forwarding or auto-replying into the alias", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      const fromOwner = { ...mail, commonHeaders: { from: ["Ada <ADA@mail.example>"] } };
+      const envelopeOwner = { ...mail, source: "ada@mail.example" };
+      expect(Policy.forwardLoop(automated, address, fromOwner, owner)).toEqual(Option.some("loop"));
+      expect(Policy.forwardLoop(automated, address, envelopeOwner, owner)).toEqual(
+        Option.some("loop"),
+      );
+      // The owner writing to their own alias by hand is not a loop.
+      expect(Policy.forwardLoop(person, address, fromOwner, owner)).toEqual(Option.none());
+    }),
+  );
+});
+
+describe("Policy.automatedReply", () => {
+  const withSender = (mail: SesEvent.SesMail, source: string, from: string): SesEvent.SesMail => ({
+    ...mail,
+    source,
+    commonHeaders: { from: [from] },
+  });
+
+  it.effect("passes a reply a person wrote", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      expect(
+        Policy.automatedReply(person, withSender(mail, "ada@mail.example", "ada@mail.example")),
+      ).toEqual(Option.none());
+    }),
+  );
+
+  it.effect.each<readonly [string, Mail.Signals, string]>([
+    ["a delivery report", { ...person, isReport: true }, "dsn@relay.example"],
+    ["automated mail", automated, "notify@relay.example"],
+    ["mail from a mailer daemon", person, "MAILER-DAEMON@relay.example"],
+    ["mail from a postmaster", person, "Mail System <postmaster@relay.example>"],
+  ])("drops %s with an empty envelope sender as a bounce", ([, signals, from]) =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      expect(Policy.automatedReply(signals, withSender(mail, "", from))).toEqual(
+        Option.some("bounce"),
+      );
+      expect(Policy.automatedReply(signals, withSender(mail, "<>", from))).toEqual(
+        Option.some("bounce"),
+      );
+    }),
+  );
+
+  it.effect("drops out-of-office replies and read receipts from the owner's mailbox", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      const owner = withSender(mail, "ada@mail.example", "Ada <ada@mail.example>");
+      expect(Policy.automatedReply(automated, owner)).toEqual(Option.some("auto-reply"));
+      expect(Policy.automatedReply({ ...person, isReport: true }, owner)).toEqual(
+        Option.some("auto-reply"),
+      );
+    }),
+  );
+
+  it.effect("leaves a null-sender message that shows no sign of a bounce to authentication", () =>
+    Effect.gen(function* () {
+      const { mail } = yield* documented;
+      expect(Policy.automatedReply(person, withSender(mail, "", "ada@mail.example"))).toEqual(
+        Option.none(),
       );
     }),
   );

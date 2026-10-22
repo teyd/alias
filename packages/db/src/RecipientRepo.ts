@@ -2,7 +2,6 @@ import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -14,6 +13,7 @@ import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Item from "./Item.ts";
+import * as Quota from "./Quota.ts";
 import { conditionFailedAt } from "./Transaction.ts";
 
 /** A real mailbox the user's alias mail is forwarded to (a forwarding address). */
@@ -406,31 +406,14 @@ const make = Effect.fn("RecipientRepo.make")(function* () {
       ),
 
     reserveMail: Effect.fn("RecipientRepo.reserveMail")(function* (userId, now, maxPerDay) {
-      const day = DateTime.startOf(now, "day");
-      const resetsAt = DateTime.addDuration(day, Duration.days(1));
-      const expiresAt = yield* Schema.encodeEffect(Attribute.EpochSeconds)(
-        DateTime.addDuration(resetsAt, Duration.days(1)),
-      ).pipe(Effect.mapError(databaseError("EncodeMailQuota")));
-      yield* DynamoDB.updateItem({
-        TableName,
-        Key: mailQuotaKey(userId, DateTime.formatIsoDateUtc(day)),
-        UpdateExpression: "SET #sent = if_not_exists(#sent, :zero) + :one, expiresAt = :expiresAt",
-        ConditionExpression: "attribute_not_exists(#sent) OR #sent < :max",
-        ExpressionAttributeNames: { "#sent": "sent" },
-        ExpressionAttributeValues: {
-          ":zero": { N: "0" },
-          ":one": { N: "1" },
-          ":max": { N: String(maxPerDay) },
-          ":expiresAt": expiresAt,
-        },
-      }).pipe(
-        Effect.mapError((error) =>
-          P.isTagged(error, "ConditionalCheckFailedException")
-            ? new MailQuotaExceeded({ resetsAt })
-            : databaseError("UpdateItem")(error),
-        ),
-        Effect.provide(client),
-      );
+      const day = Quota.window(now, "day");
+      const isReserved = yield* Quota.reserve(
+        table,
+        mailQuotaKey(userId, day.label),
+        day,
+        maxPerDay,
+      ).pipe(Effect.provide(client));
+      if (!isReserved) return yield* new MailQuotaExceeded({ resetsAt: day.end });
     }),
   });
 });

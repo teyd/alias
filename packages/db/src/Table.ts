@@ -13,6 +13,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Item              | pk                           | sk                     | gsi1pk          | gsi1sk                   | TTL         |
  * | ----------------- | ---------------------------- | ---------------------- | --------------- | ------------------------ | ----------- |
  * | Alias             | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |             |
+ * | ForwardQuota      | `ALIAS#<domain>#<localPart>` | `FORWARDS#<hour>`      |                 |                          | `expiresAt` |
  * | User              | `USER#<userId>`              | `USER`                 |                 |                          |             |
  * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                 |                          |             |
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                 |                          |             |
@@ -37,6 +38,11 @@ import { DynamoTable } from "./Dynamo.ts";
  * RecipientSettings counts pending recipients (changed in the same transaction as the recipient,
  * so the cap is atomic) and names the default recipient. MailQuota counts confirmation mails per
  * user and UTC day.
+ *
+ * A ForwardQuota counts the mail the inbound Lambda forwarded for an alias in one UTC hour
+ * (`2026-10-22T09`), next to the alias in its partition; the hourly cap is one conditional
+ * UpdateItem on it. It outlives its hour by an hour and is never read after, so a deleted alias
+ * leaves nothing behind for long. MailQuota works the same way (`Quota.ts`).
  *
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing

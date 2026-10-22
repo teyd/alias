@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import { Pipeline, ReverseKeys, Spool } from "../src/index.ts";
+import { Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
 /**
  * The pipeline as the Lambda runs it, on one fakecloud: the real repositories on a fresh table,
@@ -26,27 +26,30 @@ const aws = Layer.unwrap(
   Effect.map(Effect.service(FakeCloud.FakeCloud), ({ url }) => AwsClient.emulator(url)),
 );
 
-const pipeline = Layer.unwrap(
-  Effect.sync(() =>
-    Pipeline.layer(
-      Layer.mergeAll(
-        freshTable(),
-        Transport.ses.pipe(Layer.provide(aws)),
-        Spool.layer(bucket).pipe(Layer.provide(aws)),
-        SharedDomains.layer("alias.test"),
-        ReverseKeys.layer(keys),
+const pipeline = (limits?: Limits.Limits["Service"]) =>
+  Layer.unwrap(
+    Effect.sync(() =>
+      Pipeline.layer(
+        Layer.mergeAll(
+          freshTable(),
+          Transport.ses.pipe(Layer.provide(aws)),
+          Spool.layer(bucket).pipe(Layer.provide(aws)),
+          SharedDomains.layer("alias.test"),
+          ReverseKeys.layer(keys),
+        ),
+        limits,
       ),
     ),
-  ),
-);
+  );
 
 /** Each test gets its own fakecloud, so sent mail and the spool start empty. */
 const withPipeline = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    Layer.Success<typeof pipeline> | AwsClient.AwsClient | FakeCloud.FakeCloud
+    Layer.Success<ReturnType<typeof pipeline>> | AwsClient.AwsClient | FakeCloud.FakeCloud
   >,
+  limits?: Limits.Limits["Service"],
 ) =>
   Effect.gen(function* () {
     yield* Inbound.ensureSpool(bucket);
@@ -57,7 +60,9 @@ const withPipeline = <A, E>(
     });
     return yield* effect;
   }).pipe(
-    Effect.provide(Layer.mergeAll(pipeline, aws).pipe(Layer.provideMerge(FakeCloud.layer()))),
+    Effect.provide(
+      Layer.mergeAll(pipeline(limits), aws).pipe(Layer.provideMerge(FakeCloud.layer())),
+    ),
   );
 
 let messages = 0;
@@ -69,7 +74,9 @@ interface Received {
   readonly from?: string;
   readonly source?: string;
   readonly verdicts?: Partial<Record<"spam" | "virus" | "dkim" | "dmarc", Status>>;
-  readonly raw?: string;
+  /** Extra header fields, on top of the default message. */
+  readonly headers?: ReadonlyArray<string>;
+  readonly raw?: Uint8Array;
 }
 
 /** Stores a message in the spool the way the SES S3 action does and returns its Lambda event. */
@@ -79,21 +86,24 @@ const receive = Effect.fn("receive")(function* (mail: Received) {
   const from = mail.from ?? '"Shop" <shop@store.example>';
   const raw =
     mail.raw ??
-    [
-      "Return-Path: <bounce@store.example>",
-      "Authentication-Results: amazonses.com; spf=pass; dkim=pass; dmarc=pass",
-      `From: ${from}`,
-      `To: ${mail.recipients.join(", ")}`,
-      "Subject: Order confirmed",
-      "Message-ID: <order-1@store.example>",
-      "",
-      "Thanks for your order!",
-      "",
-    ].join("\r\n");
+    new TextEncoder().encode(
+      [
+        "Return-Path: <bounce@store.example>",
+        "Authentication-Results: amazonses.com; spf=pass; dkim=pass; dmarc=pass",
+        ...(mail.headers ?? []),
+        `From: ${from}`,
+        `To: ${mail.recipients.join(", ")}`,
+        "Subject: Order confirmed",
+        "Message-ID: <order-1@store.example>",
+        "",
+        "Thanks for your order!",
+        "",
+      ].join("\r\n"),
+    );
   yield* S3.putObject({
     Bucket: bucket,
     Key: Inbound.objectKey(Inbound.spoolPrefix, messageId),
-    Body: new TextEncoder().encode(raw),
+    Body: raw,
   });
   const verdict = (name: "spam" | "virus" | "dkim" | "dmarc") => ({
     status: mail.verdicts?.[name] ?? "PASS",
@@ -356,6 +366,147 @@ describe("inbound pipeline (fakecloud)", () => {
         expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
         expect(yield* sent).toHaveLength(1);
         expect(yield* spoolHolds(messageId)).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("forwards newsletters: Precedence and Auto-Submitted alone drop nothing", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const { event } = yield* receive({
+          recipients: ["shop@alias.test"],
+          headers: ["Precedence: bulk", "Auto-Submitted: auto-generated", "List-Id: <news.store>"],
+        });
+
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+      }),
+    ),
+  );
+
+  it.effect("drops a forwarded copy that comes back to the alias, and counts it as blocked", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* Pipeline.handle((yield* receive({ recipients: ["shop@alias.test"] })).event);
+        const [copy] = yield* sent;
+        expect(header(text(copy?.raw ?? Option.none()), "X-Alias-Forwarded")).toEqual(
+          Option.some("shop@alias.test"),
+        );
+
+        // The owner's mailbox redirects it to the alias again, headers and all.
+        const looped = yield* receive({
+          recipients: ["shop@alias.test"],
+          raw: Option.getOrElse(copy?.raw ?? Option.none(), () => new Uint8Array()),
+        });
+        expect(yield* Pipeline.handle(looped.event)).toEqual([{ _tag: "Dropped", reason: "loop" }]);
+        expect(yield* sent).toHaveLength(1);
+        expect(yield* counters).toEqual(Option.some([1, 1]));
+        expect(yield* spoolHolds(looped.messageId)).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("drops mail that made more hops than the limit", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const hops = (count: number) =>
+          Arr.makeBy(
+            count,
+            (i) => `Received: from hop${i}.relay.example by hop${i + 1}.relay.example`,
+          );
+        const within = yield* receive({ recipients: ["shop@alias.test"], headers: hops(50) });
+        const beyond = yield* receive({ recipients: ["shop@alias.test"], headers: hops(51) });
+
+        expect(yield* Pipeline.handle(within.event)).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* Pipeline.handle(beyond.event)).toEqual([{ _tag: "Dropped", reason: "loop" }]);
+      }),
+    ),
+  );
+
+  it.effect("caps forwards per alias and hour, counting the rest as blocked", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* alias({ id: "al_news", localPart: "news" });
+        yield* recipient("ada@mail.example");
+        const outcomes = yield* Effect.forEach(
+          ["shop@alias.test", "shop@alias.test", "shop@alias.test", "news@alias.test"],
+          (address) =>
+            Effect.flatMap(receive({ recipients: [address] }), ({ event }) =>
+              Pipeline.handle(event),
+            ),
+          { concurrency: 1 },
+        );
+
+        expect(Arr.flatten(outcomes)).toEqual([
+          { _tag: "Forwarded" },
+          { _tag: "Forwarded" },
+          { _tag: "Dropped", reason: "rate-limited" },
+          { _tag: "Forwarded" },
+        ]);
+        expect(yield* sent).toHaveLength(3);
+        expect(yield* counters).toEqual(Option.some([2, 1]));
+      }),
+      { ...Limits.defaults, forwardsPerHour: 2 },
+    ),
+  );
+
+  it.effect("drops oversized mail before reading it, and counts it as blocked", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const small = yield* receive({ recipients: ["shop@alias.test"] });
+        const large = yield* receive({
+          recipients: ["shop@alias.test"],
+          raw: new TextEncoder().encode(`From: shop@store.example\r\n\r\n${"x".repeat(2_000)}`),
+        });
+
+        expect(yield* Pipeline.handle(small.event)).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* Pipeline.handle(large.event)).toEqual([
+          { _tag: "Dropped", reason: "too-large" },
+        ]);
+        expect(yield* counters).toEqual(Option.some([1, 1]));
+        expect(yield* spoolHolds(large.messageId)).toBe(false);
+      }),
+      { ...Limits.defaults, maxMessageBytes: 1_000 },
+    ),
+  );
+
+  it.effect("drops auto-replies and bounces sent to a reverse alias", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* Pipeline.handle((yield* receive({ recipients: ["shop@alias.test"] })).event);
+        const reverse = (yield* sent)[0]?.from ?? "";
+
+        const outOfOffice = yield* receive({
+          from: "ada@mail.example",
+          source: "ada@mail.example",
+          recipients: [reverse],
+          headers: ["Auto-Submitted: auto-replied"],
+        });
+        const bounce = yield* receive({
+          from: "MAILER-DAEMON@mail.example",
+          source: "",
+          recipients: [reverse],
+          headers: ['Content-Type: multipart/report; report-type=delivery-status; boundary="b"'],
+        });
+        expect(yield* Pipeline.handle(outOfOffice.event)).toEqual([
+          { _tag: "Dropped", reason: "auto-reply" },
+        ]);
+        expect(yield* Pipeline.handle(bounce.event)).toEqual([
+          { _tag: "Dropped", reason: "bounce" },
+        ]);
+        expect(yield* sent).toHaveLength(1);
+        // Only the alias's own mail is counted; refused replies never were.
+        expect(yield* counters).toEqual(Option.some([1, 0]));
       }),
     ),
   );

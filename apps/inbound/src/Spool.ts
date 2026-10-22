@@ -8,6 +8,10 @@ import * as Layer from "effect/Layer";
 export class Spool extends Context.Service<
   Spool,
   {
+    /** The stored message's size in bytes, without reading it. */
+    readonly size: (
+      messageId: string,
+    ) => Effect.Effect<number, Inbound.MessageGone | Inbound.SpoolError>;
     readonly read: (
       messageId: string,
     ) => Effect.Effect<Uint8Array, Inbound.MessageGone | Inbound.SpoolError>;
@@ -18,6 +22,7 @@ export class Spool extends Context.Service<
 const make = Effect.fn("Spool.make")(function* (bucket: string) {
   const client = yield* Effect.context<AwsClient.AwsClient>();
   return Spool.of({
+    size: (messageId) => Inbound.messageSize(bucket, messageId).pipe(Effect.provide(client)),
     read: (messageId) => Inbound.readMessage(bucket, messageId).pipe(Effect.provide(client)),
     delete: (messageId) => Inbound.deleteMessage(bucket, messageId).pipe(Effect.provide(client)),
   });

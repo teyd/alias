@@ -1,6 +1,6 @@
 import { type Inbound, type SesEvent, Transport } from "@alias/aws";
 import { Address, Mail, ReverseToken, SharedDomains } from "@alias/core";
-import { AliasRepo, DeliveryRepo, type Dynamo, RecipientRepo } from "@alias/db";
+import { AliasRepo, type DatabaseError, DeliveryRepo, type Dynamo, RecipientRepo } from "@alias/db";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Limits from "./Limits.ts";
 import * as Policy from "./Policy.ts";
 import { ReverseKeys } from "./ReverseKeys.ts";
 import { Route, route } from "./Route.ts";
@@ -52,6 +53,11 @@ type Record = SesEvent.SesEvent["Records"][number];
 interface Send {
   readonly kind: "forward" | "reply";
   readonly alias: AliasRepo.Alias;
+  /**
+   * The checks that need the message's header block (loops, auto-replies, bounces) or spend an
+   * allowance, run once it is read. None means send it.
+   */
+  readonly admit: (signals: Mail.Signals) => Effect.Effect<Option.Option<Refusal>, DatabaseError>;
   readonly rewrite: (raw: Uint8Array) => ReturnType<typeof Mail.reply>;
   readonly envelope: Transport.Envelope;
 }
@@ -63,6 +69,13 @@ type Plan = Data.TaggedEnum<{
   Drop: { readonly reason: Policy.DropReason };
 }>;
 const Plan = Data.taggedEnum<Plan>();
+type Refusal = Exclude<Plan, { readonly _tag: "Send" }>;
+
+/** The spooled message, read lazily and at most once per record. */
+interface Spooled {
+  readonly size: Effect.Effect<number, Inbound.MessageGone | Inbound.SpoolError>;
+  readonly raw: Effect.Effect<Uint8Array, Inbound.MessageGone | Inbound.SpoolError>;
+}
 
 /** Claims outlive Lambda's longest retry window (6 hours) by far, and cost nothing to keep. */
 const CLAIM_LIFETIME = Duration.weeks(1);
@@ -88,9 +101,25 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     contactId: Option.none(),
   }).pipe(Effect.option);
   if (Option.isNone(token)) return Plan.Drop({ reason: "unencodable-sender" });
+  const aliases = yield* AliasRepo.AliasRepo;
+  const { forwardsPerHour } = yield* Limits.Limits;
+  const admit = Effect.fn("Pipeline.admitForward")(function* (signals: Mail.Signals) {
+    const loop = Policy.forwardLoop(signals, address, record.ses.mail, recipients);
+    if (Option.isSome(loop)) return Option.some(Plan.Block({ alias, reason: loop.value }));
+    const isReserved = yield* aliases.reserveForward(
+      alias.domain,
+      alias.localPart,
+      yield* DateTime.now,
+      forwardsPerHour,
+    );
+    return isReserved
+      ? Option.none<Refusal>()
+      : Option.some(Plan.Block({ alias, reason: "rate-limited" }));
+  });
   return Plan.Send({
     kind: "forward",
     alias,
+    admit,
     rewrite: (raw) =>
       Mail.forward(raw, { alias: address, sender: sender.value, token: token.value }),
     envelope: {
@@ -116,12 +145,17 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
     Option.flatMap(Mail.parseSender),
     Option.map((sender) => sender.address),
   );
-  const rejected = Policy.rejectReply(record.ses.receipt, from, recipients);
-  if (Option.isSome(rejected)) return Plan.Drop({ reason: rejected.value });
   const messageId = yield* Effect.orDie((yield* Crypto.Crypto).randomUUIDv4());
   return Plan.Send({
     kind: "reply",
     alias,
+    admit: (signals) =>
+      Effect.succeed(
+        Policy.automatedReply(signals, record.ses.mail).pipe(
+          Option.orElse(() => Policy.rejectReply(record.ses.receipt, from, recipients)),
+          Option.map((reason): Refusal => Plan.Drop({ reason })),
+        ),
+      ),
     rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact.value, messageId }),
     envelope: { from: Address.format(address), to: [contact.value] },
   });
@@ -156,36 +190,51 @@ const count = (alias: AliasRepo.Alias, counter: "forwarded" | "blocked") =>
     }),
   );
 
+/** Counts a refusal of mail to an existing alias as blocked; plain drops count nothing. */
+const refuse = (refusal: Refusal): Effect.Effect<Outcome, never, AliasRepo.AliasRepo> =>
+  Plan.$is("Block")(refusal)
+    ? Effect.as(count(refusal.alias, "blocked"), dropped(refusal.reason))
+    : Effect.succeed(dropped(refusal.reason));
+
+/** Size check, read, header checks, rewrite, send: everything after the claim. */
+const send = Effect.fn("Pipeline.send")(function* (planned: Send, message: Spooled) {
+  const { maxMessageBytes } = yield* Limits.Limits;
+  if ((yield* message.size) > maxMessageBytes) {
+    return yield* refuse(Plan.Block({ alias: planned.alias, reason: "too-large" }));
+  }
+  const raw = yield* message.raw;
+  const refused = yield* planned.admit(yield* Mail.signals(raw));
+  if (Option.isSome(refused)) return yield* refuse(refused.value);
+  const rewritten = yield* planned.rewrite(raw);
+  yield* (yield* Transport.Transport).send(rewritten, planned.envelope);
+  if (planned.kind === "reply") return replied;
+  yield* count(planned.alias, "forwarded");
+  return forwarded;
+});
+
 /** Carries out one recipient's plan, at most once per message (see `DeliveryRepo`). */
 const execute = Effect.fn("Pipeline.execute")(function* (
   delivery: DeliveryRepo.Delivery,
   planned: Plan,
-  raw: Effect.Effect<Uint8Array, Inbound.MessageGone | Inbound.SpoolError>,
+  message: Spooled,
 ) {
   if (Plan.$is("Drop")(planned)) return dropped(planned.reason);
   const deliveries = yield* DeliveryRepo.DeliveryRepo;
   const expiresAt = DateTime.addDuration(yield* DateTime.now, CLAIM_LIFETIME);
   if (!(yield* deliveries.claim(delivery, expiresAt))) return duplicate;
-  if (Plan.$is("Block")(planned)) {
-    yield* count(planned.alias, "blocked");
-    return dropped(planned.reason);
-  }
-  const transport = yield* Transport.Transport;
-  const sent = yield* raw.pipe(
-    Effect.flatMap(planned.rewrite),
-    Effect.flatMap((message) => transport.send(message, planned.envelope)),
-    Effect.as(planned.kind === "forward" ? forwarded : replied),
+  if (Plan.$is("Block")(planned)) return yield* refuse(planned);
+  // Temporary failures give the claim back so Lambda's retry can send it.
+  const defer = (code: string) => Effect.as(deliveries.release(delivery), deferred(code));
+  return yield* send(planned, message).pipe(
     Effect.catchTags({
       TransportRejected: () => Effect.succeed(dropped("rejected")),
       MessageGone: () => Effect.succeed(dropped("spool-missing")),
       MalformedMessage: () => Effect.succeed(dropped("malformed-message")),
-      // Temporary: give the claim back so Lambda's retry can send it.
-      TransportRetryable: (error) => Effect.as(deliveries.release(delivery), deferred(error.code)),
-      SpoolError: (error) => Effect.as(deliveries.release(delivery), deferred(error._tag)),
+      TransportRetryable: (error) => defer(error.code),
+      SpoolError: (error) => defer(error._tag),
+      DatabaseError: (error) => defer(error._tag),
     }),
   );
-  if (Outcome.guards.Forwarded(sent)) yield* count(planned.alias, "forwarded");
-  return sent;
 });
 
 const log = (outcome: Outcome) =>
@@ -210,12 +259,15 @@ const processRecord = Effect.fn("Pipeline.processRecord")(
       (recipient) => Effect.map(plan(record, recipient), (planned) => ({ recipient, planned })),
       { concurrency: 4 },
     );
-    // Read at most once, and only if something is sent.
-    const raw = yield* Effect.cached(spool.read(messageId));
+    // Looked at at most once, and only if something may be sent.
+    const message: Spooled = {
+      size: yield* Effect.cached(spool.size(messageId)),
+      raw: yield* Effect.cached(spool.read(messageId)),
+    };
     const outcomes = yield* Effect.forEach(
       plans,
       ({ recipient, planned }) =>
-        execute({ messageId, recipient }, planned, raw).pipe(Effect.tap(log)),
+        execute({ messageId, recipient }, planned, message).pipe(Effect.tap(log)),
       { concurrency: 1 },
     );
     const codes = Arr.map(Arr.filter(outcomes, Outcome.guards.Deferred), ({ code }) => code);
@@ -244,8 +296,18 @@ export type Services =
   | SharedDomains.SharedDomains
   | ReverseKeys;
 
-/** Everything {@link handle} needs, from {@link Services}: real AWS in Lambda, emulators elsewhere. */
-export const layer = <E, R>(services: Layer.Layer<Services, E, R>) =>
-  Layer.mergeAll(AliasRepo.layer, RecipientRepo.layer, DeliveryRepo.layer, NodeCrypto.layer).pipe(
-    Layer.provideMerge(services),
-  );
+/**
+ * Everything {@link handle} needs, from {@link Services}: real AWS in Lambda, emulators elsewhere.
+ * Tests pass lower {@link Limits.Limits}.
+ */
+export const layer = <E, R>(
+  services: Layer.Layer<Services, E, R>,
+  limits: Limits.Limits["Service"] = Limits.defaults,
+) =>
+  Layer.mergeAll(
+    AliasRepo.layer,
+    RecipientRepo.layer,
+    DeliveryRepo.layer,
+    NodeCrypto.layer,
+    Layer.succeed(Limits.Limits, limits),
+  ).pipe(Layer.provideMerge(services));

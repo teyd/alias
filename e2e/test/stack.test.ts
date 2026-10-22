@@ -226,6 +226,22 @@ const smtp = (mail: {
     return yield* SesEvent.decode(json);
   });
 
+/** Sends a raw message over SMTP as-is (a mailbox's redirect rule) and returns its event. */
+const smtpRaw = (mail: { readonly from: string; readonly to: string; readonly raw: string }) =>
+  Effect.gen(function* () {
+    const emulator = yield* SesEmulator.SesEmulator;
+    yield* Effect.tryPromise(() =>
+      createTransport({
+        host: "127.0.0.1",
+        port: emulator.smtpPort,
+        secure: false,
+        ignoreTLS: true,
+      }).sendMail({ envelope: { from: mail.from, to: [mail.to] }, raw: mail.raw }),
+    );
+    const json: unknown = JSON.parse(JSON.stringify(yield* Queue.take(emulator.events)));
+    return yield* SesEvent.decode(json);
+  });
+
 const invoke = Pipeline.handle;
 
 const messageIdOf = (event: SesEvent.SesEvent) => event.Records[0]?.ses.mail.messageId ?? "";
@@ -364,6 +380,48 @@ describe("emulated stack", () => {
           { _tag: "Dropped", reason: "unauthenticated-reply" },
         ]);
 
+        expect(yield* sentTo("news@shop.example")).toEqual([]);
+      }),
+    );
+
+    it.effect("stops a loop through the owner's mailbox and keeps auto-replies from contacts", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const dora = yield* owner("dora");
+        expect(
+          yield* invoke(
+            yield* smtp({
+              from: "news@shop.example",
+              to: dora.alias,
+              subject: "Weekly deals",
+              text: "Deals!",
+              headers: { Precedence: "bulk", "List-Id": "<deals.shop.example>" },
+            }),
+          ),
+        ).toEqual([{ _tag: "Forwarded" }]);
+        const forwarded = (yield* sentTo(dora.mailbox)).at(-1);
+        expect(field(forwarded?.text ?? "", "x-alias-forwarded")).toEqual(Option.some(dora.alias));
+
+        // A redirect rule in the mailbox sends the copy back to the alias, headers and all.
+        const looped = yield* smtpRaw({
+          from: dora.mailbox,
+          to: dora.alias,
+          raw: forwarded?.text ?? "",
+        });
+        expect(yield* invoke(looped)).toEqual([{ _tag: "Dropped", reason: "loop" }]);
+
+        // The mailbox's out-of-office reply to the reverse alias never reaches the shop.
+        const outOfOffice = yield* smtp({
+          from: dora.mailbox,
+          to: forwarded?.from ?? "",
+          subject: "Out of office",
+          text: "I'm away until Monday.",
+          headers: { "Auto-Submitted": "auto-replied" },
+        });
+        expect(yield* invoke(outOfOffice)).toEqual([{ _tag: "Dropped", reason: "auto-reply" }]);
+
+        // The confirmation mail and the one forward; nothing went back to the shop.
+        expect(yield* sentTo(dora.mailbox)).toHaveLength(2);
         expect(yield* sentTo("news@shop.example")).toEqual([]);
       }),
     );

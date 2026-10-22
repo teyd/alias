@@ -166,8 +166,8 @@ export default Alchemy.Stack(
         ALIAS_REVERSE_TOKEN_KEYS: reverseTokenKeys,
       },
     });
-    // Least privilege: aliases and recipients are read by key or one partition Query, counters
-    // and delivery claims are single-item writes. No index, no transactions.
+    // Least privilege: aliases and recipients are read by key or one partition Query; counters,
+    // forward quotas and delivery claims are single-item writes. No index, no transactions.
     yield* inbound.bind("DataAccess", {
       policyStatements: [
         {
@@ -183,10 +183,14 @@ export default Alchemy.Stack(
         },
       ],
     });
-    // Read and delete spooled mail, nothing else in the bucket.
+    // Read (GetObject also authorizes HeadObject, the size check) and delete spooled mail. S3
+    // answers a missing key with 404 only to callers allowed to list the bucket and with 403 to
+    // everyone else, so without ListBucket a message processed earlier would look like a spool
+    // failure and be retried instead of dropped as gone (S3 HeadObject/GetObject docs).
     yield* inbound.bind("Spool", {
       policyStatements: [
         { Effect: "Allow", Action: ["s3:GetObject", "s3:DeleteObject"], Resource: spoolObjects },
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: `arn:aws:s3:::${spoolBucketName}` },
       ],
     });
     yield* inbound.bind("SendMail", { policyStatements: [sendFromSharedDomains] });

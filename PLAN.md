@@ -214,13 +214,13 @@ The code reaches AWS with **`aws4fetch`** (a tiny, Workers-native SigV4 client) 
 apps/
   api/          ✅ API Lambda (function URL): Effect HttpApi handlers, handler.ts entry, bin/dev.ts
   web/          ✅ React 19 + TanStack + shadcn/ui
-  inbound/      ✅ inbound Lambda (SES receipt action): resolve → policy → forward/reply → spool delete (§20.6)
+  inbound/      ✅ inbound Lambda (SES receipt action): resolve → policy → guards → forward/reply → spool delete (§20.6, §20.7)
   mcp/             Remote MCP + OAuth
   cli/             `alias` CLI
 packages/
   core/         ✅ pure logic: addressing (done), rewrite, sanitize, trackers, PGP, OTP extract, tokens
   contracts/    ✅ Effect HttpApi + Schemas shared by API, web, CLI, MCP
-  aws/          ✅ AWS boundary: AwsClient (real/emulated), Lambda + SES event schemas, function URL adapter, Inbound spool, Transport (SESv2 sending); fixtures/ = AWS payloads
+  aws/          ✅ AWS boundary: AwsClient (real/emulated), Lambda + SES event schemas, function URL adapter, Inbound spool (size/read/delete), Transport (SESv2 sending); fixtures/ = AWS payloads
   db/           ✅ DynamoDB single table (Table.spec) + repositories (tested on fakecloud and DynamoDB Local)
 tools/
   ses-emulator/      ✅ SMTP inbound + receipt rules + verdicts + S3 action (fakecloud) + SES Lambda events
@@ -300,19 +300,19 @@ webhooks(id, user_id, url, secret, events)
 
 ## 8. Roadmap (emulator-first)
 
-| Phase                                     | Scope                                                                                                                                                                                                   | Exit criteria                                                                                           |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **1. Foundations** ✅ (2026-10-21)        | Vite+ monorepo (pnpm 12), TS7, Effect v4, React 19 web, Effect HttpApi (now a Lambda on DynamoDB, §20), local dev, SES emulator (SMTP + rules + spool), port blocks, AGENTS.md + skills, AGPL, CI       | Done. `pnpm dev` boots with no cloud account, and three checkouts ran all suites and dev stacks at once |
-| **2. `ses-emulator` + contract fixtures** | SMTP in → receipt matching → S3 → signed SNS. SESv2 subset → Mailpit. DoH stub. Record real AWS fixtures once (sandbox account, ~$0).                                                                   | Emulator passes the contract tests                                                                      |
-| **3. Forwarding core** (in progress)      | ✅ SES → Lambda pipeline (§20.6): alias resolution on shared + user-subdomain domains, verdict policy, `ses` transport, counters, idempotency, passkey auth, minimal React UI. Open: on-the-fly aliases | `swaks` → fakecloud sent mail works for all address types                                               |
-| **4. Replies & send-as** (in progress)    | ✅ Reverse aliases, sender verification (verified recipient + DKIM/DMARC), header hygiene incl. `Message-ID` (§20.6). Open: contacts, quoted-text scrubbing, bounce/complaint handling, suppression     | ✅ Two-way thread in the stack test with no real-address leak (header-diff test)                        |
-| **5. Custom domains**                     | Domain wizard, SESv2 identity + DKIM, DoH checks, MAIL FROM, verification Cron                                                                                                                          | Custom domain verified end-to-end in the emulator                                                       |
-| **6. Privacy hardening**                  | Trackers, image proxy, PGP, encryption at rest, retention, threat model, security review                                                                                                                | No plaintext content at rest for forward aliases                                                        |
-| **7. Temp mail + OTP**                    | Inbox mode, DO live, long-poll, extractor + corpus, AI fallback (Ollama locally)                                                                                                                        | `alias temp --wait --otp` < 5 s locally                                                                 |
-| **8. API tokens, SDK, CLI, webhooks**     | OpenAPI → SDK, Bun-compiled CLI, device-code login                                                                                                                                                      | CLI release (npm + Homebrew tap)                                                                        |
-| **9. MCP**                                | Remote MCP, OAuth scopes (e.g. temp-only), confirm-gated send                                                                                                                                           | Works from MCP clients against local stack                                                              |
-| **10. Staging**                           | Real CF + AWS, IaC (Alchemy v2, OpenTofu fallback), SES production access, deliverability smoke tests, abuse runbook                                                                                    | Private beta                                                                                            |
-| **11. Public launch**                     | Billing (Stripe), plans/quotas, status page, ToS/privacy policy, abuse@ handling                                                                                                                        | Public                                                                                                  |
+| Phase                                     | Scope                                                                                                                                                                                                                                                                                 | Exit criteria                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **1. Foundations** ✅ (2026-10-21)        | Vite+ monorepo (pnpm 12), TS7, Effect v4, React 19 web, Effect HttpApi (now a Lambda on DynamoDB, §20), local dev, SES emulator (SMTP + rules + spool), port blocks, AGENTS.md + skills, AGPL, CI                                                                                     | Done. `pnpm dev` boots with no cloud account, and three checkouts ran all suites and dev stacks at once |
+| **2. `ses-emulator` + contract fixtures** | SMTP in → receipt matching → S3 → signed SNS. SESv2 subset → Mailpit. DoH stub. Record real AWS fixtures once (sandbox account, ~$0).                                                                                                                                                 | Emulator passes the contract tests                                                                      |
+| **3. Forwarding core** (in progress)      | ✅ SES → Lambda pipeline (§20.6): alias resolution on shared + user-subdomain domains, verdict policy, `ses` transport, counters, idempotency, passkey auth, minimal React UI. ✅ Forwarding safety (§20.7): loops, auto-replies, bounces, hourly cap, size. Open: on-the-fly aliases | `swaks` → fakecloud sent mail works for all address types                                               |
+| **4. Replies & send-as** (in progress)    | ✅ Reverse aliases, sender verification (verified recipient + DKIM/DMARC), header hygiene incl. `Message-ID` (§20.6). Open: contacts, quoted-text scrubbing, bounce/complaint handling, suppression                                                                                   | ✅ Two-way thread in the stack test with no real-address leak (header-diff test)                        |
+| **5. Custom domains**                     | Domain wizard, SESv2 identity + DKIM, DoH checks, MAIL FROM, verification Cron                                                                                                                                                                                                        | Custom domain verified end-to-end in the emulator                                                       |
+| **6. Privacy hardening**                  | Trackers, image proxy, PGP, encryption at rest, retention, threat model, security review                                                                                                                                                                                              | No plaintext content at rest for forward aliases                                                        |
+| **7. Temp mail + OTP**                    | Inbox mode, DO live, long-poll, extractor + corpus, AI fallback (Ollama locally)                                                                                                                                                                                                      | `alias temp --wait --otp` < 5 s locally                                                                 |
+| **8. API tokens, SDK, CLI, webhooks**     | OpenAPI → SDK, Bun-compiled CLI, device-code login                                                                                                                                                                                                                                    | CLI release (npm + Homebrew tap)                                                                        |
+| **9. MCP**                                | Remote MCP, OAuth scopes (e.g. temp-only), confirm-gated send                                                                                                                                                                                                                         | Works from MCP clients against local stack                                                              |
+| **10. Staging**                           | Real CF + AWS, IaC (Alchemy v2, OpenTofu fallback), SES production access, deliverability smoke tests, abuse runbook                                                                                                                                                                  | Private beta                                                                                            |
+| **11. Public launch**                     | Billing (Stripe), plans/quotas, status page, ToS/privacy policy, abuse@ handling                                                                                                                                                                                                      | Public                                                                                                  |
 
 ---
 
@@ -793,7 +793,7 @@ The phase-1 scaffold (Workers/D1) gets ported. The test architecture carries ove
    - Drop on spam/virus verdicts before any work.
    - Rate-limit on-the-fly alias creation per user, and make catch-all opt-in per domain.
    - Use SES IP filters to block known-bad sources for free. Receipt-rule rejects are still billed.
-8. **Loop and auto-reply safety:**
+8. **Loop and auto-reply safety** (built, §20.7):
    - Honour `Auto-Submitted`.
    - Never forward to another alias.
    - Cap forwards per alias per hour.
@@ -855,6 +855,7 @@ This setup has already caught two problems. The documented function URL sample u
 - **Infra** is only typechecked (`tsc -p infra` in `pnpm check`; `vp check` alone skipped it until 2026-10-22). Done since: the receipt rule invokes the inbound Lambda after the S3 action, with a `lambda:InvokeFunction` permission for SES limited to this account; the spool bucket policy has an `aws:SourceAccount` condition; the inbound Lambda gets least-privilege grants (S3 get/delete on `inbound/*`, five single-item DynamoDB actions, no index or transactions) and the shared-domain `SendMail` statements, inline on its role because Alchemy's `Lambda.Function` creates the role and takes no managed policies; IAM ARNs name the account. Still open: the ARNs use the fixed table name, the reverse-token keys are a deploy-time environment secret (§20.6), and the SES `aws:SourceArn` condition needs the rule ARN, which Alchemy can't template into the policy yet. Review before the first deploy.
 - **SES sending error paths fakecloud can't produce** (§20.5). Record them from a sandbox account in phase 2.
 - **fakecloud doesn't let a verified domain cover its subdomains** (§20.5). Tests verify user subdomains explicitly; dev drops mail to `<user>.alias.test` aliases as `rejected`.
+- **Null envelope sender.** The bounce check (§20.7) treats an SES `mail.source` of `""` or `<>` as the null reverse-path. AWS doesn't document which one SES writes for `MAIL FROM:<>`; the emulator writes `""`. Record one in phase 2.
 - **Inbound gaps** (§20.6): inbox-mode aliases are dropped until phase 7, senders longer than ~120 characters can't get a reverse alias until contacts exist (phase 4), spam is always dropped (no quarantine yet), and quoted text in replies still carries the owner's address if their client quotes it.
 
 ### 20.4 fakecloud replaces dynalite (2026-10-22)
@@ -920,6 +921,30 @@ Mail to an alias now reaches the owner's verified mailbox, and the owner's reply
 **Dev.** `apps/inbound/bin/dev.ts` replaces `tools/ses-emulator/bin/serve.ts`: it runs the SES emulator's SMTP listener and hands every Lambda event to the real pipeline. The API seeds the demo alias `shop@alias.test` with the verified recipient `demo@mailbox.test`.
 
 **Tests.** Unit (`apps/inbound/test/decisions.test.ts`: routing, verdicts, reply authentication, keys, on the AWS-documented event), handler on fakecloud (`pipeline.test.ts`: drops, blocks, redelivery after a clean run and after a crash, concurrent redelivery, paused sending and retry, SES rejection), repository (`DeliveryRepo` on both engines) and stack (`e2e`: SMTP → forward with rewritten `From`/`Reply-To` → reply round trip with a header diff → spoofed replies dropped → redelivery sends nothing).
+
+### 20.7 Forwarding safety (2026-10-22)
+
+Guards that keep the pipeline from feeding loops, relaying machines' mail to contacts, or flooding a mailbox, all decided from data the pipeline already has, with no new AWS service.
+
+**Where each check runs.** `Pipeline.plan` still decides from the SES event and the table alone. After the delivery claim, `Pipeline.send` runs, in order:
+
+1. **Size.** `Inbound.messageSize` asks S3 `HeadObject` for `Content-Length` (the SES event carries no size). Mail over `Limits.maxMessageBytes` (25 MiB) is dropped as `too-large` and counted as blocked, before the body is read. fakecloud answers `HeadObject` with the stored size and a missing key with a bare 404 (`NotFound`), as the S3 API reference documents; `tools/aws-emulators/test/emulators.test.ts` checks both through the production helper.
+2. **Header signals.** `Mail.signals` (core, pure) reads the raw header block: our `X-Alias-Forwarded` markers, the `Received` count, RFC 3834 `Auto-Submitted` other than `no` or `Precedence: bulk|junk|list` (`isAutomated`), and RFC 6522 `multipart/report` (`isReport`). It reads the spooled message, not the event's `headers`, because SES truncates those above 10 KB (`headersTruncated`), and a loop's marker sits under its newest `Received` fields.
+3. **Forward path** (`Policy.forwardLoop`), each dropped as `loop` and counted as blocked:
+   - the message carries this alias's marker. `Mail.forward` adds `X-Alias-Forwarded: <alias>` and keeps other aliases' markers, so a loop through several aliases is caught when it gets back to one of them, while a one-way chain (alias → mailbox → someone else's alias) still forwards;
+   - more than 50 `Received` fields (`Policy.MAX_HOPS`, Postfix's `hopcount_limit`; RFC 5321 §6.3 recommends counting);
+   - automated mail whose `From` or envelope sender is one of the owner's own recipients: the owner's mailbox auto-forwarding or auto-replying into the alias.
+
+   `Auto-Submitted` and `Precedence` do nothing else here: newsletters and notifications forward.
+
+4. **Hourly cap.** `AliasRepo.reserveForward` adds one to the alias's `FORWARDS#<hour>` counter (`Table.spec`, TTL an hour after the hour, one conditional `UpdateItem`, tested on both engines including concurrent callers). Past `Limits.forwardsPerHour` (100) the mail is dropped as `rate-limited` and counted as blocked. A retry after a temporary SES failure counts again; the cap is a safety net, not billing. `RecipientRepo.reserveMail` now uses the same `Quota` helper.
+5. **Reply path** (`Policy.automatedReply`), before the reply's authentication (§20.6), dropped without counting: a null envelope sender on a report, an automated message or mail from `MAILER-DAEMON`/`postmaster` is a `bounce`; any other automated message or report is an `auto-reply` (an out-of-office or read receipt from the owner's mailbox must not reach the contact). `Mail.reply` strips `X-Alias-Forwarded`, which names the alias.
+
+A database failure while reserving the quota releases the claim and defers the record, like a temporary SES failure.
+
+**Infra.** The inbound Lambda may now `s3:ListBucket` the spool. Without it, S3 answers a missing key with 403 instead of 404, so a message processed earlier looked like a spool failure and was retried instead of dropped as gone.
+
+**Tests.** Core (`Mail.signals`, the marker on forward and its removal on reply), unit (`forwardLoop`, `automatedReply` on the AWS-documented event), repository (`reserveForward` on fakecloud and DynamoDB Local), contract (`HeadObject` on fakecloud), handler (`pipeline.test.ts`: newsletters forward, a copy that comes back is a loop, 50 vs 51 hops, the cap, oversized mail, an out-of-office and a bounce to a reverse alias) and stack (`e2e`: a bulk newsletter forwards, the mailbox's redirect of it back to the alias is dropped as `loop`, and the mailbox's out-of-office to the reverse alias is dropped as `auto-reply`).
 
 ## Sources
 

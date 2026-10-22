@@ -49,9 +49,14 @@ describe("WebhookUrl.check", () => {
       "[fe80::1]",
       "[2002:a9fe:a9fe::1]",
       "[2001::1]",
+      "[3fff::1]",
+      "[5f00::1]",
       "localhost",
+      "localhost.",
+      "api.localhost.",
       "api.localhost",
       "intranet",
+      "intranet.",
     ];
     expect(Arr.map(hosts, (host) => refusal(`https://${host}/hook`))).toEqual(
       Arr.replicate("not-public-host", hosts.length),

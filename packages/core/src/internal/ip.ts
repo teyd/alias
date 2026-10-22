@@ -2,7 +2,7 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
 
-/** The 4 bytes of a dotted-quad IPv4 address. */
+/** The 4 bytes of a dotted-quad IPv4 address (no leading `+`, no octal or hex forms). */
 export const ipv4 = (text: string): Option.Option<ReadonlyArray<number>> => {
   const parts = text.split(".");
   if (parts.length !== 4 || !Arr.every(parts, (part) => /^\d{1,3}$/.test(part))) {
@@ -31,7 +31,9 @@ export const ipv6 = (text: string): Option.Option<ReadonlyArray<number>> => {
   const right = groupsOf(halves[1] ?? "");
   const missing = 8 - left.length - right.length;
   if (halves.length === 1 ? missing !== 0 : missing < 1) return Option.none();
-  const groups = [...left, ...Arr.replicate("0", halves.length === 1 ? 0 : missing), ...right];
+  // `Arr.replicate` returns at least one element, so the no-`::` case adds none by hand.
+  const filler = halves.length === 1 ? [] : Arr.replicate("0", missing);
+  const groups = [...left, ...filler, ...right];
   if (!Arr.every(groups, (group) => /^[0-9a-f]{1,4}$/i.test(group))) return Option.none();
   return Option.some(
     Arr.flatMap(groups, (group) => {
@@ -40,3 +42,15 @@ export const ipv6 = (text: string): Option.Option<ReadonlyArray<number>> => {
     }),
   );
 };
+
+/** Whether the first `bits` bits of `bytes` equal those of `prefix` (missing bytes count as 0). */
+export const within = (bytes: ReadonlyArray<number>, prefix: ReadonlyArray<number>, bits: number) =>
+  Arr.every(Arr.range(0, bits - 1), (bit) => {
+    const mask = 0x80 >> (bit % 8);
+    return (
+      ((bytes[Math.floor(bit / 8)] ?? 0) & mask) === ((prefix[Math.floor(bit / 8)] ?? 0) & mask)
+    );
+  });
+
+/** `::ffff:a.b.c.d`: an IPv4 address carried in IPv6 (dual-stack sockets report these). */
+export const MAPPED_V4: ReadonlyArray<number> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff];

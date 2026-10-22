@@ -1,6 +1,13 @@
-import { MailSettings, RelyingParty, SignupLimits, makeFunctionUrlHandler } from "@alias/api";
+import {
+  FrontConfig,
+  MailSettings,
+  RelyingParty,
+  SignupLimits,
+  makeFunctionUrlHandler,
+} from "@alias/api";
 import {
   AwsClient,
+  CloudFront,
   FunctionUrl,
   Identities,
   Inbound,
@@ -15,7 +22,7 @@ import {
 } from "@alias/aws";
 import bounceRecord from "@alias/aws/fixtures/ses-event-bounce.json" with { type: "json" };
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains, TempDomains } from "@alias/core";
+import { OriginSecret, SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo, ProxyRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Doh } from "@alias/dns";
@@ -36,12 +43,14 @@ import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as R from "effect/Record";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 import { createTransport } from "nodemailer";
 
@@ -148,12 +157,13 @@ const turnstileSecretParameter = "/alias/e2e/turnstile-secret";
 
 /**
  * The real API Lambda handler on the stack's table, queue and SES, for passkeys bound to
- * `relyingParty`. Serve it with `FunctionUrlServer`.
+ * `relyingParty`. Serve it with `FunctionUrlServer`; `front` puts CloudFront before it
+ * ({@link behindCloudFront}).
  */
-export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty: {
-  readonly id: string;
-  readonly origin: string;
-}) {
+export const apiHandler = Effect.fn("stack.apiHandler")(function* (
+  relyingParty: { readonly id: string; readonly origin: string },
+  front: FunctionUrl.Front = FunctionUrl.direct,
+) {
   const context = yield* Effect.context<Dynamo.Database>();
   const fakecloud = yield* FakeCloud.FakeCloud;
   const dns = yield* DohServer.DohServer;
@@ -198,9 +208,33 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty:
       // poll (PLAN.md §20.22) sleeps on.
       Layer.succeed(Clock.Clock, yield* TestClock.withLive(Effect.clockWith(Effect.succeed))),
     ),
+    front,
   );
   yield* Effect.addFinalizer(() => Effect.promise(dispose));
   return (event: FunctionUrl.FunctionUrlEvent) => Effect.runPromise(handle(event));
+});
+
+/**
+ * The API as production runs it behind CloudFront (PLAN.md §20.26): the origin secrets are a
+ * keyring in Parameter Store, which the API reads through its own `FrontConfig` and the
+ * distribution's origin custom header carries the current key of (what `infra` deploys). Pass
+ * `front` to {@link apiHandler} and `customHeaders` to `CloudFrontServer`.
+ */
+export const behindCloudFront = Effect.fn("stack.behindCloudFront")(function* () {
+  const { url } = yield* FakeCloud.FakeCloud;
+  const name = "/alias/e2e/origin-secrets";
+  yield* SSM.putParameter({
+    Name: name,
+    Type: "SecureString",
+    Value: `2:${Buffer.alloc(32, 15).toString("base64url")},1:${Buffer.alloc(32, 14).toString("base64url")}`,
+  }).pipe(Effect.provide(AwsClient.emulator(url)));
+  const env = { ALIAS_ORIGIN_SECRETS_PARAMETER: name, AWS_ENDPOINT_URL_SSM: url };
+  const front = yield* Effect.flatten(FrontConfig.parse(ConfigProvider.fromEnv({ env })));
+  const keys = yield* Parameters.keyring(name).pipe(Effect.provide(AwsClient.emulator(url)));
+  const customHeaders = {
+    [CloudFront.ORIGIN_SECRET_HEADER]: Redacted.value(OriginSecret.headerValue(keys)),
+  };
+  return { front, customHeaders };
 });
 
 /** The reverse-token keys as production stores them: a SecureString in Parameter Store. */

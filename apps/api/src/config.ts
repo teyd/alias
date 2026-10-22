@@ -1,4 +1,4 @@
-import { Identities, MessageQueue, Parameters, Transport } from "@alias/aws";
+import { FunctionUrl, Identities, MessageQueue, Parameters, Transport } from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { Doh } from "@alias/dns";
@@ -10,6 +10,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as MailSettings from "./MailSettings.ts";
 import * as RelyingParty from "./RelyingParty.ts";
 import * as SignupLimits from "./SignupLimits.ts";
@@ -84,3 +85,20 @@ export const ServicesConfig = Config.all([
   TurnstileConfig,
   SignupLimits.config,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));
+
+/**
+ * Who fronts the function URL (`FunctionUrl.Front`). `ALIAS_ORIGIN_SECRETS_PARAMETER` names the
+ * SSM keyring CloudFront's origin secret comes from (PLAN.md §20.26): when set, only requests
+ * that carry it are served and their client is `CloudFront-Viewer-Address`. Unset (`pnpm dev`,
+ * tests), the function URL is the endpoint and its `sourceIp` the client.
+ */
+export const FrontConfig = Config.option(
+  Parameters.keyringConfig("ALIAS_ORIGIN_SECRETS_PARAMETER"),
+).pipe(
+  Config.map(
+    Option.match({
+      onNone: () => Effect.succeed(FunctionUrl.direct),
+      onSome: Effect.map(FunctionUrl.cloudFront),
+    }),
+  ),
+);

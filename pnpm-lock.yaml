@@ -1100,6 +1100,9 @@ importers:
       '@alias/aws-emulators':
         specifier: workspace:*
         version: link:../aws-emulators
+      '@alias/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)

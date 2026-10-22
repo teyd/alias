@@ -7,10 +7,11 @@ import * as Option from "effect/Option";
 import { hashToken } from "./Secrets.ts";
 
 /**
- * The calling client's address, hashed, for rate limits: their counters' keys hold no IP. IPv6
- * addresses count by their /64 (`ClientAddress.rateLimitKey`). The address is the function URL's
- * `sourceIp` (`FunctionUrl.toRequest` sets the header and overwrites a client-sent one); behind
- * CloudFront it must come from `CloudFront-Viewer-Address` instead (PLAN.md §20.20).
+ * The calling client, hashed, for rate limits: their counters' keys hold no IP. The address is
+ * the one `FunctionUrl.handle` vouches for: the function URL's `sourceIp`, or behind CloudFront
+ * `CloudFront-Viewer-Address` once the origin secret proved the request came through it (PLAN.md
+ * §20.26); client-sent copies never get here. IPv6 clients count per /64
+ * (`ClientAddress.rateLimitKey`).
  */
 export const clientSource = Effect.fn("ClientSource.clientSource")(function* () {
   const crypto = yield* Crypto.Crypto;

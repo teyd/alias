@@ -1,4 +1,4 @@
-import { AwsClient, Identities, Transport } from "@alias/aws";
+import { AwsClient, FunctionUrl, Identities, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
@@ -55,6 +55,8 @@ interface Options {
   readonly limits?: Partial<SignupLimits.Limits>;
   /** The Turnstile test secret the API verifies with; the always-passing one by default. */
   readonly turnstileSecret?: string;
+  /** Who stands before the function URL (`FunctionUrl.Front`); nobody by default. */
+  readonly front?: FunctionUrl.Front;
 }
 
 /**
@@ -104,6 +106,7 @@ export const makeWith = (options: Options = {}) =>
           ),
           SignupLimits.layer(options.limits ?? {}),
         ),
+        options.front ?? FunctionUrl.direct,
       );
       return {
         ...handler,

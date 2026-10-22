@@ -5,6 +5,7 @@ export * as Keyring from "./Keyring.ts";
 export * as Mail from "./Mail.ts";
 export * as Message from "./Message.ts";
 export * as OAuth from "./OAuth.ts";
+export * as OriginSecret from "./OriginSecret.ts";
 export * as Pgp from "./Pgp.ts";
 export * as PgpKey from "./PgpKey.ts";
 export * as ReverseToken from "./ReverseToken.ts";

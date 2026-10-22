@@ -2,7 +2,7 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Str from "effect/String";
-import { ipv4, ipv6 } from "./internal/ip.ts";
+import { MAPPED_V4, ipv4, ipv6, within } from "./internal/ip.ts";
 
 /**
  * Where webhooks may be sent. A user-chosen URL is a server-side request forgery risk: a Lambda
@@ -28,14 +28,6 @@ export interface Options {
 }
 
 const MAX_LENGTH = 2_048;
-
-const within = (bytes: ReadonlyArray<number>, prefix: ReadonlyArray<number>, bits: number) =>
-  Arr.every(Arr.range(0, bits - 1), (bit) => {
-    const mask = 0x80 >> (bit % 8);
-    return (
-      ((bytes[Math.floor(bit / 8)] ?? 0) & mask) === ((prefix[Math.floor(bit / 8)] ?? 0) & mask)
-    );
-  });
 
 /** IANA special-purpose IPv4 blocks that aren't globally reachable, plus multicast and reserved. */
 const NON_PUBLIC_V4: ReadonlyArray<readonly [ReadonlyArray<number>, number]> = [
@@ -72,7 +64,6 @@ const NON_PUBLIC_V6: ReadonlyArray<readonly [ReadonlyArray<number>, number]> = [
   [[0xff], 8], // multicast
 ];
 
-const MAPPED_V4 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff];
 const NAT64 = [0x00, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0];
 
 const isPublicV4 = (bytes: ReadonlyArray<number>) =>

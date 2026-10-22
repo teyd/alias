@@ -30,6 +30,7 @@
     "@alias/lambda-emulator": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "@effect/vitest": "catalog:",
+    "@seriousme/openapi-schema-validator": "catalog:",
     "@types/node": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"

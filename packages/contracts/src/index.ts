@@ -6,3 +6,4 @@ export * from "./Scopes.ts";
 export * from "./Settings.ts";
 export * from "./Tokens.ts";
 export * from "./Webhooks.ts";
+export * from "./OpenApiDocument.ts";

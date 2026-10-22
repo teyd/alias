@@ -3,6 +3,8 @@ import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
 import { UrlPolicy } from "@alias/webhooks";
+import { FunctionUrlServer } from "@alias/lambda-emulator";
+import { NodeCrypto } from "@effect/platform-node";
 import { freshQueue } from "@alias/webhooks/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
@@ -128,3 +130,14 @@ export const signedIn = Effect.fn("signedIn")(function* (
   const registered = yield* signUp(browser, TestAuthenticator.make(Browser.origin), username);
   return { browser, ...Schema.decodeUnknownSync(Me)(registered.body) };
 });
+
+/**
+ * {@link make}'s API behind the function URL emulator on port 0, for clients that speak HTTP
+ * (the SDK, the CLI). `url` is its origin; `browser` and `withToken` still reach the same table.
+ */
+export const served = Effect.flatMap(make, (api) =>
+  FunctionUrlServer.make({ handler: (event) => Effect.runPromise(api.handle(event)) }).pipe(
+    Effect.provide(NodeCrypto.layer),
+    Effect.map((server) => ({ ...api, url: server.url })),
+  ),
+);

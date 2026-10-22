@@ -1,4 +1,4 @@
-import { Api } from "@alias/contracts";
+import { Api, openApiDocument } from "@alias/contracts";
 import {
   AccountRepo,
   AliasRepo,
@@ -16,7 +16,7 @@ import {
 import { Publisher, type UrlPolicy } from "@alias/webhooks";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
-import { HttpRouter, HttpServer } from "effect/http";
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
 import type { Identities, MessageQueue, Transport } from "@alias/aws";
@@ -36,6 +36,13 @@ import { WebhooksLive } from "./webhooks.ts";
 
 const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
   handlers.handle("health", () => Effect.succeed({ status: "ok" as const })),
+);
+
+/** The OpenAPI document, public like the API's shape itself (it's in the repo). */
+const OpenApiLive = HttpRouter.add(
+  "GET",
+  "/v1/openapi.json",
+  HttpServerResponse.jsonUnsafe(openApiDocument),
 );
 
 const Repositories = Layer.mergeAll(
@@ -71,7 +78,7 @@ export type Services =
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
  * elsewhere.
  */
-const ApiLive = HttpApiBuilder.layer(Api).pipe(
+const ApiLive = Layer.merge(HttpApiBuilder.layer(Api), OpenApiLive).pipe(
   Layer.provide([
     SystemLive,
     AuthLive,

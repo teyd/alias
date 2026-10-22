@@ -1,0 +1,38 @@
+{
+  "name": "@alias/sdk",
+  "version": "0.0.0",
+  "description": "Typed client for the Alias API, built on Effect's HttpApiClient",
+  "license": "AGPL-3.0-only",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack src/index.ts --dts --platform neutral --tsconfig ../tsconfig.sdk.json",
+    "test": "vp test",
+    "test:unit": "vp test"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alias/api": "workspace:*",
+    "@alias/contracts": "workspace:*",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

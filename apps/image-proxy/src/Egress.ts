@@ -18,6 +18,7 @@ import * as dns from "node:dns";
 import * as http from "node:http";
 import * as https from "node:https";
 import * as net from "node:net";
+import { WebhookUrl } from "@alias/core";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -36,59 +37,12 @@ export class EgressPolicy extends Context.Service<
 >()("@alias/image-proxy/EgressPolicy") {}
 
 /**
- * IANA special-purpose ranges (RFC 6890 and its updates): this network, private, shared
- * (carrier-grade NAT), loopback, link-local (incl. the cloud metadata address 169.254.169.254),
- * protocol assignments, documentation, benchmarking, 6to4 relay, multicast, reserved and
- * broadcast.
+ * A globally reachable address (IANA special-purpose registries; IPv4-mapped and NAT64 forms
+ * checked as the IPv4 address they reach). The same rule webhook delivery connects by
+ * (`WebhookUrl.isAllowedAddress` in `@alias/core`, PLAN.md §20.20), never with loopback.
  */
-const BLOCKED_V4: ReadonlyArray<readonly [string, number]> = [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.88.99.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 4],
-  ["240.0.0.0", 4],
-];
-
-/**
- * IPv6 must be global unicast (2000::/3), which already excludes loopback, unique local
- * (fc00::/7, incl. AWS's fd00:ec2::254), link-local, multicast and IPv4-mapped addresses. Inside
- * 2000::/3: IETF protocol assignments incl. Teredo (2001::/23), documentation (2001:db8::/32,
- * 3fff::/20) and 6to4 (2002::/16), which embeds an IPv4 address.
- */
-const GLOBAL_V6: readonly [string, number] = ["2000::", 3];
-const BLOCKED_V6: ReadonlyArray<readonly [string, number]> = [
-  ["2001::", 23],
-  ["2001:db8::", 32],
-  ["2002::", 16],
-  ["3fff::", 20],
-];
-
-const blockList = (ranges: ReadonlyArray<readonly [string, number]>, family: "ipv4" | "ipv6") => {
-  const list = new net.BlockList();
-  Arr.map(ranges, ([address, prefix]) => list.addSubnet(address, prefix, family));
-  return list;
-};
-
-const blockedV4 = blockList(BLOCKED_V4, "ipv4");
-const blockedV6 = blockList(BLOCKED_V6, "ipv6");
-const globalV6 = blockList([GLOBAL_V6], "ipv6");
-
-/** A public unicast address: anything a mail sender may legitimately host an image on. */
-export const isPublicAddress = (address: string): boolean => {
-  const family = net.isIP(address);
-  if (family === 4) return !blockedV4.check(address, "ipv4");
-  return family === 6 && globalV6.check(address, "ipv6") && !blockedV6.check(address, "ipv6");
-};
+export const isPublicAddress = (address: string): boolean =>
+  WebhookUrl.isAllowedAddress(address, { isLoopbackAllowed: false });
 
 /** Production: public addresses on the default http and https ports. */
 export const publicInternet = Layer.succeed(EgressPolicy, {

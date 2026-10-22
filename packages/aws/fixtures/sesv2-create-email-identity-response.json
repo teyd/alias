@@ -1,0 +1,18 @@
+{
+  "DkimAttributes": {
+    "CurrentSigningKeyLength": "RSA_2048_BIT",
+    "LastKeyGenerationTimestamp": 1761120000,
+    "NextSigningKeyLength": "RSA_2048_BIT",
+    "SigningAttributesOrigin": "AWS_SES",
+    "SigningEnabled": true,
+    "SigningHostedZone": "dkim.amazonses.com",
+    "Status": "PENDING",
+    "Tokens": [
+      "vvjuipp74whm76gqoni7qmwwn4w4qusj",
+      "3frqe7jn4obpuxjpwpolz6ipb3k5nvt2",
+      "wrqplteh7oodxnad7hsl4mixg2uavzne"
+    ]
+  },
+  "IdentityType": "DOMAIN",
+  "VerifiedForSendingStatus": false
+}

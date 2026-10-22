@@ -1,6 +1,6 @@
 import { Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { Dynamo } from "@alias/db";
+import { Dynamo, RecipientRepo, SentRepo } from "@alias/db";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import { describe, expect, it } from "@effect/vitest";
@@ -8,6 +8,7 @@ import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Hex } from "effect/encoding";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -320,6 +321,78 @@ describe("forwarding addresses (recipients) on the API handler, fakecloud Dynamo
       expect(gone._tag).toBe("NotFoundException");
       const [listed] = yield* list(browser);
       expect(listed).not.toHaveProperty("bouncedAt");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("resumes a paused destination once the owner confirms a new link", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.make;
+      const { browser, me } = yield* signedIn(api, "barbara");
+      const added = yield* addVerified(api, browser, "barbara@example.com");
+      const resend = () => browser.post(`/v1/recipients/${added.id}/resend`);
+      // Each confirmation mail is recorded, so its bounces can be traced to this recipient.
+      const first = yield* lastMailTo(api, "barbara@example.com");
+      expect(
+        yield* SentRepo.SentRepo.use((repo) => repo.find(me.userId, first.email.messageId)).pipe(
+          Effect.provide(SentRepo.layer.pipe(Layer.provide(Layer.succeedContext(api.context)))),
+        ),
+      ).toEqual(
+        Option.some({
+          messageId: first.email.messageId,
+          userId: me.userId,
+          kind: "confirmation",
+          recipientId: Option.some(added.id),
+          sentAt: expect.anything(),
+        }),
+      );
+
+      // The feedback Lambda paused it, and SES has the address suppressed.
+      yield* RecipientRepo.RecipientRepo.use((repo) =>
+        repo.markBounced(
+          me.userId,
+          "barbara@example.com",
+          DateTime.makeUnsafe(0),
+          "address-unknown",
+        ),
+      ).pipe(
+        Effect.provide(RecipientRepo.layer.pipe(Layer.provide(Layer.succeedContext(api.context)))),
+      );
+      yield* SESV2.putSuppressedDestination({
+        EmailAddress: "barbara@example.com",
+        Reason: "BOUNCE",
+      }).pipe(Effect.provide(api.context));
+      expect((yield* browser.get("/v1/recipients")).body).toMatchObject([
+        { isVerified: true, bouncedAt: expect.any(String), bounceReason: "address-unknown" },
+      ]);
+
+      yield* TestClock.adjust("1 minute");
+      expect((yield* resend()).status).toBe(204);
+      const mail = yield* lastMailTo(api, "barbara@example.com");
+      expect(mail.token).not.toBe(first.token);
+      // Off the suppression list for the new link, but still paused until it is opened.
+      const gone = yield* Effect.flip(
+        SESV2.getSuppressedDestination({ EmailAddress: "barbara@example.com" }),
+      ).pipe(Effect.provide(api.context));
+      expect(gone._tag).toBe("NotFoundException");
+      expect((yield* browser.get("/v1/recipients")).body).toMatchObject([
+        { bouncedAt: expect.any(String) },
+      ]);
+
+      expect(yield* confirm(browser, added.id, mail.token)).toMatchObject({
+        status: 200,
+        body: { id: added.id, isVerified: true, isDefault: true },
+      });
+      expect((yield* browser.get("/v1/recipients")).body).toEqual([
+        expect.not.objectContaining({ bouncedAt: expect.anything() }),
+      ]);
+      expect((yield* browser.get("/v1/recipients")).body).toEqual([
+        expect.not.objectContaining({ bounceReason: expect.anything() }),
+      ]);
+      yield* TestClock.adjust("1 minute");
+      expect(yield* resend()).toMatchObject({
+        status: 409,
+        body: { _tag: "RecipientAlreadyVerified" },
+      });
     }).pipe(Effect.scoped),
   );
 

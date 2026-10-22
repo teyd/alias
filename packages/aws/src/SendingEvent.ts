@@ -20,14 +20,25 @@ const Mail = Schema.Struct({
 
 const Recipient = Schema.Struct({ emailAddress: Schema.String });
 
+/** A bounced recipient. The DSN fields are there only if a DSN was attached to the bounce. */
+const BouncedRecipient = Schema.Struct({
+  emailAddress: Schema.String,
+  /** The DSN's `Status` field, an enhanced status code (RFC 3463) such as `5.1.1`. */
+  status: Schema.optionalKey(Schema.String),
+  /** The DSN's `Diagnostic-Code` field, e.g. `smtp; 550 5.1.1 user unknown`. */
+  diagnosticCode: Schema.optionalKey(Schema.String),
+});
+export type BouncedRecipient = typeof BouncedRecipient.Type;
+
 const Bounce = Schema.Struct({
   eventType: Schema.Literal("Bounce"),
   mail: Mail,
   bounce: Schema.Struct({
-    /** Only `Permanent` bounces mean the address will never accept mail. */
+    /** As SES classified it; what the receiving server said is in each recipient's DSN fields. */
     bounceType: Schema.Literals(["Undetermined", "Permanent", "Transient"]),
+    /** Documented values per type in the bounce types table; kept a string so new ones decode. */
     bounceSubType: Schema.String,
-    bouncedRecipients: Schema.Array(Recipient),
+    bouncedRecipients: Schema.Array(BouncedRecipient),
     timestamp: Schema.String,
   }),
 });

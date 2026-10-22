@@ -9,7 +9,7 @@ import {
   SendFailed,
 } from "@alias/contracts";
 import { Mail } from "@alias/core";
-import { type AliasRepo, ContactRepo, OutboxRepo } from "@alias/db";
+import { type AliasRepo, ContactRepo, OutboxRepo, SentRepo } from "@alias/db";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -166,8 +166,8 @@ const send = Effect.fn("outbox.send")(function* (draftId: string) {
     messageId: (yield* Effect.orDie(crypto.randomULID)).toLowerCase(),
     date: now,
   });
-  // Tagged like a reply: a message to a contact, so its bounces suppress but mark nothing.
-  yield* transport
+  // Tagged like a reply: a message to a contact, so only a gone mailbox's bounce suppresses it.
+  const messageId = yield* transport
     .send(raw, {
       from: `${alias.localPart}@${alias.domain}`,
       to: [contact.address],
@@ -180,6 +180,12 @@ const send = Effect.fn("outbox.send")(function* (draftId: string) {
         TransportRetryable: () => Effect.fail(refused(draftId, "unavailable", true)),
       }),
     );
+  yield* SentRepo.remember({
+    messageId,
+    userId: user.userId,
+    kind: "reply",
+    recipientId: Option.none(),
+  });
   yield* Effect.logInfo("outbox sent", draftId);
   return view(sent, now);
 });
@@ -204,6 +210,7 @@ type OutboxServices =
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
   | OutboxRepo.OutboxRepo
+  | SentRepo.SentRepo
   | Transport.Transport;
 
 export const OutboxLive = HttpApiBuilder.group(Api, "outbox", (handlers) =>

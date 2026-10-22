@@ -127,6 +127,7 @@ const seed = Effect.fn("api.dev.seed")(function* () {
         lastSentAt: now,
         isDefault: false,
         bouncedAt: Option.none(),
+        bounceReason: Option.none(),
         complainedAt: Option.none(),
         encryption: Option.none(),
       },

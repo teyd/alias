@@ -6,6 +6,7 @@ import {
   ContactRepo,
   DomainRepo,
   RecipientRepo,
+  SentRepo,
   UserRepo,
   WebhookRepo,
 } from "@alias/db";
@@ -203,6 +204,7 @@ const recipient = Effect.fn("recipient")(function* (
         lastSentAt: now,
         isDefault: false,
         bouncedAt: Option.none(),
+        bounceReason: Option.none(),
         complainedAt: Option.none(),
         encryption: Option.none(),
       },
@@ -369,6 +371,43 @@ describe("inbound pipeline (fakecloud)", () => {
         expect(raw).toContain("\r\n\r\nThanks for your order!");
         expect(yield* counters).toEqual(Option.some([1, 0]));
         expect(yield* spoolHolds(messageId)).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("records each send under SES's message id, so bounces can be traced to it", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const { outcomes, reverse } = yield* forwardFrom("shop@store.example");
+        expect(outcomes).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([{ _tag: "Replied" }]);
+
+        const [forward, reply] = yield* sent;
+        const records = yield* SentRepo.SentRepo.use((repo) =>
+          Effect.forEach(
+            [forward?.messageId ?? "", reply?.messageId ?? ""],
+            (messageId) => repo.find("usr_1", messageId),
+            { concurrency: 1 },
+          ),
+        );
+        expect(records).toEqual([
+          Option.some({
+            messageId: forward?.messageId,
+            userId: "usr_1",
+            kind: "forward",
+            recipientId: Option.some("rcp_ada@mail.example"),
+            sentAt: expect.anything(),
+          }),
+          Option.some({
+            messageId: reply?.messageId,
+            userId: "usr_1",
+            kind: "reply",
+            recipientId: Option.none(),
+            sentAt: expect.anything(),
+          }),
+        ]);
       }),
     ),
   );
@@ -1055,7 +1094,7 @@ describe("inbound pipeline (fakecloud)", () => {
         yield* alias();
         yield* recipient("ada@mail.example");
         yield* RecipientRepo.RecipientRepo.use((repo) =>
-          repo.markBounced("usr_1", "ada@mail.example", DateTime.makeUnsafe(1)),
+          repo.markBounced("usr_1", "ada@mail.example", DateTime.makeUnsafe(1), "address-unknown"),
         );
         const { messageId, event } = yield* receive({ recipients: ["shop@alias.test"] });
 

@@ -31,10 +31,20 @@ const Recipient = Schema.Struct({
   isDefault: Schema.Boolean,
   createdAt: Schema.DateTimeUtcFromString,
   /**
-   * When SES last reported a permanent bounce. Mail isn't forwarded to it any more; resending
-   * the confirmation (pending) or deleting and adding it again (verified) tries it once more.
+   * When forwarding to it was paused because it bounces. Mail isn't forwarded to it any more;
+   * resending the confirmation tries it once more, and for a verified recipient confirming the
+   * new link resumes forwarding.
    */
   bouncedAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
+  /**
+   * Why it was paused: the receiving server said the mailbox doesn't exist (`address-unknown`),
+   * SES wouldn't send to it because it is on a suppression list (`suppressed`), or several
+   * messages to it bounced for good within a week (`repeated-bounces`). A single message
+   * refused for its content never pauses forwarding.
+   */
+  bounceReason: Schema.OptionFromOptionalKey(
+    Schema.Literals(["address-unknown", "suppressed", "repeated-bounces"]),
+  ),
   /** When the mailbox last reported forwarded mail as spam. */
   complainedAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
   encryption: Schema.OptionFromOptionalKey(Encryption),
@@ -71,6 +81,7 @@ export class RecipientNotFound extends Schema.TaggedError<RecipientNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
+/** Verified and not paused: there is nothing to confirm. */
 export class RecipientAlreadyVerified extends Schema.TaggedError<RecipientAlreadyVerified>()(
   "RecipientAlreadyVerified",
   { recipientId: Schema.String },

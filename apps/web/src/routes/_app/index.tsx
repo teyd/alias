@@ -172,9 +172,11 @@ const DestinationAlerts = ({ recipients }: { readonly recipients: ReadonlyArray<
         <Alert key={recipient.id}>
           <TriangleAlertIcon className="text-warning" />
           <AlertTitle>
-            <span className="data">{recipient.address}</span> bounced
+            Forwarding to <span className="data">{recipient.address}</span> is paused
           </AlertTitle>
-          <AlertDescription>Nothing is forwarded there until you retry it.</AlertDescription>
+          <AlertDescription>
+            It bounces: nothing is forwarded there until you resume it.
+          </AlertDescription>
           <AlertAction>
             <Button
               variant="outline"
@@ -214,7 +216,7 @@ const DestinationsCard = ({ recipients }: { readonly recipients: ReadonlyArray<R
                 <span className="data min-w-0 flex-1 truncate">{recipient.address}</span>
                 {recipient.isDefault && <Badge variant="outline">Default</Badge>}
                 {Option.isSome(recipient.bouncedAt) ? (
-                  <Badge variant="destructive">Bounced</Badge>
+                  <Badge variant="destructive">Paused</Badge>
                 ) : recipient.isVerified ? (
                   <Badge variant="success">Verified</Badge>
                 ) : (

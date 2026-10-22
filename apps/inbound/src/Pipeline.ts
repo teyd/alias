@@ -16,6 +16,7 @@ import {
   type Dynamo,
   MessageRepo,
   RecipientRepo,
+  SentRepo,
   UserRepo,
 } from "@alias/db";
 import { Inbox } from "@alias/inbox";
@@ -96,6 +97,8 @@ interface Send {
 interface Outgoing {
   /** Who wrote, for a forward: named in the `mail.forwarded` webhook event. */
   readonly contactId: Option.Option<string>;
+  /** The owner's recipient it goes to, for a forward: its bounces are about that recipient. */
+  readonly recipientId: Option.Option<string>;
   /** Header rewrite, scrubbing, and for a recipient with a key, encryption last. */
   readonly rewrite: (
     raw: Uint8Array,
@@ -251,6 +254,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     }
     return Result.succeed<Outgoing>({
       contactId: Option.some(contact.id),
+      recipientId: Option.some(target.value.id),
       rewrite: (raw) =>
         Mail.forward(raw, {
           alias: address,
@@ -296,6 +300,7 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   const messageId = yield* Effect.orDie((yield* Crypto.Crypto).randomUUIDv4());
   const outgoing: Outgoing = {
     contactId: Option.none(),
+    recipientId: Option.none(),
     rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId, owner }),
     envelope: {
       from: Address.format(address),
@@ -535,7 +540,13 @@ const send = Effect.fn("Pipeline.send")(function* (
   if (Result.isFailure(admitted)) return yield* refuse(delivery, admitted.failure);
   const outgoing = admitted.success;
   const rewritten = yield* outgoing.rewrite(raw);
-  yield* (yield* Transport.Transport).send(rewritten, outgoing.envelope);
+  const messageId = yield* (yield* Transport.Transport).send(rewritten, outgoing.envelope);
+  yield* SentRepo.remember({
+    messageId,
+    userId: planned.alias.userId,
+    kind: planned.kind,
+    recipientId: outgoing.recipientId,
+  });
   if (planned.kind === "reply") return replied;
   yield* count(planned.alias, "forwarded");
   if (Option.isSome(outgoing.contactId)) {
@@ -692,6 +703,7 @@ export const layer = <E, R>(
     AliasRepo.layer,
     ContactRepo.layer,
     RecipientRepo.layer,
+    SentRepo.layer,
     DeliveryRepo.layer,
     DomainRepo.layer,
     MessageRepo.layer,

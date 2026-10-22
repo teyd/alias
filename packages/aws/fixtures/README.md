@@ -56,3 +56,23 @@ MAIL FROM domain still pending. The DKIM tokens are made up in the shape SES use
 and `VerificationInfo` leaves out the optional `ErrorType` and `SOARecord`. Record real ones in phase 2.
 
 Payloads recorded from a real AWS account go next to these with a `recorded-` prefix (roadmap phase 2).
+
+### Slots for recorded bounces (PLAN.md §20.28)
+
+The bounce decision table (`apps/inbound/src/Bounces.ts`) is built from the documented bounce types
+and RFC 3463 codes. Once a sandbox account exists, record one SES event (the SNS `Message` body)
+for each slot, strip addresses to `recipient@example.com`, and add a row for it to
+`apps/inbound/test/bounces.test.ts` with the verdict the table gives. A recording that disagrees
+with the table is a finding, not a test to adjust.
+
+| File (to record)                                          | Case                                                  | Expected verdict |
+| --------------------------------------------------------- | ----------------------------------------------------- | ---------------- |
+| `recorded-ses-event-bounce-user-unknown-gmail.json`       | Mail to a nonexistent Gmail address                   | `AddressUnknown` |
+| `recorded-ses-event-bounce-user-unknown-outlook.json`     | Mail to a nonexistent Outlook.com address             | `AddressUnknown` |
+| `recorded-ses-event-bounce-user-unknown-postfix.json`     | Mail to a nonexistent address on a stock Postfix host | `AddressUnknown` |
+| `recorded-ses-event-bounce-null-mx.json`                  | Mail to a domain with a null MX (RFC 7505)            | `AddressUnknown` |
+| `recorded-ses-event-bounce-content-spam.json`             | A message the receiver refuses as spam (5.7.x)        | `MessageOnly`    |
+| `recorded-ses-event-bounce-content-dmarc.json`            | A DMARC rejection (e.g. 5.7.26)                       | `MessageOnly`    |
+| `recorded-ses-event-bounce-mailbox-full.json`             | A full mailbox (5.2.2)                                | `MessageOnly`    |
+| `recorded-ses-event-bounce-account-suppression-list.json` | A send to an address on the account-level list        | `Suppressed`     |
+| `recorded-ses-event-bounce-global-suppression-list.json`  | `suppressionlist@simulator.amazonses.com`             | `Suppressed`     |

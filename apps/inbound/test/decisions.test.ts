@@ -58,6 +58,7 @@ const recipient = (
   lastSentAt: DateTime.makeUnsafe(0),
   isDefault: fields.isDefault ?? false,
   bouncedAt: Option.none(),
+  bounceReason: Option.none(),
   complainedAt: Option.none(),
   encryption: Option.none(),
 });

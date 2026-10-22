@@ -2,7 +2,7 @@ import { AwsClient, SendingEvent, SnsEvent, Transport } from "@alias/aws";
 import bounceRecord from "@alias/aws/fixtures/ses-event-bounce.json" with { type: "json" };
 import snsEvent from "@alias/aws/fixtures/sns-lambda-event.json" with { type: "json" };
 import { FakeCloud } from "@alias/aws-emulators";
-import { RecipientRepo, WebhookRepo } from "@alias/db";
+import { RecipientRepo, SentRepo, WebhookRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { freshQueue, TestQueue } from "@alias/webhooks/testing";
 import { SnsSubscriber } from "@alias/lambda-emulator";
@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as R from "effect/Record";
 import { Feedback } from "../src/index.ts";
 
 /**
@@ -95,6 +96,7 @@ const recipient = Effect.fn("recipient")(function* (address: string) {
       lastSentAt: now,
       isDefault: false,
       bouncedAt: Option.none(),
+      bounceReason: Option.none(),
       complainedAt: Option.none(),
       encryption: Option.none(),
     },
@@ -103,13 +105,32 @@ const recipient = Effect.fn("recipient")(function* (address: string) {
   );
 });
 
-const send = (to: string, kind: SendingEvent.Kind) =>
-  Effect.flatMap(Transport.Transport, (transport) =>
-    transport.send(new TextEncoder().encode(`From: shop@alias.test\r\nTo: ${to}\r\n\r\nhi`), {
-      from: "shop+r.token@alias.test",
-      to: [to],
-      tags: SendingEvent.tags("usr_1", kind),
-    }),
+/** Sends to `to` through the configuration set and records the send, as production does. */
+const send = Effect.fn("send")(function* (
+  to: string,
+  kind: SendingEvent.Kind,
+  options: { readonly isRecorded?: boolean } = {},
+) {
+  const transport = yield* Transport.Transport;
+  const messageId = yield* transport.send(
+    new TextEncoder().encode(`From: shop@alias.test\r\nTo: ${to}\r\n\r\nhi`),
+    { from: "shop+r.token@alias.test", to: [to], tags: SendingEvent.tags("usr_1", kind) },
+  );
+  if (options.isRecorded !== false) {
+    yield* SentRepo.remember({
+      messageId,
+      userId: "usr_1",
+      kind,
+      recipientId: kind === "reply" ? Option.none() : Option.some(`rcp_${to}`),
+    });
+  }
+  return messageId;
+});
+
+const isSuppressed = (address: string) =>
+  SESV2.getSuppressedDestination({ EmailAddress: address }).pipe(
+    Effect.as(true),
+    Effect.catchTag("NotFoundException", () => Effect.succeed(false)),
   );
 
 /** The next event SNS delivers, as the Lambda runtime would pass it (JSON). */
@@ -139,7 +160,7 @@ describe("feedback Lambda (fakecloud SES events → SNS → Lambda event)", () =
     ),
   );
 
-  it.effect("marks a hard-bounced recipient and suppresses the address", () =>
+  it.effect("pauses a recipient whose mailbox doesn't exist (5.1.1) and suppresses it", () =>
     withFeedback((subscriber) =>
       Effect.gen(function* () {
         yield* recipient(BOUNCE);
@@ -158,15 +179,18 @@ describe("feedback Lambda (fakecloud SES events → SNS → Lambda event)", () =
         const event = yield* nextEvent(subscriber);
 
         expect(yield* Feedback.handle(event)).toEqual([
-          { _tag: "Bounced", suppressed: 1, marked: 1 },
+          { _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 },
         ]);
-        expect(Option.isSome((yield* stored(BOUNCE)).bouncedAt)).toBe(true);
+        expect(yield* stored(BOUNCE)).toMatchObject({
+          bouncedAt: Option.some(expect.anything()),
+          bounceReason: Option.some("address-unknown"),
+        });
         const suppressed = yield* SESV2.getSuppressedDestination({ EmailAddress: BOUNCE });
         expect(suppressed.SuppressedDestination?.Reason).toBe("BOUNCE");
 
         // SNS may deliver the same event again; nothing changes.
         expect(yield* Feedback.handle(event)).toEqual([
-          { _tag: "Bounced", suppressed: 1, marked: 1 },
+          { _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 },
         ]);
 
         // The owner's webhook hears of it, twice with one webhook-id, which receivers dedupe.
@@ -181,6 +205,20 @@ describe("feedback Lambda (fakecloud SES events → SNS → Lambda event)", () =
           { type: "recipient.bounced", timestamp: expect.any(String), data: { address: BOUNCE } },
         ]);
         expect(jobs[0]?.id).toBe(jobs[1]?.id);
+      }),
+    ),
+  );
+
+  it.effect("ignores a bounce of a message it has no record of", () =>
+    withFeedback((subscriber) =>
+      Effect.gen(function* () {
+        yield* recipient(BOUNCE);
+        yield* send(BOUNCE, "forward", { isRecorded: false });
+        expect(yield* Feedback.handle(yield* nextEvent(subscriber))).toEqual([
+          { _tag: "Ignored", reason: "uncorrelated" },
+        ]);
+        expect(Option.isNone((yield* stored(BOUNCE)).bouncedAt)).toBe(true);
+        expect(yield* isSuppressed(BOUNCE)).toBe(false);
       }),
     ),
   );
@@ -221,23 +259,219 @@ describe("feedback Lambda on documented payloads", () => {
       })),
     });
 
-  it.layer(feedback.pipe(Layer.provideMerge(aws), Layer.provideMerge(FakeCloud.layer())), {
-    timeout: 30_000,
-  })((it) => {
-    it.effect("suppresses the documented permanent bounce, even untagged", () =>
-      Effect.gen(function* () {
-        const event = yield* withMessage(JSON.stringify(bounceRecord));
-        expect(yield* Feedback.handle(event)).toEqual([
-          { _tag: "Bounced", suppressed: 1, marked: 0 },
-        ]);
-        const suppressed = yield* SESV2.getSuppressedDestination({
-          EmailAddress: "recipient@example.com",
-        });
-        expect(suppressed.SuppressedDestination?.Reason).toBe("BOUNCE");
-      }),
+  /** The documented recipient (`recipient@example.com`), verified for usr_1. */
+  const ADDRESS = bounceRecord.mail.destination[0] ?? "";
+
+  /**
+   * The documented bounce record, about message `messageId` and tagged for usr_1, with the bounce
+   * fields replaced: what SES would publish for the cases fakecloud's simulator can't produce.
+   */
+  const bounceEvent = (
+    messageId: string,
+    bounce: {
+      readonly bounceType?: string;
+      readonly bounceSubType?: string;
+      readonly status?: string;
+      readonly diagnosticCode?: string;
+      readonly emailAddress?: string;
+      readonly userId?: string;
+    } = {},
+  ) => {
+    const [documented] = bounceRecord.bounce.bouncedRecipients;
+    return Effect.flatMap(
+      withMessage(
+        JSON.stringify({
+          ...bounceRecord,
+          mail: {
+            ...bounceRecord.mail,
+            messageId,
+            tags: {
+              ...bounceRecord.mail.tags,
+              ...R.fromEntries(
+                Arr.map(
+                  SendingEvent.tags(bounce.userId ?? "usr_1", "forward"),
+                  (tag) => [tag.name, [tag.value]] as const,
+                ),
+              ),
+            },
+          },
+          bounce: {
+            ...bounceRecord.bounce,
+            bounceType: bounce.bounceType ?? "Permanent",
+            bounceSubType: bounce.bounceSubType ?? "General",
+            bouncedRecipients: [
+              {
+                ...documented,
+                emailAddress: bounce.emailAddress ?? ADDRESS,
+                status: bounce.status ?? documented?.status,
+                diagnosticCode: bounce.diagnosticCode ?? documented?.diagnosticCode,
+              },
+            ],
+          },
+        }),
+      ),
+      Feedback.handle,
+    );
+  };
+
+  /** Records a send of `messageId` to the documented recipient (or, for a reply, a contact). */
+  const sentAs = (messageId: string, kind: SendingEvent.Kind = "forward") =>
+    SentRepo.remember({
+      messageId,
+      userId: "usr_1",
+      kind,
+      recipientId: kind === "reply" ? Option.none() : Option.some(`rcp_${ADDRESS}`),
+    });
+
+  /** Each test on its own fakecloud: the suppression list is account-wide. */
+  const own = <A, E>(
+    effect: Effect.Effect<
+      A,
+      E,
+      Layer.Success<typeof feedback> | AwsClient.AwsClient | FakeCloud.FakeCloud
+    >,
+  ) =>
+    effect.pipe(
+      Effect.provide(Layer.mergeAll(feedback, aws).pipe(Layer.provideMerge(FakeCloud.layer()))),
     );
 
-    it.effect("changes nothing for transient bounces, other events and unreadable messages", () =>
+  const paused = Effect.map(stored(ADDRESS), (found) => ({
+    bouncedAt: Option.isSome(found.bouncedAt),
+    reason: found.bounceReason,
+  }));
+
+  it.effect("does nothing about the address for a message refused for its content", () =>
+    own(
+      Effect.gen(function* () {
+        yield* recipient(ADDRESS);
+        const contentRejections = [
+          { status: "5.7.1", diagnosticCode: "smtp; 550 5.7.1 Message rejected as spam" },
+          { status: "5.6.0", diagnosticCode: "smtp; 554 5.6.0 Message contains bad content" },
+          { status: "5.3.4", diagnosticCode: "smtp; 552 5.3.4 Message size exceeds fixed limit" },
+          // An address code in `status` doesn't count when the server's reply names the content.
+          { status: "5.1.1", diagnosticCode: "smtp; 550 5.7.26 Unauthenticated email (DMARC)" },
+          { bounceSubType: "NoEmail", status: "5.7.1", diagnosticCode: "smtp; 550 5.7.1 Blocked" },
+        ];
+        const outcomes = yield* Effect.forEach(
+          contentRejections,
+          (rejection, index) =>
+            Effect.andThen(
+              sentAs(`msg_content_${index}`),
+              bounceEvent(`msg_content_${index}`, rejection),
+            ),
+          { concurrency: 1 },
+        );
+        expect(Arr.flatten(outcomes)).toEqual(
+          Arr.map(contentRejections, () => ({ _tag: "Ignored", reason: "message-bounce" })),
+        );
+        expect(yield* paused).toEqual({ bouncedAt: false, reason: Option.none() });
+        expect(yield* isSuppressed(ADDRESS)).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("pauses after three unclear hard bounces of distinct messages within a week", () =>
+    own(
+      Effect.gen(function* () {
+        yield* recipient(ADDRESS);
+        const unclear = { status: "5.0.0", diagnosticCode: "smtp; 550 Mailbox unavailable" };
+        yield* sentAs("msg_1");
+        yield* sentAs("msg_2");
+        yield* sentAs("msg_3");
+        const counted = [{ _tag: "Bounced", suppressed: 0, marked: 0, counted: 1 }];
+        expect(yield* bounceEvent("msg_1", unclear)).toEqual(counted);
+        // SNS delivering the same bounce again doesn't count it twice.
+        expect(yield* bounceEvent("msg_1", unclear)).toEqual(counted);
+        expect(yield* bounceEvent("msg_2", { status: "5.2.1" })).toEqual(counted);
+        expect(yield* paused).toEqual({ bouncedAt: false, reason: Option.none() });
+        expect(yield* isSuppressed(ADDRESS)).toBe(false);
+
+        expect(
+          yield* bounceEvent("msg_3", {
+            bounceSubType: "NoEmail",
+            status: "5.4.4",
+            diagnosticCode: "smtp; 550 5.4.4 Unable to route",
+          }),
+        ).toEqual([{ _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 }]);
+        expect(yield* paused).toEqual({
+          bouncedAt: true,
+          reason: Option.some("repeated-bounces"),
+        });
+        expect(yield* isSuppressed(ADDRESS)).toBe(true);
+      }),
+    ),
+  );
+
+  it.effect("pauses at once for an address SES has on a suppression list, adding nothing", () =>
+    own(
+      Effect.gen(function* () {
+        yield* recipient(ADDRESS);
+        yield* sentAs("msg_listed");
+        expect(
+          yield* bounceEvent("msg_listed", {
+            bounceSubType: "OnAccountSuppressionList",
+            status: "5.1.1",
+            diagnosticCode: "Amazon SES has suppressed sending to this address",
+          }),
+        ).toEqual([{ _tag: "Bounced", suppressed: 0, marked: 1, counted: 0 }]);
+        expect(yield* paused).toEqual({ bouncedAt: true, reason: Option.some("suppressed") });
+        expect(yield* isSuppressed(ADDRESS)).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("suppresses a contact's gone mailbox after a reply, and marks nothing", () =>
+    own(
+      Effect.gen(function* () {
+        yield* recipient(ADDRESS);
+        yield* sentAs("msg_reply", "reply");
+        yield* sentAs("msg_reply_spam", "reply");
+        expect(
+          yield* bounceEvent("msg_reply_spam", {
+            status: "5.7.1",
+            diagnosticCode: "smtp; 550 5.7.1 Spam",
+          }),
+        ).toEqual([{ _tag: "Ignored", reason: "message-bounce" }]);
+        expect(yield* isSuppressed(ADDRESS)).toBe(false);
+        expect(yield* bounceEvent("msg_reply")).toEqual([
+          { _tag: "Bounced", suppressed: 1, marked: 0, counted: 0 },
+        ]);
+        expect(yield* isSuppressed(ADDRESS)).toBe(true);
+        expect(yield* paused).toEqual({ bouncedAt: false, reason: Option.none() });
+      }),
+    ),
+  );
+
+  it.effect("ignores bounces it can't trace to a message of ours to that recipient", () =>
+    own(
+      Effect.gen(function* () {
+        yield* recipient(ADDRESS);
+        yield* sentAs("msg_ours");
+        const outcomes = yield* Effect.forEach(
+          [
+            // The documented record, untagged and unknown to us.
+            Effect.flatMap(withMessage(JSON.stringify(bounceRecord)), Feedback.handle),
+            // Our message, but tagged for someone else.
+            bounceEvent("msg_ours", { userId: "usr_2" }),
+            // Our message, but an address it wasn't sent to.
+            bounceEvent("msg_ours", { emailAddress: "someone@example.com" }),
+          ],
+          (outcome) => outcome,
+          { concurrency: 1 },
+        );
+        expect(Arr.flatten(outcomes)).toEqual([
+          { _tag: "Ignored", reason: "uncorrelated" },
+          { _tag: "Ignored", reason: "uncorrelated" },
+          { _tag: "Ignored", reason: "uncorrelated" },
+        ]);
+        expect(yield* paused).toEqual({ bouncedAt: false, reason: Option.none() });
+        expect(yield* isSuppressed(ADDRESS)).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("changes nothing for transient bounces, other events and unreadable messages", () =>
+    own(
       Effect.gen(function* () {
         const transient = {
           ...bounceRecord,
@@ -254,6 +488,6 @@ describe("feedback Lambda on documented payloads", () => {
           [{ _tag: "Ignored", reason: "invalid-event" }],
         ]);
       }),
-    );
-  });
+    ),
+  );
 });

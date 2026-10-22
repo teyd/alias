@@ -7,10 +7,13 @@ import {
   type MessageQueue,
   Objects,
   Parameters,
+  SendingEvent,
   SesEvent,
+  SnsEvent,
   SqsEvent,
   Transport,
 } from "@alias/aws";
+import bounceRecord from "@alias/aws/fixtures/ses-event-bounce.json" with { type: "json" };
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo, ProxyRepo } from "@alias/db";
@@ -31,10 +34,12 @@ import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as R from "effect/Record";
 import * as TestClock from "effect/testing/TestClock";
 import { createTransport } from "nodemailer";
 
@@ -318,6 +323,67 @@ export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
   );
 
 const decoder = new TextDecoder();
+
+/**
+ * Publishes to the SES event topic what SES would for a bounce of `messageId` (a message we sent
+ * to `address` for `userId`): AWS's documented bounce record with these fields, for the bounces
+ * fakecloud's mailbox simulator can't produce (it has `bounce@` → 5.1.1 only). SNS (fakecloud)
+ * delivers it to the subscriber; returns what the feedback Lambda made of it.
+ */
+export const bounceBack = Effect.fn("stack.bounceBack")(function* (bounce: {
+  readonly messageId: string;
+  readonly userId: string;
+  readonly kind: SendingEvent.Kind;
+  readonly address: string;
+  readonly bounceSubType: string;
+  readonly status: string;
+  readonly diagnosticCode: string;
+}) {
+  const [documented] = bounceRecord.bounce.bouncedRecipients;
+  // The Lambdas run in real time; so does SES.
+  const now = DateTime.formatIso(yield* TestClock.withLive(DateTime.now));
+  const { TopicArn = "" } = yield* SNS.createTopic({ Name: "ses-events" });
+  yield* SNS.publish({
+    TopicArn,
+    Message: JSON.stringify({
+      ...bounceRecord,
+      mail: {
+        ...bounceRecord.mail,
+        messageId: bounce.messageId,
+        timestamp: now,
+        destination: [bounce.address],
+        tags: {
+          ...bounceRecord.mail.tags,
+          ...R.fromEntries(
+            Arr.map(
+              SendingEvent.tags(bounce.userId, bounce.kind),
+              (tag) => [tag.name, [tag.value]] as const,
+            ),
+          ),
+        },
+      },
+      bounce: {
+        ...bounceRecord.bounce,
+        bounceType: "Permanent",
+        bounceSubType: bounce.bounceSubType,
+        timestamp: now,
+        bouncedRecipients: [
+          {
+            ...documented,
+            emailAddress: bounce.address,
+            status: bounce.status,
+            diagnosticCode: bounce.diagnosticCode,
+          },
+        ],
+      },
+    }),
+  }).pipe(Effect.provide(aws));
+  const subscriber = yield* SnsSubscriber.SnsSubscriber;
+  const event = yield* SnsEvent.decode(
+    JSON.parse(JSON.stringify(yield* Queue.take(subscriber.events))),
+  );
+  return yield* Feedback.handle(event);
+});
 
 /** Mail SES sent to `address`, oldest first, as raw text. */
 export const sentTo = (address: string) =>

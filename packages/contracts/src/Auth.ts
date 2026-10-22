@@ -23,6 +23,17 @@ export class Unauthenticated extends Schema.TaggedError<Unauthenticated>()(
 ) {}
 
 /**
+ * A change authenticated by the session cookie that didn't come from the web app itself: its
+ * `Sec-Fetch-Site` isn't `same-origin`, its `Origin` isn't the app's (or it names neither), or it
+ * has a body that isn't `application/json` (PLAN.md §20.30). Bearer-token requests never get it.
+ */
+export class CrossSiteRequest extends Schema.TaggedError<CrossSiteRequest>()(
+  "CrossSiteRequest",
+  {},
+  { httpApiStatus: 403 },
+) {}
+
+/**
  * The session cookie. `__Host-` makes browsers insist on `Secure`, `Path=/` and no `Domain`, so
  * no subdomain (every username is one) can set or read it.
  */
@@ -37,14 +48,15 @@ const bearerToken = HttpApiSecurity.bearer;
  * first. A token passes only on endpoints annotated with a scope it holds (`requires` in
  * `Scopes.ts`), so endpoints without one stay session-only. Failures, before the handler runs:
  * {@link Unauthenticated} (401) without a live credential, {@link Forbidden} (403) for a token
- * the endpoint doesn't accept, {@link TooManyAttempts} (429) after too many bad tokens.
+ * the endpoint doesn't accept, {@link CrossSiteRequest} (403) for a cookie-authenticated change
+ * from elsewhere, {@link TooManyAttempts} (429) after too many bad tokens.
  */
 export class Authentication extends HttpApiMiddleware.Service<
   Authentication,
   { provides: CurrentUser }
 >()("@alias/contracts/Authentication", {
   security: { session: sessionCookie, token: bearerToken },
-  error: [Unauthenticated, Forbidden, TooManyAttempts],
+  error: [Unauthenticated, Forbidden, CrossSiteRequest, TooManyAttempts],
 }) {}
 
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });

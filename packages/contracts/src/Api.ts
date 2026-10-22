@@ -1,8 +1,10 @@
 import * as Schema from "effect/Schema";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { AccountGroup, AuthGroup, Authentication } from "./Auth.ts";
+import { requires } from "./Scopes.ts";
 import { RecipientsGroup } from "./Recipients.ts";
 import { SettingsGroup } from "./Settings.ts";
+import { TokensGroup } from "./Tokens.ts";
 
 const Health = Schema.Struct({
   status: Schema.Literal("ok"),
@@ -102,35 +104,51 @@ const AliasAddress = { domain: Schema.String, local: Schema.String };
  * aliases answer `AliasNotFound`, so lookups reveal nothing.
  */
 const AliasesGroup = HttpApiGroup.make("aliases")
-  .add(HttpApiEndpoint.get("list", "/aliases", { success: Schema.Array(AliasView) }))
-  .add(HttpApiEndpoint.get("domains", "/aliases/domains", { success: AliasDomains }))
   .add(
-    HttpApiEndpoint.post("create", "/aliases", {
-      payload: NewAlias,
-      success: AliasView.pipe(HttpApiSchema.status(201)),
-      error: [InvalidAlias, AliasTaken],
-    }),
+    requires("aliases:read")(
+      HttpApiEndpoint.get("list", "/aliases", { success: Schema.Array(AliasView) }),
+    ),
   )
   .add(
-    HttpApiEndpoint.get("lookup", "/aliases/:domain/:local", {
-      params: AliasAddress,
-      success: AliasView,
-      error: AliasNotFound,
-    }),
+    requires("aliases:read")(
+      HttpApiEndpoint.get("domains", "/aliases/domains", { success: AliasDomains }),
+    ),
   )
   .add(
-    HttpApiEndpoint.patch("update", "/aliases/:domain/:local", {
-      params: AliasAddress,
-      payload: AliasChanges,
-      success: AliasView,
-      error: AliasNotFound,
-    }),
+    requires("aliases:write")(
+      HttpApiEndpoint.post("create", "/aliases", {
+        payload: NewAlias,
+        success: AliasView.pipe(HttpApiSchema.status(201)),
+        error: [InvalidAlias, AliasTaken],
+      }),
+    ),
   )
   .add(
-    HttpApiEndpoint.delete("remove", "/aliases/:domain/:local", {
-      params: AliasAddress,
-      error: AliasNotFound,
-    }),
+    requires("aliases:read")(
+      HttpApiEndpoint.get("lookup", "/aliases/:domain/:local", {
+        params: AliasAddress,
+        success: AliasView,
+        error: AliasNotFound,
+      }),
+    ),
+  )
+  .add(
+    requires("aliases:write")(
+      HttpApiEndpoint.patch("update", "/aliases/:domain/:local", {
+        params: AliasAddress,
+        payload: AliasChanges,
+        success: AliasView,
+        error: AliasNotFound,
+      }),
+    ),
+  )
+  .add(
+    requires("aliases:write")(
+      HttpApiEndpoint.delete("remove", "/aliases/:domain/:local", {
+        params: AliasAddress,
+        error: AliasNotFound,
+      }),
+    ),
   )
   .middleware(Authentication)
   .prefix("/v1");
@@ -144,25 +162,31 @@ const ContactAddress = { ...AliasAddress, contactId: Schema.String };
  */
 const ContactsGroup = HttpApiGroup.make("contacts")
   .add(
-    HttpApiEndpoint.get("list", "/aliases/:domain/:local/contacts", {
-      params: AliasAddress,
-      success: Schema.Array(Contact),
-      error: AliasNotFound,
-    }),
+    requires("contacts:read")(
+      HttpApiEndpoint.get("list", "/aliases/:domain/:local/contacts", {
+        params: AliasAddress,
+        success: Schema.Array(Contact),
+        error: AliasNotFound,
+      }),
+    ),
   )
   .add(
-    HttpApiEndpoint.patch("update", "/aliases/:domain/:local/contacts/:contactId", {
-      params: ContactAddress,
-      payload: Schema.Struct({ isBlocked: Schema.Boolean }),
-      success: Contact,
-      error: [AliasNotFound, ContactNotFound],
-    }),
+    requires("contacts:write")(
+      HttpApiEndpoint.patch("update", "/aliases/:domain/:local/contacts/:contactId", {
+        params: ContactAddress,
+        payload: Schema.Struct({ isBlocked: Schema.Boolean }),
+        success: Contact,
+        error: [AliasNotFound, ContactNotFound],
+      }),
+    ),
   )
   .add(
-    HttpApiEndpoint.delete("remove", "/aliases/:domain/:local/contacts/:contactId", {
-      params: ContactAddress,
-      error: [AliasNotFound, ContactNotFound],
-    }),
+    requires("contacts:write")(
+      HttpApiEndpoint.delete("remove", "/aliases/:domain/:local/contacts/:contactId", {
+        params: ContactAddress,
+        error: [AliasNotFound, ContactNotFound],
+      }),
+    ),
   )
   .middleware(Authentication)
   .prefix("/v1");
@@ -174,4 +198,5 @@ export const Api = HttpApi.make("alias")
   .add(AliasesGroup)
   .add(ContactsGroup)
   .add(RecipientsGroup)
-  .add(SettingsGroup);
+  .add(SettingsGroup)
+  .add(TokensGroup);

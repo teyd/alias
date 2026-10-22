@@ -148,12 +148,16 @@ const stack = Layer.mergeAll(
   aws,
 ).pipe(Layer.provide(NodeCrypto.layer), Layer.provideMerge(FakeCloud.layer()));
 
-/** A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. */
+/**
+ * A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. With `bearer`, a
+ * CLI-ish one: an API token in `Authorization` instead.
+ */
 const call = (
   path: string,
   init: {
     readonly body?: Schema.Json;
     readonly cookie?: string;
+    readonly bearer?: string;
     readonly method?: "GET" | "POST" | "PATCH" | "DELETE";
   } = {},
 ) =>
@@ -161,6 +165,7 @@ const call = (
     const { url } = yield* FunctionUrlServer.FunctionUrlServer;
     const headers = new Headers({ "content-type": "application/json", origin });
     if (init.cookie !== undefined) headers.set("cookie", init.cookie);
+    if (init.bearer !== undefined) headers.set("authorization", `Bearer ${init.bearer}`);
     const method = init.method ?? (init.body === undefined ? "GET" : "POST");
     const request: RequestInit = { method, headers };
     if (init.body !== undefined) request.body = JSON.stringify(init.body);
@@ -311,6 +316,36 @@ describe("emulated stack", () => {
     it.effect("serves the API over a function URL", () =>
       Effect.gen(function* () {
         expect(yield* call("/health")).toMatchObject({ status: 200, body: { status: "ok" } });
+      }),
+    );
+
+    it.effect("creates an alias with a personal API token minted in the browser session", () =>
+      Effect.gen(function* () {
+        const { cookie } = yield* signUp("cli-user");
+        const minted = yield* call("/v1/tokens", {
+          cookie,
+          body: { name: "laptop CLI", scopes: ["aliases:read", "aliases:write"] },
+        });
+        expect(minted.status).toBe(201);
+        const bearer = String(minted.body.token);
+        expect(bearer).toMatch(/^alias_pat_/);
+
+        const created = yield* call("/v1/aliases", {
+          bearer,
+          body: { _tag: "Random", domain: "alias.test", mode: "forward" },
+        });
+        expect(created.status).toBe(201);
+        expect((yield* call("/v1/aliases", { cookie })).body).toEqual([created.body]);
+        expect((yield* call("/v1/aliases", { bearer })).body).toEqual([created.body]);
+
+        // Out of scope, and session-only: the token can't mint itself a stronger one.
+        expect((yield* call("/v1/recipients", { bearer })).status).toBe(403);
+        const escalate = { name: "more", scopes: ["recipients:write"] };
+        expect((yield* call("/v1/tokens", { bearer, body: escalate })).status).toBe(403);
+
+        const revoked = yield* call(`/v1/tokens/${minted.body.id}`, { cookie, method: "DELETE" });
+        expect(revoked.status).toBe(204);
+        expect((yield* call("/v1/aliases", { bearer })).status).toBe(401);
       }),
     );
 

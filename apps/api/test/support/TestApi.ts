@@ -9,7 +9,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "../../src/index.ts";
 import * as Browser from "./Browser.ts";
-import type * as TestAuthenticator from "./TestAuthenticator.ts";
+import * as TestAuthenticator from "./TestAuthenticator.ts";
 
 const fakecloudClient = Layer.unwrap(
   Effect.map(Effect.service(FakeCloud.FakeCloud), ({ url }) => AwsClient.emulator(url)),
@@ -46,7 +46,14 @@ export const make = Effect.acquireRelease(
         ),
       ),
     );
-    return { ...handler, context, browser: () => Browser.make(handler.handle) };
+    return {
+      ...handler,
+      context,
+      browser: () => Browser.make(handler.handle),
+      /** A client sending `Authorization: Bearer <token>` and no cookies, from `sourceIp`. */
+      withToken: (token: string, sourceIp = "198.51.100.7") =>
+        Browser.make(handler.handle, { headers: { authorization: `Bearer ${token}` }, sourceIp }),
+    };
   }),
   (handler) => Effect.promise(() => handler.dispose()),
 );
@@ -92,4 +99,16 @@ export const logIn = Effect.fn("logIn")(function* (
     challengeId,
     credential: authenticator.get(options),
   });
+});
+
+const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
+
+/** A browser signed in as a freshly registered user. */
+export const signedIn = Effect.fn("signedIn")(function* (
+  open: () => Browser.Client,
+  username: string,
+) {
+  const browser = open();
+  const registered = yield* signUp(browser, TestAuthenticator.make(Browser.origin), username);
+  return { browser, ...Schema.decodeUnknownSync(Me)(registered.body) };
 });

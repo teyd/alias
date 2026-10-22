@@ -80,6 +80,13 @@ const requestBody = (event: FunctionUrlEvent) =>
         : Effect.succeed({ body }),
   });
 
+/**
+ * The header the built `Request` carries the caller's address in (`requestContext.http.sourceIp`),
+ * since a web `Request` has no field for it. Whatever the client sent under this name is replaced,
+ * so handlers may trust it. Behind CloudFront this is CloudFront's address, not the viewer's.
+ */
+export const SOURCE_IP_HEADER = "x-alias-source-ip";
+
 /** Builds the web `Request` the function URL received. Cookies arrive split out, as AWS sends them. */
 export const toRequest = Effect.fn("FunctionUrl.toRequest")(function* (event: FunctionUrlEvent) {
   const query = Str.isEmpty(event.rawQueryString) ? "" : `?${event.rawQueryString}`;
@@ -87,6 +94,7 @@ export const toRequest = Effect.fn("FunctionUrl.toRequest")(function* (event: Fu
   Option.map(Option.fromUndefinedOr(event.cookies), (cookies) =>
     headers.set("cookie", cookies.join("; ")),
   );
+  headers.set(SOURCE_IP_HEADER, event.requestContext.http.sourceIp);
   const method = event.requestContext.http.method;
   const body = method === "GET" || method === "HEAD" ? {} : yield* requestBody(event);
   const url = `https://${event.requestContext.domainName}${event.rawPath}${query}`;

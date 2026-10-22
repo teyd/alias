@@ -28,6 +28,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              | `SESSIONS#<userId>`        | `SESSION#<sha256(token)>` | `expiresAt` |
  * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                            |                           | `expiresAt` |
  * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                            |                           | `expiresAt` |
+ * | Token             | `TOKEN#<sha256(secret)>`     | `TOKEN`                | `TOKENS#<userId>`          | `TOKEN#<id>`              | `expiresAt` |
+ * | AuthFailures      | `AUTHFAIL#<sha256(ip)>`      | `FAILURES#<hour>`      |                            |                           | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
@@ -74,6 +76,13 @@ import { DynamoTable } from "./Dynamo.ts";
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing
  * again. It carries no content and expires after a week, well past Lambda's 6-hour retry window.
+ *
+ * A Token is a personal API token (PLAN.md §20.20), stored under the SHA-256 of its secret, so a
+ * bearer request costs one strongly consistent GetItem and a table dump yields no usable token.
+ * Listing a user's tokens is a gsi1 Query on `TOKENS#<userId>` (eventually consistent, like the
+ * alias list); revoking deletes the item by its key. An expiring token carries `expiresAt`, so TTL
+ * removes it later. AuthFailures counts failed token attempts per hashed client address and UTC
+ * hour, like the other quota items.
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

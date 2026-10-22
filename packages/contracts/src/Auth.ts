@@ -2,6 +2,7 @@ import { Username } from "@alias/core";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";
+import { Forbidden, TooManyAttempts, anyToken } from "./Scopes.ts";
 import * as WebAuthn from "./WebAuthn.ts";
 
 /**
@@ -13,7 +14,7 @@ export class CurrentUser extends Context.Service<
   { readonly userId: string; readonly username: string }
 >()("@alias/contracts/CurrentUser") {}
 
-/** No session cookie, or one that is unknown, expired or logged out. */
+/** No live credential: no session cookie or bearer token, or one that is unknown, expired, logged out or revoked. */
 export class Unauthenticated extends Schema.TaggedError<Unauthenticated>()(
   "Unauthenticated",
   {},
@@ -26,17 +27,23 @@ export class Unauthenticated extends Schema.TaggedError<Unauthenticated>()(
  */
 export const sessionCookie = HttpApiSecurity.apiKey({ key: "__Host-alias_session", in: "cookie" });
 
+/** A personal API token (`alias_pat_…`) in `Authorization: Bearer`. */
+const bearerToken = HttpApiSecurity.bearer;
+
 /**
- * Session-cookie authentication. Add it to a group or endpoint with `.middleware(Authentication)`
- * and the handlers get {@link CurrentUser}; requests without a live session fail with
- * {@link Unauthenticated} (401) before the handler runs.
+ * Session-cookie or API-token authentication. Add it to a group or endpoint with
+ * `.middleware(Authentication)` and the handlers get {@link CurrentUser}. The session is tried
+ * first. A token passes only on endpoints annotated with a scope it holds (`requires` in
+ * `Scopes.ts`), so endpoints without one stay session-only. Failures, before the handler runs:
+ * {@link Unauthenticated} (401) without a live credential, {@link Forbidden} (403) for a token
+ * the endpoint doesn't accept, {@link TooManyAttempts} (429) after too many bad tokens.
  */
 export class Authentication extends HttpApiMiddleware.Service<
   Authentication,
   { provides: CurrentUser }
 >()("@alias/contracts/Authentication", {
-  security: { session: sessionCookie },
-  error: Unauthenticated,
+  security: { session: sessionCookie, token: bearerToken },
+  error: [Unauthenticated, Forbidden, TooManyAttempts],
 }) {}
 
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
@@ -136,7 +143,7 @@ export const AuthGroup = HttpApiGroup.make("auth")
  * cookie. If `erase` fails halfway, calling both again finishes the job.
  */
 export const AccountGroup = HttpApiGroup.make("account")
-  .add(HttpApiEndpoint.get("me", "/me", { success: Me }))
+  .add(anyToken(HttpApiEndpoint.get("me", "/me", { success: Me })))
   .add(
     HttpApiEndpoint.post("eraseOptions", "/me/erase/options", {
       success: AuthenticationChallenge,

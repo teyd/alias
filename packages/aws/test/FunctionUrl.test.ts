@@ -42,6 +42,16 @@ describe("FunctionUrl (contract: AWS documentation payloads)", () => {
     }),
   );
 
+  it.effect("passes the caller's address in a header the client can't set", () =>
+    Effect.gen(function* () {
+      const built = yield* FunctionUrl.decode({
+        ...request,
+        headers: { ...request.headers, [FunctionUrl.SOURCE_IP_HEADER]: "10.0.0.1" },
+      }).pipe(Effect.flatMap(FunctionUrl.toRequest));
+      expect(built.headers.get(FunctionUrl.SOURCE_IP_HEADER)).toBe("123.123.123.123");
+    }),
+  );
+
   it.effect("decodes base64 request bodies", () =>
     Effect.gen(function* () {
       const built = yield* FunctionUrl.decode({

@@ -9,6 +9,7 @@ import type * as React from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { DeleteAccount } from "@/components/DeleteAccount";
 import { Page } from "@/components/Page";
+import { ApiTokens } from "@/components/settings/ApiTokens";
 import { Separator } from "@/components/ui/separator";
 import { domainsQuery } from "@/lib/aliases";
 import { meQuery } from "@/lib/session";
@@ -90,6 +91,13 @@ const Settings = () => {
               </span>
             </div>
           </div>
+        </Section>
+        <Separator />
+        <Section
+          title="API tokens"
+          description="Let the CLI and your scripts call the API as you, limited to the scopes you pick."
+        >
+          <ApiTokens />
         </Section>
         {Option.match(me.data ?? Option.none(), {
           onNone: () => null,

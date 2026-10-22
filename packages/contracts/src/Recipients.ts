@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { Authentication } from "./Auth.ts";
+import { requires } from "./Scopes.ts";
 
 /** A forwarding address: a real mailbox alias mail can be forwarded to once it is verified. */
 const Recipient = Schema.Struct({
@@ -97,52 +98,66 @@ const recipientId = { recipientId: Schema.String };
  * opens the link while signed in, and the web app posts its token to `confirm`.
  */
 export const RecipientsGroup = HttpApiGroup.make("recipients")
-  .add(HttpApiEndpoint.get("list", "/recipients", { success: Schema.Array(Recipient) }))
   .add(
-    HttpApiEndpoint.post("add", "/recipients", {
-      payload: Schema.Struct({ address: Schema.String }),
-      success: Recipient.pipe(HttpApiSchema.status(201)),
-      error: [
-        InvalidRecipientAddress,
-        RecipientExists,
-        TooManyPendingRecipients,
-        ConfirmationRateLimited,
-        ConfirmationUndeliverable,
-        MailUnavailable,
-      ],
-    }),
+    requires("recipients:read")(
+      HttpApiEndpoint.get("list", "/recipients", { success: Schema.Array(Recipient) }),
+    ),
   )
   .add(
-    HttpApiEndpoint.post("confirm", "/recipients/:recipientId/confirm", {
-      params: recipientId,
-      payload: Schema.Struct({ token: Schema.String }),
-      success: Recipient,
-      error: [RecipientNotFound, ConfirmationRejected],
-    }),
+    requires("recipients:write")(
+      HttpApiEndpoint.post("add", "/recipients", {
+        payload: Schema.Struct({ address: Schema.String }),
+        success: Recipient.pipe(HttpApiSchema.status(201)),
+        error: [
+          InvalidRecipientAddress,
+          RecipientExists,
+          TooManyPendingRecipients,
+          ConfirmationRateLimited,
+          ConfirmationUndeliverable,
+          MailUnavailable,
+        ],
+      }),
+    ),
   )
   .add(
-    HttpApiEndpoint.post("resend", "/recipients/:recipientId/resend", {
-      params: recipientId,
-      error: [
-        RecipientNotFound,
-        RecipientAlreadyVerified,
-        ConfirmationRateLimited,
-        ConfirmationUndeliverable,
-        MailUnavailable,
-      ],
-    }),
+    requires("recipients:write")(
+      HttpApiEndpoint.post("confirm", "/recipients/:recipientId/confirm", {
+        params: recipientId,
+        payload: Schema.Struct({ token: Schema.String }),
+        success: Recipient,
+        error: [RecipientNotFound, ConfirmationRejected],
+      }),
+    ),
   )
   .add(
-    HttpApiEndpoint.post("makeDefault", "/recipients/:recipientId/default", {
-      params: recipientId,
-      error: [RecipientNotFound, RecipientNotVerified],
-    }),
+    requires("recipients:write")(
+      HttpApiEndpoint.post("resend", "/recipients/:recipientId/resend", {
+        params: recipientId,
+        error: [
+          RecipientNotFound,
+          RecipientAlreadyVerified,
+          ConfirmationRateLimited,
+          ConfirmationUndeliverable,
+          MailUnavailable,
+        ],
+      }),
+    ),
   )
   .add(
-    HttpApiEndpoint.delete("remove", "/recipients/:recipientId", {
-      params: recipientId,
-      error: RecipientNotFound,
-    }),
+    requires("recipients:write")(
+      HttpApiEndpoint.post("makeDefault", "/recipients/:recipientId/default", {
+        params: recipientId,
+        error: [RecipientNotFound, RecipientNotVerified],
+      }),
+    ),
+  )
+  .add(
+    requires("recipients:write")(
+      HttpApiEndpoint.delete("remove", "/recipients/:recipientId", {
+        params: recipientId,
+        error: RecipientNotFound,
+      }),
+    ),
   )
   .middleware(Authentication)
   .prefix("/v1");

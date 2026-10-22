@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { Authentication } from "./Auth.ts";
+import { requires } from "./Scopes.ts";
 
 /** The caller's account settings. */
 const Settings = Schema.Struct({
@@ -18,9 +19,11 @@ const SettingsChanges = Schema.Struct({
 
 /** Signed-in only. */
 export const SettingsGroup = HttpApiGroup.make("settings")
-  .add(HttpApiEndpoint.get("get", "/settings", { success: Settings }))
+  .add(requires("settings:read")(HttpApiEndpoint.get("get", "/settings", { success: Settings })))
   .add(
-    HttpApiEndpoint.patch("update", "/settings", { payload: SettingsChanges, success: Settings }),
+    requires("settings:write")(
+      HttpApiEndpoint.patch("update", "/settings", { payload: SettingsChanges, success: Settings }),
+    ),
   )
   .middleware(Authentication)
   .prefix("/v1");

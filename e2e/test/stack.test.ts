@@ -9,6 +9,7 @@ import { Feedback, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber } from "@alias/lambda-emulator";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
@@ -17,7 +18,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
-import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { createTransport } from "nodemailer";
 
@@ -26,8 +26,8 @@ import { createTransport } from "nodemailer";
  * - SMTP → SES emulator (receipt rules, verdicts) → S3 spool on fakecloud → SES Lambda event →
  *   the real inbound pipeline → SES sending on fakecloud;
  * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud.
- * One fakecloud process serves S3, DynamoDB and SES, as one AWS account would, and both Lambdas
- * share one table.
+ * One fakecloud process serves S3, DynamoDB, SES, SNS and SSM, as one AWS account would, and both
+ * Lambdas share one table.
  */
 const aws = Layer.unwrap(
   Effect.map(Effect.service(FakeCloud.FakeCloud), (fakecloud) => AwsClient.emulator(fakecloud.url)),
@@ -84,14 +84,24 @@ const api = Layer.unwrap(
   }),
 );
 
-/** The real inbound pipeline on the same table, spool and SES. */
+/** The reverse-token keys as production stores them: a SecureString in Parameter Store. */
+const reverseKeysParameter = "/alias/e2e/reverse-token-keys";
+const reverseKeys = Layer.unwrap(
+  SSM.putParameter({
+    Name: reverseKeysParameter,
+    Type: "SecureString",
+    Value: `1:${Buffer.alloc(32, 9).toString("base64url")}`,
+  }).pipe(Effect.as(ReverseKeys.fromParameter(reverseKeysParameter))),
+).pipe(Layer.provide(aws));
+
+/** The real inbound pipeline on the same table, spool, SES and keys. */
 const inbound = Pipeline.layer(
   Layer.mergeAll(
     database,
     sending,
     Spool.layer(spoolBucket).pipe(Layer.provide(aws)),
     sharedDomains,
-    ReverseKeys.layer(Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64url")}`)),
+    reverseKeys,
   ),
 );
 

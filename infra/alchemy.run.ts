@@ -38,18 +38,22 @@ const alarmPrefix = `alias-${stage}-ses-`;
 const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
 
 /**
- * Reverse-alias signing keys for the inbound Lambda: `<version>:<base64url secret>` entries, the
- * first one minting (`ReverseKeys.parse` in `apps/inbound`; secrets of at least 32 bytes). A
- * deploy-time secret: the deployer (CI) passes it from its secret store, Lambda keeps environment
- * variables encrypted at rest with KMS, and the Alchemy state backend must stay private because it
- * records the value too. Rotate by putting a new key first and keeping the old one for as long as
- * replies to older mail should work. Moving it to Secrets Manager needs an emulator and a contract
- * test first (AGENTS.md).
+ * Reverse-alias signing keys for the inbound Lambda (PLAN.md §20.14): `<version>:<base64url
+ * secret>` entries, the first one minting (`ReverseKeys.parse` in `apps/inbound`; secrets of at
+ * least 32 bytes). They live in an SSM Parameter Store `SecureString` (standard tier, free) that
+ * the Lambda reads at cold start. This stack only names the parameter and grants reading it; it
+ * never holds the value, so the value stays out of the Alchemy state and the Lambda console.
+ * Before the first deploy of a stage, put it once (the default key `aws/ssm` encrypts it):
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/reverse-token-keys \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * Rotate in two puts with `--overwrite`: first append the new key (`1:<old>,2:<new>`), then, once
+ * every warm container has reloaded (or after any function configuration update), put it first
+ * (`2:<new>,1:<old>`). Keep the old key for as long as replies to older mail should work.
  */
-const reverseTokenKeys = process.env.ALIAS_REVERSE_TOKEN_KEYS;
-if (reverseTokenKeys === undefined || reverseTokenKeys.trim() === "") {
-  throw new Error("Set ALIAS_REVERSE_TOKEN_KEYS (see the comment above it) before planning.");
-}
+const reverseTokenKeysParameter = `/alias/${stage}/reverse-token-keys`;
 
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
@@ -64,6 +68,8 @@ export default Alchemy.Stack(
     const tableArn = `arn:aws:dynamodb:eu-west-1:${accountId}:table/${tableName}`;
     const spoolObjects = `arn:aws:s3:::${spoolBucketName}/${spoolPrefix}*`;
     // Sending through a configuration set is authorized on the set as well as on the identity.
+    // A name with a leading slash has no extra slash in its ARN.
+    const reverseTokenKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${reverseTokenKeysParameter}`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
     // both name it, and SES checks both when the rule is created, before it exists. The format is
@@ -195,7 +201,7 @@ export default Alchemy.Stack(
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_SPOOL_BUCKET: spool.bucketName,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
-        ALIAS_REVERSE_TOKEN_KEYS: reverseTokenKeys,
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
       },
     });
@@ -228,6 +234,17 @@ export default Alchemy.Stack(
       ],
     });
     yield* inbound.bind("SendMail", { policyStatements: [sendFromSharedDomains] });
+    // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
+    // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of
+    // this account use it through Parameter Store, and which takes no access policies of ours
+    // (SSM user guide, "AWS KMS encryption for Parameter Store SecureString parameters"). A
+    // customer managed key would need `kms:Decrypt` here, conditioned on
+    // `kms:EncryptionContext:PARAMETER_ARN`.
+    yield* inbound.bind("ReverseTokenKeys", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: reverseTokenKeysParameterArn },
+      ],
+    });
     // SES checks that it may invoke the function when the rule is created, so the rule waits for
     // this permission (it takes the function ARN from it). Only this rule may invoke it.
     const sesInvoke = yield* AWS.Lambda.Permission("SesInvokesInbound", {

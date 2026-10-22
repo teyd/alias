@@ -9,8 +9,10 @@
  * event the feedback handler gets in production (PLAN.md §20.11). Send to
  * `bounce@simulator.amazonses.com` or `complaint@simulator.amazonses.com` to see it work.
  *
- * The reverse-token key is a fixed dev key unless `ALIAS_REVERSE_TOKEN_KEYS` is set. Never use it
- * anywhere real: anyone with this repo can mint reverse aliases for it.
+ * Reverse-token keys come from Parameter Store, as in production (PLAN.md §20.14): on start, the
+ * fixed dev key is put into fakecloud's SSM as `/alias/dev/reverse-token-keys` unless that
+ * parameter already exists, so `aws ssm put-parameter` against fakecloud can replace it. Never use
+ * the dev key anywhere real: anyone with this repo can mint reverse aliases for it.
  */
 import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
@@ -19,16 +21,17 @@ import { SnsSubscriber } from "@alias/lambda-emulator";
 import { SesEmulator } from "@alias/ses-emulator";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Feedback, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
 const DEV_REVERSE_TOKEN_KEYS = "1:ZGV2LW9ubHktcmV2ZXJzZS10b2tlbi1rZXktbm90LXNlY3JldA";
+const reverseKeysParameter = "/alias/dev/reverse-token-keys";
 
 const sharedDomainsValue = process.env.ALIAS_SHARED_DOMAINS ?? "alias.test";
 const spoolBucket = "alias-spool";
@@ -41,15 +44,28 @@ const sending = Transport.layer({ configurationSet: Option.some(configurationSet
   Layer.provide(awsClient),
 );
 
+// fakecloud starts alongside; retry until it accepts the bucket, the identities and the table.
+const untilFakeCloudIsUp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }));
+
+/** The dev key, stored the way production stores its keys, then read back like the Lambda does. */
+const reverseKeys = Layer.unwrap(
+  untilFakeCloudIsUp(
+    SSM.putParameter({
+      Name: reverseKeysParameter,
+      Type: "SecureString",
+      Value: DEV_REVERSE_TOKEN_KEYS,
+    }).pipe(Effect.catchTag("ParameterAlreadyExists", () => Effect.void)),
+  ).pipe(Effect.as(ReverseKeys.fromParameter(reverseKeysParameter))),
+).pipe(Layer.provide(awsClient));
+
 const pipeline = Pipeline.layer(
   Layer.mergeAll(
     Dynamo.emulator(fakecloudUrl, "alias"),
     sending,
     Spool.layer(spoolBucket).pipe(Layer.provide(awsClient)),
     sharedDomains,
-    ReverseKeys.layer(
-      Redacted.make(process.env.ALIAS_REVERSE_TOKEN_KEYS ?? DEV_REVERSE_TOKEN_KEYS),
-    ),
+    reverseKeys,
   ),
 );
 
@@ -79,10 +95,6 @@ const emulator = Layer.unwrap(
     }),
   ),
 ).pipe(Layer.provide([NodeCrypto.layer, awsClient, sharedDomains]));
-
-// fakecloud starts alongside; retry until it accepts the bucket, the identities and the table.
-const untilFakeCloudIsUp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }));
 
 const prepare = Effect.fn("inbound.dev.prepare")(function* () {
   yield* untilFakeCloudIsUp(Inbound.ensureSpool(spoolBucket)).pipe(Effect.provide(awsClient));

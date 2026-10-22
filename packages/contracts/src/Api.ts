@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { AccountGroup, AuthGroup, Authentication } from "./Auth.ts";
 import { DeviceGroup, OAuthGroup } from "./Device.ts";
+import { ConsentGroup } from "./OAuth.ts";
 import { requires } from "./Scopes.ts";
 import { DomainsGroup } from "./Domains.ts";
 import { RecipientsGroup } from "./Recipients.ts";
@@ -213,4 +214,5 @@ export const Api = HttpApi.make("alias")
   .add(TokensGroup)
   .add(WebhooksGroup)
   .add(OAuthGroup)
-  .add(DeviceGroup);
+  .add(DeviceGroup)
+  .add(ConsentGroup);

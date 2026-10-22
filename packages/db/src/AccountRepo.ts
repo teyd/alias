@@ -19,6 +19,7 @@ import * as Item from "./Item.ts";
 import { userPasskeysKey } from "./PasskeyRepo.ts";
 import * as Purge from "./Purge.ts";
 import { sessionKey, userSessionsKey } from "./SessionRepo.ts";
+import { userOAuthKey } from "./OAuthRepo.ts";
 import { userTokensKey } from "./TokenRepo.ts";
 import { userKey, usernameKey } from "./UserRepo.ts";
 
@@ -156,8 +157,8 @@ const make = Effect.fn("AccountRepo.make")(function* () {
 
   const erase = Effect.fn("AccountRepo.erase")(function* (account: Account) {
     const current = sessionKey(account.sessionId);
-    // 1. Every other session and every API token, so no other device or script acts on the
-    //    account while it is erased.
+    // 1. Every other session, every API token and every OAuth grant with its tokens, so no other
+    //    device, script or connected app acts on the account while it is erased.
     const sessions = yield* Effect.forEach(
       yield* Purge.indexItems(table, userSessionsKey(account.userId)),
       Purge.keyOf,
@@ -168,9 +169,15 @@ const make = Effect.fn("AccountRepo.make")(function* () {
       Purge.keyOf,
       { concurrency: "unbounded" },
     );
+    const oauth = yield* Effect.forEach(
+      yield* Purge.indexItems(table, userOAuthKey(account.userId)),
+      Purge.keyOf,
+      { concurrency: "unbounded" },
+    );
     yield* Purge.deleteAll(table, [
       ...Arr.filter(sessions, (key) => key.pk.S !== current.pk.S),
       ...tokens,
+      ...oauth,
     ]);
 
     // 2. The username becomes a tombstone: no new aliases on the fly, and nobody gets it again.

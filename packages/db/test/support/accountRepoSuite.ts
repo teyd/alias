@@ -20,6 +20,7 @@ import {
   ContactRepo,
   DomainRepo,
   Dynamo,
+  OAuthRepo,
   RecipientRepo,
   SessionRepo,
   TokenRepo,
@@ -35,6 +36,7 @@ const repos = Layer.mergeAll(
   AliasRepo.layer,
   ContactRepo.layer,
   DomainRepo.layer,
+  OAuthRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
   TokenRepo.layer,
@@ -47,6 +49,7 @@ type Repos =
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
   | DomainRepo.DomainRepo
+  | OAuthRepo.OAuthRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
@@ -73,10 +76,11 @@ const scan = Effect.fn("scan")(function* () {
 });
 
 /**
- * One user with one of everything the service stores about a user: sessions, settings, a
- * recipient, a creation quota, a custom domain, live and deleted aliases on a shared domain, on
- * their subdomain and on their custom domain, contacts, counters, and a deletion that stopped
- * halfway.
+ * One user with one of everything the service stores about a user: sessions, tokens, a connected
+ * app (its grant, a used and a current refresh token, two access tokens, the redeemed code and
+ * one waiting), settings, a recipient, a creation quota, a custom domain, live and deleted aliases
+ * on a shared domain, on their subdomain and on their custom domain, contacts, counters, and a
+ * deletion that stopped halfway.
  */
 const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) {
   const users = yield* UserRepo.UserRepo;
@@ -126,6 +130,60 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
         }),
       ),
     { concurrency: 1, discard: true },
+  );
+  const oauth = yield* OAuthRepo.OAuthRepo;
+  const issued = (n: number): OAuthRepo.Issued => ({
+    access: {
+      hash: `${name}access${n}`.padEnd(64, "0"),
+      grantId: `grt_${name}`,
+      clientId: "mcp_client",
+      userId,
+      username,
+      scopes: ["aliases:read"],
+      resource: "https://alias.test/mcp",
+      expiresAt: at(9_000_000_000_000),
+    },
+    refresh: {
+      hash: `${name}refresh${n}`.padEnd(64, "0"),
+      grantId: `grt_${name}`,
+      clientId: "mcp_client",
+      userId,
+      expiresAt: at(9_000_000_000_000),
+    },
+  });
+  const code = (purpose: string): OAuthRepo.NewCode => ({
+    hash: `${name}code${purpose}`.padEnd(64, "0"),
+    clientId: "mcp_client",
+    clientName: "Claude",
+    redirectUri: "http://127.0.0.1/callback",
+    codeChallenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    scopes: ["aliases:read"],
+    resource: "https://alias.test/mcp",
+    userId,
+    username,
+    expiresAt: at(9_000_000_000_000),
+  });
+  yield* oauth.createCode(code("redeemed"));
+  yield* oauth.createCode(code("waiting"));
+  yield* oauth.redeemCode(
+    { ...code("redeemed"), grantId: Option.none() },
+    {
+      id: `grt_${name}`,
+      userId,
+      username,
+      clientId: "mcp_client",
+      clientName: "Claude",
+      scopes: ["aliases:read"],
+      resource: "https://alias.test/mcp",
+      createdAt: at(1_000),
+      expiresAt: at(9_000_000_000_000),
+    },
+    issued(0),
+  );
+  yield* oauth.rotate(
+    { ...issued(0).refresh, usedAt: Option.none() },
+    issued(1),
+    at(9_000_000_000_000),
   );
   yield* WebhookRepo.WebhookRepo.use((webhooks) =>
     webhooks.create({

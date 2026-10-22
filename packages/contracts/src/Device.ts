@@ -31,6 +31,7 @@ export class OAuthError extends Schema.TaggedError<OAuthError>()(
       "slow_down",
       "access_denied",
       "expired_token",
+      "invalid_target",
     ]),
     error_description: Schema.optionalKey(Schema.String),
   },
@@ -55,25 +56,44 @@ const DeviceAuthorization = Schema.Struct({
   interval: Schema.Int,
 });
 
-/** RFC 8628 §3.4. */
+/**
+ * One token endpoint for every grant: the device code (RFC 8628 §3.4) and, for MCP clients
+ * (PLAN.md §20.24), an authorization code with its PKCE verifier (OAuth 2.1 §4.1.3) or a refresh
+ * token (§4.3). Each grant type checks the fields it needs.
+ */
 const TokenRequest = Schema.Struct({
   grant_type: Schema.String,
-  device_code: Schema.String,
   client_id: Schema.String,
+  device_code: Schema.optionalKey(Schema.String),
+  code: Schema.optionalKey(Schema.String),
+  redirect_uri: Schema.optionalKey(Schema.String),
+  code_verifier: Schema.optionalKey(Schema.String),
+  refresh_token: Schema.optionalKey(Schema.String),
+  scope: Schema.optionalKey(Schema.String),
+  /** RFC 8707: the MCP resource the token is for. */
+  resource: Schema.optionalKey(Schema.String),
 }).pipe(HttpApiSchema.asFormUrlEncoded());
 
-/** RFC 6749 §5.1: a personal API token (`alias_pat_…`) with the approved scopes. */
+/**
+ * RFC 6749 §5.1. A device login gets a personal API token (`alias_pat_…`); an MCP client an
+ * hour's access token (`alias_oat_…`) and a refresh token (`alias_ort_…`), rotated on each use.
+ */
 const AccessToken = Schema.Struct({
   access_token: Schema.String,
   token_type: Schema.Literal("Bearer"),
   expires_in: Schema.Int,
+  refresh_token: Schema.optionalKey(Schema.String),
   scope: Schema.String,
 });
 
-/** RFC 7009 §2.1. `token_type_hint` is accepted and ignored: there is one kind of token. */
+/**
+ * RFC 7009 §2.1. `token_type_hint` is accepted and ignored: the prefix tells the kind of token.
+ * A public client may name itself (`client_id`); another client's token is then left alone.
+ */
 const RevocationRequest = Schema.Struct({
   token: Schema.String,
   token_type_hint: Schema.optionalKey(Schema.String),
+  client_id: Schema.optionalKey(Schema.String),
 }).pipe(HttpApiSchema.asFormUrlEncoded());
 
 /**

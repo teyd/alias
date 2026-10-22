@@ -12,7 +12,7 @@ import {
   TOKEN_PREFIX,
   TooManyAttempts,
 } from "@alias/contracts";
-import { DeviceRepo, TokenRepo, UserRepo } from "@alias/db";
+import { DeviceRepo, type OAuthRepo, TokenRepo, UserRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -28,6 +28,7 @@ import { MAX_FAILURES_PER_HOUR } from "./Authentication.ts";
 import { clientSource } from "./ClientSource.ts";
 import { RelyingParty } from "./RelyingParty.ts";
 import { hashToken, newToken } from "./Secrets.ts";
+import * as Grants from "./oauth/Grants.ts";
 import { mint } from "./tokens.ts";
 
 /** RFC 8628 §3.2 leaves the lifetime open; 10 minutes is enough to switch to a browser. */
@@ -160,15 +161,36 @@ const issue = Effect.fn("device.issue")(function* (
   };
 });
 
-const token = Effect.fn("device.token")(function* (payload: {
-  readonly grant_type: string;
-  readonly device_code: string;
-  readonly client_id: string;
-}) {
+/**
+ * An MCP client's grant (PLAN.md §20.24). Failed exchanges count against the address with the
+ * same counter as device codes and API tokens, so codes and refresh tokens can't be guessed at
+ * volume either.
+ */
+const mcpToken = Effect.fn("device.mcpToken")(function* (payload: Grants.TokenRequest) {
+  const tokens = yield* TokenRepo.TokenRepo;
+  const now = yield* DateTime.now;
+  const source = yield* clientSource();
+  if ((yield* Effect.orDie(tokens.failures(source, now))) >= MAX_FAILURES_PER_HOUR) {
+    return yield* new TooManyAttempts();
+  }
+  return yield* Grants.exchange(payload).pipe(
+    Effect.tapError((error) =>
+      error.error === "invalid_grant"
+        ? Effect.orDie(tokens.recordFailure(source, now, MAX_FAILURES_PER_HOUR))
+        : Effect.void,
+    ),
+  );
+});
+
+const token = Effect.fn("device.token")(function* (payload: Grants.TokenRequest) {
   yield* noStore;
+  if (Arr.contains(Grants.GRANT_TYPES, payload.grant_type)) return yield* mcpToken(payload);
   if (payload.grant_type !== DEVICE_CODE_GRANT_TYPE) {
     return yield* oauthError("unsupported_grant_type");
   }
+  const deviceCode = Option.fromUndefinedOr(payload.device_code);
+  if (Option.isNone(deviceCode))
+    return yield* oauthError("invalid_request", "Missing device_code.");
   if (Option.isNone(knownClient(payload.client_id))) return yield* oauthError("invalid_client");
   // Device codes are bearer secrets like tokens: unknown ones count as failed attempts.
   const tokens = yield* TokenRepo.TokenRepo;
@@ -180,7 +202,7 @@ const token = Effect.fn("device.token")(function* (payload: {
   const crypto = yield* Crypto.Crypto;
   const devices = yield* DeviceRepo.DeviceRepo;
   const polled = yield* Effect.orDie(
-    Effect.flatMap(hashToken(crypto, payload.device_code), devices.poll),
+    Effect.flatMap(hashToken(crypto, deviceCode.value), devices.poll),
   );
   if (Option.isNone(polled) || polled.value.grant.clientId !== payload.client_id) {
     yield* Effect.orDie(tokens.recordFailure(source, now, MAX_FAILURES_PER_HOUR));
@@ -196,9 +218,17 @@ const token = Effect.fn("device.token")(function* (payload: {
   });
 });
 
-/** RFC 7009: the holder revokes its token. Unknown and malformed tokens are fine too. */
-const revoke = Effect.fn("device.revoke")(function* (payload: { readonly token: string }) {
+/**
+ * RFC 7009: the holder revokes its token, a device login's API token or an MCP client's
+ * (`Grants.revoke`). Unknown and malformed tokens are fine too.
+ */
+const revoke = Effect.fn("device.revoke")(function* (payload: {
+  readonly token: string;
+  readonly client_id?: string;
+}) {
   yield* noStore;
+  if (Grants.isOAuthToken(payload.token))
+    return yield* Grants.revoke(payload.token, Option.fromUndefinedOr(payload.client_id));
   if (!Str.startsWith(TOKEN_PREFIX)(payload.token)) return;
   const crypto = yield* Crypto.Crypto;
   const tokens = yield* TokenRepo.TokenRepo;
@@ -265,6 +295,7 @@ const decide = Effect.fn("device.decide")(function* (typed: string, isApproved: 
 /** What the device handlers use. The groups capture them once, at startup. */
 type DeviceServices =
   | Crypto.Crypto
+  | OAuthRepo.OAuthRepo
   | DeviceRepo.DeviceRepo
   | TokenRepo.TokenRepo
   | UserRepo.UserRepo

@@ -7,6 +7,7 @@ export * as DeliveryRepo from "./DeliveryRepo.ts";
 export * as DeviceRepo from "./DeviceRepo.ts";
 export * as DomainRepo from "./DomainRepo.ts";
 export * as Dynamo from "./Dynamo.ts";
+export * as OAuthRepo from "./OAuthRepo.ts";
 export * as PasskeyRepo from "./PasskeyRepo.ts";
 export * as RecipientRepo from "./RecipientRepo.ts";
 export * as SessionRepo from "./SessionRepo.ts";

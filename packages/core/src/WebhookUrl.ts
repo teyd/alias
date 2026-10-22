@@ -1,0 +1,171 @@
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
+
+/**
+ * Where webhooks may be sent. A user-chosen URL is a server-side request forgery risk: a Lambda
+ * outside a VPC can still reach its own runtime API on 127.0.0.1, and anything on a private or
+ * link-local address the network routes. So a webhook URL must be `https:`, carry no
+ * credentials, name a dotted public host and, if it names an IP literal, a public one. Names are
+ * checked again after DNS resolution, at connect time (`@alias/webhooks` Egress), because a
+ * name can point anywhere and change between checks.
+ *
+ * `isLoopbackAllowed` (tests and `pnpm dev` only, never production) additionally admits
+ * `http:` and `https:` to `localhost` and loopback literals, so a receiver on port 0 works.
+ */
+
+export type Refusal =
+  | "invalid-url"
+  | "not-https"
+  | "has-credentials"
+  | "not-public-host"
+  | "too-long";
+
+export interface Options {
+  readonly isLoopbackAllowed: boolean;
+}
+
+const MAX_LENGTH = 2_048;
+
+const ipv4 = (text: string): Option.Option<ReadonlyArray<number>> => {
+  const parts = text.split(".");
+  if (parts.length !== 4 || !Arr.every(parts, (part) => /^\d{1,3}$/.test(part))) {
+    return Option.none();
+  }
+  const bytes = Arr.map(parts, Number);
+  return Arr.every(bytes, (byte) => byte <= 255) ? Option.some(bytes) : Option.none();
+};
+
+/** The 16 bytes of an IPv6 address (`::` compression and an embedded IPv4 tail allowed). */
+const ipv6 = (text: string): Option.Option<ReadonlyArray<number>> => {
+  const lastColon = text.lastIndexOf(":");
+  const tail = text.slice(lastColon + 1);
+  const hasIpv4Tail = Str.includes(".")(tail);
+  const embedded = hasIpv4Tail ? ipv4(tail) : Option.some<ReadonlyArray<number>>([]);
+  if (Option.isNone(embedded)) return Option.none();
+  // An IPv4 tail stands for the last two groups.
+  const asGroups = Arr.map(Arr.chunksOf(embedded.value, 2), ([high, low]) =>
+    (high * 256 + (low ?? 0)).toString(16),
+  );
+  const hex = hasIpv4Tail ? `${text.slice(0, lastColon + 1)}${Arr.join(asGroups, ":")}` : text;
+  const groupsOf = (part: string) => (Str.isEmpty(part) ? [] : part.split(":"));
+  const halves = hex.split("::");
+  if (halves.length > 2) return Option.none();
+  const left = groupsOf(halves[0] ?? "");
+  const right = groupsOf(halves[1] ?? "");
+  const missing = 8 - left.length - right.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return Option.none();
+  const groups = [...left, ...Arr.replicate("0", halves.length === 1 ? 0 : missing), ...right];
+  if (!Arr.every(groups, (group) => /^[0-9a-f]{1,4}$/i.test(group))) return Option.none();
+  return Option.some(
+    Arr.flatMap(groups, (group) => {
+      const value = Number.parseInt(group, 16);
+      return [value >> 8, value & 0xff];
+    }),
+  );
+};
+
+const within = (bytes: ReadonlyArray<number>, prefix: ReadonlyArray<number>, bits: number) =>
+  Arr.every(Arr.range(0, bits - 1), (bit) => {
+    const mask = 0x80 >> (bit % 8);
+    return (
+      ((bytes[Math.floor(bit / 8)] ?? 0) & mask) === ((prefix[Math.floor(bit / 8)] ?? 0) & mask)
+    );
+  });
+
+/** IANA special-purpose IPv4 blocks that aren't globally reachable, plus multicast and reserved. */
+const NON_PUBLIC_V4: ReadonlyArray<readonly [ReadonlyArray<number>, number]> = [
+  [[0, 0, 0, 0], 8],
+  [[10, 0, 0, 0], 8],
+  [[100, 64, 0, 0], 10],
+  [[127, 0, 0, 0], 8],
+  [[169, 254, 0, 0], 16],
+  [[172, 16, 0, 0], 12],
+  [[192, 0, 0, 0], 24],
+  [[192, 0, 2, 0], 24],
+  [[192, 88, 99, 0], 24],
+  [[192, 168, 0, 0], 16],
+  [[198, 18, 0, 0], 15],
+  [[198, 51, 100, 0], 24],
+  [[203, 0, 113, 0], 24],
+  [[224, 0, 0, 0], 4],
+  [[240, 0, 0, 0], 4],
+];
+
+/** IPv6 blocks that aren't globally reachable, or tunnel to addresses we can't see. */
+const NON_PUBLIC_V6: ReadonlyArray<readonly [ReadonlyArray<number>, number]> = [
+  [[], 96], // ::/96: unspecified, loopback, deprecated IPv4-compatible
+  [[0x01, 0x00], 64], // 100::/64 discard
+  [[0x20, 0x01, 0x00, 0x00], 23], // 2001::/23 IETF protocols (Teredo, ORCHID, …)
+  [[0x20, 0x01, 0x0d, 0xb8], 32], // documentation
+  [[0x20, 0x02], 16], // 6to4
+  [[0x00, 0x64, 0xff, 0x9b, 0x00, 0x01], 48], // local-use NAT64
+  [[0xfc], 7], // unique local
+  [[0xfe, 0x80], 10], // link-local
+  [[0xfe, 0xc0], 10], // site-local (deprecated)
+  [[0xff], 8], // multicast
+];
+
+const MAPPED_V4 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff];
+const NAT64 = [0x00, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0];
+
+const isPublicV4 = (bytes: ReadonlyArray<number>) =>
+  !Arr.some(NON_PUBLIC_V4, ([prefix, bits]) => within(bytes, prefix, bits));
+
+const isPublicV6 = (bytes: ReadonlyArray<number>): boolean => {
+  // IPv4-mapped and well-known NAT64 addresses reach the IPv4 address in their last 4 bytes.
+  if (within(bytes, MAPPED_V4, 96) || within(bytes, NAT64, 96)) {
+    return isPublicV4(bytes.slice(12));
+  }
+  return !Arr.some(NON_PUBLIC_V6, ([prefix, bits]) => within(bytes, prefix, bits));
+};
+
+const isLoopbackV4 = (bytes: ReadonlyArray<number>) => bytes[0] === 127;
+const isLoopbackV6 = (bytes: ReadonlyArray<number>) => within(bytes, [], 120) && bytes[15] === 1;
+
+/**
+ * Whether connecting to `address` (an IP as DNS returns it, IPv6 without brackets) is allowed:
+ * a globally reachable address, or loopback when `isLoopbackAllowed`. Anything unparsable is not.
+ */
+export const isAllowedAddress = (address: string, options: Options): boolean =>
+  Option.match(ipv4(address), {
+    onSome: (bytes) => isPublicV4(bytes) || (options.isLoopbackAllowed && isLoopbackV4(bytes)),
+    onNone: () =>
+      Option.match(ipv6(address.replace(/%.*$/, "")), {
+        onSome: (bytes) => isPublicV6(bytes) || (options.isLoopbackAllowed && isLoopbackV6(bytes)),
+        onNone: () => false,
+      }),
+  });
+
+const isLocalName = (host: string) => host === "localhost" || Str.endsWith(".localhost")(host);
+
+/** The URL to post to, or why it may not be one. */
+export const check = (input: string, options: Options): Result.Result<URL, Refusal> => {
+  if (input.length > MAX_LENGTH) return Result.fail("too-long");
+  const parsed = URL.canParse(input) ? Option.some(new URL(input)) : Option.none<URL>();
+  if (Option.isNone(parsed)) return Result.fail("invalid-url");
+  const url = parsed.value;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return Result.fail("invalid-url");
+  if (!Str.isEmpty(url.username) || !Str.isEmpty(url.password)) {
+    return Result.fail("has-credentials");
+  }
+  // The URL parser has already normalised IPv4 forms like `0x7f.1` to dotted decimal.
+  const host = url.hostname.toLowerCase();
+  const literal = Str.startsWith("[")(host) ? host.slice(1, -1) : host;
+  const isLiteral = Option.isSome(ipv4(literal)) || Option.isSome(ipv6(literal));
+  const isLoopback =
+    isLocalName(host) ||
+    Option.exists(ipv4(literal), isLoopbackV4) ||
+    Option.exists(ipv6(literal), isLoopbackV6);
+  if (options.isLoopbackAllowed && isLoopback) return Result.succeed(url);
+  if (url.protocol !== "https:") return Result.fail("not-https");
+  if (isLiteral) {
+    return isAllowedAddress(literal, { isLoopbackAllowed: false })
+      ? Result.succeed(url)
+      : Result.fail("not-public-host");
+  }
+  // A single label (`intranet`) resolves through search domains; `localhost` never leaves.
+  if (!Str.includes(".")(host) || isLocalName(host)) return Result.fail("not-public-host");
+  return Result.succeed(url);
+};

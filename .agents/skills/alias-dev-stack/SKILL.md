@@ -21,6 +21,8 @@ fakecloud accepts a sender only on an exactly verified domain, while AWS also ac
 
 Bounces and complaints: both dev bins send through the `alias-events` configuration set; inbound creates it with an SNS destination and feeds every notification to the feedback handler (log lines `feedback bounce` / `feedback complaint`). Add `bounce@simulator.amazonses.com` as a forwarding address to watch a confirmation bounce, the recipient get `bouncedAt`, and later forwards drop as `recipient-bounced`.
 
+Webhooks (PLAN.md §20.20): the api, inbound and feedback publish to the SQS queue `alias-webhooks` on fakecloud, and a fourth process, `webhooks` (`apps/webhooks/bin/dev.ts`), polls it with the emulated event source mapping and runs the real delivery handler (log lines `webhook event queued`, `webhook delivered` / `webhook retry`). Dev allows `http://localhost` receivers (`ALIAS_WEBHOOK_ALLOW_LOOPBACK`), production never does. Register an endpoint in Settings (signed in), or `POST /v1/webhooks {"url": "http://localhost:9000/hook", "eventTypes": ["mail.forwarded"]}`, then mail the alias. Failed deliveries come back after 5 s, 5 min, 30 min…; peek at the queue with `aws sqs receive-message --queue-url http://localhost:$ALIAS_FAKECLOUD_PORT/123456789012/alias-webhooks --endpoint-url http://localhost:$ALIAS_FAKECLOUD_PORT --region eu-west-1`.
+
 On-the-fly aliases: turn them on with `PATCH /v1/settings {"isOnTheFlyEnabled": true}` (signed in), then mail any new address on your subdomain; the inbound log shows `inbound alias created on the fly` before `inbound forwarded`.
 
 ## Common tasks

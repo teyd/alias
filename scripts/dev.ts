@@ -13,6 +13,7 @@ const env = { ...process.env, ...devEnv, FORCE_COLOR: "1" };
 // .dev/fakecloud. The API is the real Lambda handler behind the function URL emulator, and it seeds
 // a demo alias with a verified forwarding address. Inbound runs the SES emulator's SMTP listener
 // and hands each Lambda event to the real inbound pipeline, which forwards through fakecloud SES.
+// Webhooks polls fakecloud's SQS webhook queue and runs the real delivery handler.
 const services: Array<{ name: string; cwd: string; command: string; args: Array<string> }> = [
   {
     name: "fakecloud",
@@ -34,6 +35,7 @@ const services: Array<{ name: string; cwd: string; command: string; args: Array<
   { name: "api", cwd: `${root}/apps/api`, command: "node", args: ["bin/dev.ts"] },
   { name: "web", cwd: `${root}/apps/web`, command: "pnpm", args: ["exec", "vp", "dev"] },
   { name: "inbound", cwd: `${root}/apps/inbound`, command: "node", args: ["bin/dev.ts"] },
+  { name: "webhooks", cwd: `${root}/apps/webhooks`, command: "node", args: ["bin/dev.ts"] },
 ];
 
 const children: Array<ChildProcess> = [];

@@ -2,6 +2,8 @@ import { AwsClient, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
+import { UrlPolicy } from "@alias/webhooks";
+import { freshQueue } from "@alias/webhooks/testing";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -26,9 +28,11 @@ const sharedDomain = "alias.test";
 export const make = Effect.acquireRelease(
   Effect.gen(function* () {
     const context = yield* Layer.build(
-      Layer.mergeAll(freshTable(), Transport.ses.pipe(Layer.provide(fakecloudClient))).pipe(
-        Layer.provideMerge(FakeCloud.layer()),
-      ),
+      Layer.mergeAll(
+        freshTable(),
+        freshQueue(),
+        Transport.ses.pipe(Layer.provide(fakecloudClient)),
+      ).pipe(Layer.provideMerge(FakeCloud.layer())),
     );
     yield* Transport.ensureIdentity(sharedDomain).pipe(
       Effect.provide(fakecloudClient),
@@ -40,6 +44,8 @@ export const make = Effect.acquireRelease(
         Layer.succeedContext(context),
         Layer.succeed(Clock.Clock, clock),
         RelyingParty.layer({ id: sharedDomain, origin: Browser.origin }),
+        // Receivers in tests listen on loopback over http.
+        UrlPolicy.layer({ isLoopbackAllowed: true }),
         // A second shared domain lets alias tests pick between domains.
         MailSettings.layer(Option.some(`no-reply@${sharedDomain}`)).pipe(
           Layer.provideMerge(SharedDomains.layer(`${sharedDomain},alias2.test`)),

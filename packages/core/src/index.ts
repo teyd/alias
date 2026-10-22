@@ -3,3 +3,5 @@ export * as Mail from "./Mail.ts";
 export * as ReverseToken from "./ReverseToken.ts";
 export * as SharedDomains from "./SharedDomains.ts";
 export * as Username from "./Username.ts";
+export * as Webhook from "./Webhook.ts";
+export * as WebhookUrl from "./WebhookUrl.ts";

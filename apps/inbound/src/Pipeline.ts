@@ -1,4 +1,11 @@
-import { type Inbound, SendingEvent, type SesEvent, Transport } from "@alias/aws";
+import {
+  type Inbound,
+  type MessageQueue,
+  SendingEvent,
+  type SesEvent,
+  Transport,
+} from "@alias/aws";
+import type { WebhookEvent } from "@alias/contracts";
 import { Address, Mail, ReverseToken, SharedDomains } from "@alias/core";
 import {
   AliasRepo,
@@ -9,6 +16,7 @@ import {
   RecipientRepo,
   UserRepo,
 } from "@alias/db";
+import { Publisher } from "@alias/webhooks";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -62,6 +70,8 @@ type Record = SesEvent.SesEvent["Records"][number];
 interface Send {
   readonly kind: "forward" | "reply";
   readonly alias: AliasRepo.Alias;
+  /** Who wrote, for a forward: named in the `mail.forwarded` webhook event. */
+  readonly contactId: Option.Option<string>;
   /**
    * The checks that need the message's header block (loops, auto-replies, bounces) or spend an
    * allowance, run once it is read. None means send it.
@@ -202,6 +212,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   return Plan.Send({
     kind: "forward",
     alias,
+    contactId: Option.some(contact.id),
     admit,
     rewrite: (raw) =>
       Mail.forward(raw, { alias: address, sender: sender.value, token: token.value }),
@@ -239,6 +250,7 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   return Plan.Send({
     kind: "reply",
     alias,
+    contactId: Option.none(),
     admit: (signals) =>
       Effect.succeed(
         Policy.automatedReply(signals, record.ses.mail).pipe(
@@ -285,17 +297,32 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
     return Result.fail<Policy.DropReason>("creation-limited");
   }
   const ulid = yield* Effect.orDie((yield* Crypto.Crypto).randomULID);
-  yield* aliases
+  const aliasId = `al_${ulid.toLowerCase()}`;
+  const isCreated = yield* aliases
     .insert({
-      id: `al_${ulid.toLowerCase()}`,
+      id: aliasId,
       userId: owner.value.id,
       domain: address.domain,
       localPart: address.local,
       mode: "forward",
       createdAt: DateTime.toEpochMillis(now),
     })
-    .pipe(Effect.catchTag("AliasTaken", () => Effect.void));
-  yield* Effect.logInfo("inbound alias created on the fly");
+    .pipe(
+      Effect.as(true),
+      Effect.catchTag("AliasTaken", () => Effect.succeed(false)),
+    );
+  if (isCreated) {
+    yield* Effect.logInfo("inbound alias created on the fly");
+    yield* (yield* Publisher.Publisher).publish(
+      owner.value.id,
+      {
+        type: "alias.created",
+        timestamp: DateTime.formatIso(now),
+        data: { aliasId, address: Address.format(address), origin: "on-the-fly" },
+      },
+      aliasId,
+    );
+  }
   const created = yield* aliases.findByAddress(address.domain, address.local);
   return Option.match(created, {
     onNone: () => Result.fail<Policy.DropReason>("unknown-alias"),
@@ -339,25 +366,68 @@ const count = (alias: AliasRepo.Alias, counter: "forwarded" | "blocked") =>
     }),
   );
 
+/**
+ * Tells the alias owner's webhooks what happened to a message (metadata only: no content, no
+ * sender address). Keyed by message and recipient, so a retried invocation repeats the
+ * `webhook-id`.
+ */
+const announce = Effect.fn("Pipeline.announce")(function* (
+  delivery: DeliveryRepo.Delivery,
+  alias: AliasRepo.Alias,
+  what:
+    | { readonly type: "mail.forwarded"; readonly contactId: string }
+    | { readonly type: "mail.blocked"; readonly reason: Policy.DropReason },
+) {
+  const timestamp = DateTime.formatIso(yield* DateTime.now);
+  const ref = { aliasId: alias.id, address: Address.format(aliasAddress(alias)) };
+  const event: WebhookEvent =
+    what.type === "mail.forwarded"
+      ? { type: what.type, timestamp, data: { ...ref, contactId: what.contactId } }
+      : { type: what.type, timestamp, data: { ...ref, reason: what.reason } };
+  yield* (yield* Publisher.Publisher).publish(
+    alias.userId,
+    event,
+    `${delivery.messageId}:${delivery.recipient}`,
+  );
+});
+
 /** Counts a refusal of mail to an existing alias as blocked; plain drops count nothing. */
-const refuse = (refusal: Refusal): Effect.Effect<Outcome, never, AliasRepo.AliasRepo> =>
+const refuse = (
+  delivery: DeliveryRepo.Delivery,
+  refusal: Refusal,
+): Effect.Effect<Outcome, never, AliasRepo.AliasRepo | Publisher.Publisher> =>
   Plan.$is("Block")(refusal)
-    ? Effect.as(count(refusal.alias, "blocked"), dropped(refusal.reason))
+    ? count(refusal.alias, "blocked").pipe(
+        Effect.andThen(
+          announce(delivery, refusal.alias, { type: "mail.blocked", reason: refusal.reason }),
+        ),
+        Effect.as(dropped(refusal.reason)),
+      )
     : Effect.succeed(dropped(refusal.reason));
 
 /** Size check, read, header checks, rewrite, send: everything after the claim. */
-const send = Effect.fn("Pipeline.send")(function* (planned: Send, message: Spooled) {
+const send = Effect.fn("Pipeline.send")(function* (
+  delivery: DeliveryRepo.Delivery,
+  planned: Send,
+  message: Spooled,
+) {
   const { maxMessageBytes } = yield* Limits.Limits;
   if ((yield* message.size) > maxMessageBytes) {
-    return yield* refuse(Plan.Block({ alias: planned.alias, reason: "too-large" }));
+    return yield* refuse(delivery, Plan.Block({ alias: planned.alias, reason: "too-large" }));
   }
   const raw = yield* message.raw;
   const refused = yield* planned.admit(yield* Mail.signals(raw));
-  if (Option.isSome(refused)) return yield* refuse(refused.value);
+  if (Option.isSome(refused)) return yield* refuse(delivery, refused.value);
   const rewritten = yield* planned.rewrite(raw);
   yield* (yield* Transport.Transport).send(rewritten, planned.envelope);
   if (planned.kind === "reply") return replied;
   yield* count(planned.alias, "forwarded");
+  if (Option.isSome(planned.contactId)) {
+    yield* announce(delivery, planned.alias, {
+      type: "mail.forwarded",
+      contactId: planned.contactId.value,
+    });
+  }
   return forwarded;
 });
 
@@ -371,10 +441,10 @@ const execute = Effect.fn("Pipeline.execute")(function* (
   const deliveries = yield* DeliveryRepo.DeliveryRepo;
   const expiresAt = DateTime.addDuration(yield* DateTime.now, CLAIM_LIFETIME);
   if (!(yield* deliveries.claim(delivery, expiresAt))) return duplicate;
-  if (Plan.$is("Block")(planned)) return yield* refuse(planned);
+  if (Plan.$is("Block")(planned)) return yield* refuse(delivery, planned);
   // Temporary failures give the claim back so Lambda's retry can send it.
   const defer = (code: string) => Effect.as(deliveries.release(delivery), deferred(code));
-  return yield* send(planned, message).pipe(
+  return yield* send(delivery, planned, message).pipe(
     Effect.catchTags({
       TransportRejected: () => Effect.succeed(dropped("rejected")),
       MessageGone: () => Effect.succeed(dropped("spool-missing")),
@@ -437,10 +507,14 @@ export const handle = Effect.fn("Pipeline.handle")(function* (event: SesEvent.Se
   return Arr.flatten(yield* Effect.forEach(event.Records, processRecord, { concurrency: 1 }));
 });
 
-/** What callers provide: the table, SES sending, the spool, the shared domains and the token keys. */
+/**
+ * What callers provide: the table, SES sending, the spool, the shared domains, the token keys and
+ * the webhook queue.
+ */
 export type Services =
   | Dynamo.Database
   | Transport.Transport
+  | MessageQueue.MessageQueue
   | Spool
   | SharedDomains.SharedDomains
   | ReverseKeys;
@@ -460,5 +534,6 @@ export const layer = <E, R>(
     DeliveryRepo.layer,
     UserRepo.layer,
     NodeCrypto.layer,
+    Publisher.layer.pipe(Layer.provide(NodeCrypto.layer)),
     Layer.succeed(Limits.Limits, limits),
   ).pipe(Layer.provideMerge(services));

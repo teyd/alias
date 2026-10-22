@@ -6,6 +6,7 @@
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
  */
 import { Table } from "@alias/db";
+import { WebhookQueue } from "@alias/webhooks";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import { localState } from "alchemy/State";
@@ -27,6 +28,8 @@ const spoolPrefix = "inbound/";
 /** Fixed names, so policies can name the receipt rule before it exists (`receiptRuleArn`). */
 const receiptRuleSetName = `alias-inbound-${stage}`;
 const receiptRuleName = "all-verified";
+/** Webhook deliveries (PLAN.md §20.20), and where SQS moves those that exhausted their retries. */
+const webhookQueueName = `alias-webhooks-${stage}`;
 /** Fixed names, so the alarms and the topic policy can name each other as plain strings. */
 const alertTopicName = `alias-alerts-${stage}`;
 const alarmPrefix = `alias-${stage}-ses-`;
@@ -123,6 +126,35 @@ export default Alchemy.Stack(
     // Lambda's log groups never do.
     const logging = { retention: Duration.days(14) };
 
+    // Webhook jobs: the API, the inbound and the feedback Lambda send one message per event and
+    // subscribed endpoint; the delivery Lambda signs and posts them. Failures back off with
+    // ChangeMessageVisibility and, after the last attempt, land in the dead-letter queue, kept for
+    // the maximum 14 days. The delivery Lambda runs at most 30 s; the visibility timeout is six
+    // times that, as the Lambda SQS docs recommend (`WebhookQueue.settings`).
+    const webhookQueueArn = `arn:aws:sqs:eu-west-1:${accountId}:${webhookQueueName}`;
+    const webhookDeadLetters = yield* AWS.SQS.Queue("WebhookDeadLetters", {
+      queueName: `${webhookQueueName}-dlq`,
+      messageRetentionPeriod: Duration.days(14),
+      sqsManagedSseEnabled: true,
+    });
+    const webhookQueue = yield* AWS.SQS.Queue("Webhooks", {
+      queueName: webhookQueueName,
+      visibilityTimeout: Duration.seconds(WebhookQueue.settings.visibilityTimeoutSeconds),
+      // Longer than the whole retry schedule (about 28 hours).
+      messageRetentionPeriod: Duration.days(4),
+      redrivePolicy: {
+        deadLetterTargetArn: webhookDeadLetters.queueArn,
+        maxReceiveCount: WebhookQueue.settings.maxReceiveCount,
+      },
+      sqsManagedSseEnabled: true,
+    });
+    /** Producers only enqueue. */
+    const publishWebhooks = {
+      Effect: "Allow" as const,
+      Action: ["sqs:SendMessage"],
+      Resource: webhookQueueArn,
+    };
+
     const api = yield* AWS.Lambda.Function("Api", {
       main: new URL("../apps/api/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -140,8 +172,11 @@ export default Alchemy.Stack(
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_CONFIRMATION_FROM: confirmationSender,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
+        // No ALIAS_WEBHOOK_ALLOW_LOOPBACK: webhook URLs must be https on public addresses.
+        ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
       },
     });
+    yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
     yield* api.bind("DataAccess", {
       policyStatements: [
         {
@@ -211,6 +246,7 @@ export default Alchemy.Stack(
         ALIAS_SPOOL_BUCKET: spool.bucketName,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
+        ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
       },
     });
@@ -245,6 +281,7 @@ export default Alchemy.Stack(
       ],
     });
     yield* inbound.bind("SendMail", { policyStatements: [sendFromSharedDomains] });
+    yield* inbound.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
     // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
     // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of
     // this account use it through Parameter Store, and which takes no access policies of ours
@@ -305,13 +342,19 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(30),
       logging,
       functionUrl: false,
-      env: { ALIAS_TABLE_NAME: table.tableName },
+      env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
     });
-    // Marks recipients (one UpdateItem each) and suppresses addresses, nothing else.
+    // Marks recipients (one UpdateItem each), suppresses addresses, and tells the user's webhooks
+    // (one Query for their endpoints, then SendMessage), nothing else.
     yield* feedback.bind("Feedback", {
       policyStatements: [
-        { Effect: "Allow", Action: ["dynamodb:UpdateItem"], Resource: [tableArn] },
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:UpdateItem", "dynamodb:Query"],
+          Resource: [tableArn],
+        },
         { Effect: "Allow", Action: ["ses:PutSuppressedDestination"], Resource: "*" },
+        publishWebhooks,
       ],
     });
     const snsInvoke = yield* AWS.Lambda.Permission("SnsInvokesFeedback", {
@@ -398,12 +441,53 @@ export default Alchemy.Stack(
       }),
     );
 
+    // Webhook delivery (PLAN.md §20.20): SQS invokes it through an event source mapping that
+    // reports partial batch failures. It reads endpoints by key, disables one that answered
+    // 410 Gone, and pushes failed messages back (ChangeMessageVisibility). It needs internet
+    // access, so it stays outside any VPC; the egress guard keeps it off private addresses.
+    const delivery = yield* AWS.Lambda.Function("WebhookDelivery", {
+      main: new URL("../apps/webhooks/src/handler.ts", import.meta.url).pathname,
+      runtime: "nodejs24.x",
+      architecture: "arm64",
+      memorySize: 256,
+      timeout: Duration.seconds(30),
+      functionUrl: false,
+      env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
+    });
+    yield* delivery.bind("Deliver", {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+          Resource: [tableArn],
+        },
+        {
+          // The first three for the event source mapping, the last for backoff.
+          Effect: "Allow",
+          Action: [
+            "sqs:ReceiveMessage",
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes",
+            "sqs:ChangeMessageVisibility",
+          ],
+          Resource: webhookQueueArn,
+        },
+      ],
+    });
+    yield* AWS.Lambda.EventSourceMapping("WebhookDeliveries", {
+      functionName: delivery.functionName,
+      eventSourceArn: webhookQueue.queueArn,
+      batchSize: 10,
+      functionResponseTypes: ["ReportBatchItemFailures"],
+    });
+
     return {
       apiUrl: api.functionUrl,
       tableName: table.tableName,
       spoolBucket: spool.bucketName,
       inboundFunction: inbound.functionName,
       feedbackFunction: feedback.functionName,
+      webhookDeliveryFunction: delivery.functionName,
     };
   }),
 );

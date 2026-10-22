@@ -311,6 +311,9 @@ importers:
       '@alias/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@alias/webhooks':
+        specifier: workspace:*
+        version: link:../../packages/webhooks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
@@ -348,12 +351,18 @@ importers:
       '@alias/aws':
         specifier: workspace:*
         version: link:../../packages/aws
+      '@alias/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@alias/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@alias/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@alias/webhooks':
+        specifier: workspace:*
+        version: link:../../packages/webhooks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
@@ -462,6 +471,43 @@ importers:
         specifier: 'catalog:'
         version: 1.3.0(@types/node@24.19.2)(@vitest/ui@5.0.5)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)
 
+  apps/webhooks:
+    dependencies:
+      '@alias/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
+      '@alias/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@alias/webhooks':
+        specifier: workspace:*
+        version: link:../../packages/webhooks
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.3.0)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.5
+    devDependencies:
+      '@alias/aws-emulators':
+        specifier: workspace:*
+        version: link:../../tools/aws-emulators
+      '@alias/lambda-emulator':
+        specifier: workspace:*
+        version: link:../../tools/lambda-emulator
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(vitest@5.0.5)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.3.0(@types/node@24.19.2)(@vitest/ui@5.0.5)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@24.19.2)(@vitest/browser-preview@5.0.5)(@vitest/ui@5.0.5)(@voidzero-dev/vite-plus-core@1.3.0(@types/node@24.19.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)
+
   e2e:
     devDependencies:
       '@alias/api':
@@ -488,6 +534,9 @@ importers:
       '@alias/ses-emulator':
         specifier: workspace:*
         version: link:../tools/ses-emulator
+      '@alias/webhooks':
+        specifier: workspace:*
+        version: link:../packages/webhooks
       '@distilled.cloud/aws':
         specifier: 'catalog:'
         version: 1.0.0-rc.15(effect@4.0.5)
@@ -521,6 +570,9 @@ importers:
       '@alias/db':
         specifier: workspace:*
         version: link:../packages/db
+      '@alias/webhooks':
+        specifier: workspace:*
+        version: link:../packages/webhooks
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)
@@ -606,6 +658,49 @@ importers:
       '@alias/aws-emulators':
         specifier: workspace:*
         version: link:../../tools/aws-emulators
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(vitest@5.0.5)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.3.0(@types/node@24.19.2)(@vitest/ui@5.0.5)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@24.19.2)(@vitest/browser-preview@5.0.5)(@vitest/ui@5.0.5)(@voidzero-dev/vite-plus-core@1.3.0(@types/node@24.19.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)
+
+  packages/webhooks:
+    dependencies:
+      '@alias/aws':
+        specifier: workspace:*
+        version: link:../aws
+      '@alias/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@alias/core':
+        specifier: workspace:*
+        version: link:../core
+      '@alias/db':
+        specifier: workspace:*
+        version: link:../db
+      '@distilled.cloud/aws':
+        specifier: 'catalog:'
+        version: 1.0.0-rc.15(effect@4.0.5)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.3.0)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.5
+    devDependencies:
+      '@alias/aws-emulators':
+        specifier: workspace:*
+        version: link:../../tools/aws-emulators
+      '@alias/lambda-emulator':
+        specifier: workspace:*
+        version: link:../../tools/lambda-emulator
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.5)

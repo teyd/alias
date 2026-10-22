@@ -1,5 +1,5 @@
 /** Lambda entrypoint (SNS subscription of the SES event topic). Configuration from the environment. */
-import { type LambdaHandler, SnsEvent, Transport } from "@alias/aws";
+import { type LambdaHandler, MessageQueue, SnsEvent, Transport } from "@alias/aws";
 import { Dynamo } from "@alias/db";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -7,10 +7,15 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Feedback from "./Feedback.ts";
 
-/** `ALIAS_TABLE_NAME` and the AWS-standard endpoint overrides that only emulated runs set. */
-const ServicesConfig = Config.all([Dynamo.config, Transport.config]).pipe(
-  Config.map((layers) => Layer.mergeAll(...layers)),
-);
+/**
+ * `ALIAS_TABLE_NAME`, `ALIAS_WEBHOOK_QUEUE_URL` and the AWS-standard endpoint overrides that only
+ * emulated runs set.
+ */
+const ServicesConfig = Config.all([
+  Dynamo.config,
+  Transport.config,
+  MessageQueue.config("ALIAS_WEBHOOK_QUEUE_URL"),
+]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));
 
 const runtime = ManagedRuntime.make(Feedback.layer(Effect.runSync(ServicesConfig)));
 

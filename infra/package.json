@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@alias/db": "workspace:*",
+    "@alias/webhooks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "alchemy": "catalog:",
     "effect": "catalog:"

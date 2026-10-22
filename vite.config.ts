@@ -70,6 +70,15 @@ export default defineConfig({
         },
       },
       {
+        // The webhook egress guard hooks Node's resolver into the socket (PLAN.md §20.20), and the
+        // tests' webhook receiver is an HTTP server: Node's job, like an emulator's.
+        files: ["packages/webhooks/src/Egress.ts", "packages/webhooks/test/support/Receiver.ts"],
+        rules: {
+          "effect/avoid-node-imports": "off",
+          "effect/use-http-client-service": "off",
+        },
+      },
+      {
         // Tests drive the system from outside, as its clients do: real HTTP, JSON bodies, async handlers.
         files: ["**/test/**/*.ts", "e2e/**/*.ts"],
         rules: {

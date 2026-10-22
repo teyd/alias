@@ -1,0 +1,16 @@
+{
+  "Messages": [
+    {
+      "Attributes": {
+        "SenderId": "AIDASSYFHUBOBT7F4XT75",
+        "ApproximateFirstReceiveTimestamp": "1677112433437",
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1677112427387"
+      },
+      "Body": "This is a test message",
+      "MD5OfBody": "fafb00f5732ab283681e124bf8747ed1",
+      "MessageId": "219f8380-5770-4cc2-8c3e-5c715e145f5e",
+      "ReceiptHandle": "AQEBaZ+j5qUoOAoxlmrCQPkBm9njMWXqemmIG6shMHCO6fV20JrQYg/AiZ8JELwLwOu5U61W+aIX5Qzu7GGofxJuvzymr4Ph53RiR0mudj4InLSgpSspYeTRDteBye5tV/txbZDdNZxsi+qqZA9xPnmMscKQqF6pGhnGIKrnkYGl45Nl6GPIZv62LrIRb6mSqOn1fn0yqrvmWuuY3w2UzQbaYunJWGxpzZze21EOBtywknU3Je/g7G9is+c6K9hGniddzhLkK1tHzZKjejOU4jokaiB4nmi0dF3JqLzDsQuPF0Gi8qffhEvw56nl8QCbluSJScFhJYvoagGnDbwOnd9z50L239qtFIgETdpKyirlWwl/NGjWJ45dqWpiW3d2Ws7q"
+    }
+  ]
+}

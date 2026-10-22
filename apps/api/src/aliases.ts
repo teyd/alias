@@ -8,6 +8,7 @@ import {
   InvalidAlias,
 } from "@alias/contracts";
 import { AliasRepo } from "@alias/db";
+import { Publisher } from "@alias/webhooks";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -45,7 +46,25 @@ const insert = Effect.fn("aliases.insert")(function* (address: Address.MailAddre
       DatabaseError: Effect.die,
     }),
   );
-  return view({ ...alias, mode, createdAt, isActive: true, forwardedCount: 0, blockedCount: 0 });
+  const created = view({
+    ...alias,
+    mode,
+    createdAt,
+    isActive: true,
+    forwardedCount: 0,
+    blockedCount: 0,
+  });
+  const publisher = yield* Publisher.Publisher;
+  yield* publisher.publish(
+    user.userId,
+    {
+      type: "alias.created",
+      timestamp: DateTime.formatIso(DateTime.makeUnsafe(createdAt)),
+      data: { aliasId: id, address: created.address, origin: "api" },
+    },
+    id,
+  );
+  return created;
 });
 
 /** A fresh local part on one of the shared domains. Draws again if it is already taken. */
@@ -80,7 +99,11 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
 });
 
 /** What the alias handlers use. The group captures them once, at startup. */
-type AliasServices = Crypto.Crypto | AliasRepo.AliasRepo | SharedDomains.SharedDomains;
+type AliasServices =
+  | Crypto.Crypto
+  | AliasRepo.AliasRepo
+  | SharedDomains.SharedDomains
+  | Publisher.Publisher;
 
 interface AliasParams {
   readonly domain: string;
@@ -98,6 +121,28 @@ export const ownedAlias = Effect.fn("aliases.ownedAlias")(function* (params: Ali
   return yield* Option.match(
     Option.filter(alias, (found) => found.userId === user.userId),
     { onNone: () => Effect.fail(notFound(params)), onSome: Effect.succeed },
+  );
+});
+
+/** Deletes the caller's alias and tells their webhooks. */
+const remove = Effect.fn("aliases.remove")(function* (params: AliasParams) {
+  const alias = yield* ownedAlias(params);
+  const repo = yield* AliasRepo.AliasRepo;
+  yield* repo.delete(alias).pipe(
+    Effect.catchTags({
+      NoSuchAlias: () => Effect.fail(notFound(params)),
+      DatabaseError: Effect.die,
+    }),
+  );
+  const publisher = yield* Publisher.Publisher;
+  yield* publisher.publish(
+    alias.userId,
+    {
+      type: "alias.deleted",
+      timestamp: DateTime.formatIso(yield* DateTime.now),
+      data: { aliasId: alias.id, address: `${alias.localPart}@${alias.domain}` },
+    },
+    alias.id,
   );
 });
 
@@ -147,14 +192,6 @@ export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
           }),
         ),
       )
-      .handle("remove", ({ params }) =>
-        owned(params).pipe(
-          Effect.flatMap(repo.delete),
-          Effect.catchTags({
-            NoSuchAlias: () => Effect.fail(notFound(params)),
-            DatabaseError: Effect.die,
-          }),
-        ),
-      );
+      .handle("remove", ({ params }) => Effect.provide(remove(params), services));
   }),
 );

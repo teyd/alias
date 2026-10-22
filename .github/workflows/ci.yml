@@ -30,6 +30,8 @@ jobs:
           - "@alias/db"
           - "@alias/api"
           - "@alias/inbound"
+          - "@alias/webhooks"
+          - "@alias/webhooks-lambda"
           - "@alias/ses-emulator"
           - "@alias/aws-emulators"
           - "@alias/lambda-emulator"

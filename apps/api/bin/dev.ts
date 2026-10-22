@@ -15,6 +15,7 @@ import { AwsClient, type FunctionUrl, Transport } from "@alias/aws";
 import { SharedDomains } from "@alias/core";
 import { AliasRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
+import { UrlPolicy, WebhookQueue } from "@alias/webhooks";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -35,6 +36,14 @@ const mail = Layer.merge(
   ),
   MailSettings.layer(Option.fromUndefinedOr(process.env.ALIAS_CONFIRMATION_FROM)),
 ).pipe(Layer.provideMerge(sharedDomains));
+/**
+ * The webhook queue, as `apps/webhooks/bin/dev.ts` delivers from it; created here too, so either
+ * may start first. Dev receivers may listen on `http://localhost`.
+ */
+const webhooks = Layer.merge(
+  WebhookQueue.dev.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
+  UrlPolicy.layer({ isLoopbackAllowed: true }),
+);
 const relyingParty = RelyingParty.layer({
   id: "localhost",
   origin: `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`,
@@ -113,7 +122,7 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
     Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
-  const { handle } = makeFunctionUrlHandler(Layer.mergeAll(database, relyingParty, mail));
+  const { handle } = makeFunctionUrlHandler(Layer.mergeAll(database, relyingParty, mail, webhooks));
   const devHooks = Layer.merge(sharedDomains, AwsClient.emulator(fakecloudUrl));
   const server = yield* FunctionUrlServer.make({
     port,

@@ -4,3 +4,4 @@ export * from "./Recipients.ts";
 export * from "./Scopes.ts";
 export * from "./Settings.ts";
 export * from "./Tokens.ts";
+export * from "./Webhooks.ts";

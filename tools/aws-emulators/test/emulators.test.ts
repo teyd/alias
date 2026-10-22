@@ -1,4 +1,4 @@
-import { AwsClient } from "@alias/aws";
+import { AwsClient, Inbound } from "@alias/aws";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect, it } from "@effect/vitest";
@@ -43,6 +43,34 @@ describe("fakecloud (separate process, port 0)", () => {
         yield* S3.deleteObject({ Bucket: "probe", Key: "a" });
         const missing = yield* Effect.flip(S3.getObject({ Bucket: "probe", Key: "a" }));
         expect(missing._tag).toBe("NoSuchKey");
+      }),
+    );
+
+    // AWS documents HeadObject as answering with the object's Content-Length and no body, and a
+    // missing key as a bare 404. The pipeline's size check relies on both.
+    it.effect("answers HeadObject with the stored size, for the spool's size check", () =>
+      Effect.gen(function* () {
+        yield* Inbound.ensureSpool("spool");
+        const message = new Uint8Array(70_001).fill(0x61);
+        message.set(new TextEncoder().encode("Subject: \u00e9\r\n\r\n"));
+        yield* S3.putObject({
+          Bucket: "spool",
+          Key: Inbound.objectKey(Inbound.spoolPrefix, "m1"),
+          Body: message,
+        });
+        const head = yield* S3.headObject({
+          Bucket: "spool",
+          Key: Inbound.objectKey(Inbound.spoolPrefix, "m1"),
+        });
+        expect(head.ContentLength).toBe(70_001);
+        expect(yield* Inbound.messageSize("spool", "m1")).toBe(70_001);
+        expect((yield* Inbound.readMessage("spool", "m1")).byteLength).toBe(70_001);
+
+        const missing = yield* Effect.flip(S3.headObject({ Bucket: "spool", Key: "inbound/m2" }));
+        expect(missing._tag).toBe("NotFound");
+        expect(yield* Effect.flip(Inbound.messageSize("spool", "m2"))).toEqual(
+          new Inbound.MessageGone({ key: "inbound/m2" }),
+        );
       }),
     );
   });

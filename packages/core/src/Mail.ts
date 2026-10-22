@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
@@ -90,13 +91,28 @@ const ALWAYS_REMOVED = HashSet.make(
   "return-receipt-to",
 );
 
-const isAlwaysRemoved = (name: string) =>
+const isAlwaysRemoved = ({ name }: Headers.Field) =>
   HashSet.has(ALWAYS_REMOVED, name) || name.startsWith("x-ses-");
 
 /**
+ * The field {@link forward} adds, naming the alias that forwarded the message. Mail that comes
+ * back to the same alias still carrying it went round in a loop (see {@link signals}).
+ */
+const FORWARD_MARKER = "X-Alias-Forwarded";
+
+/** The first token of a structured value, without `;` parameters or `(comments)`, lowercased. */
+const token = (value: string) =>
+  value
+    .replace(/\([^)]*\)/g, " ")
+    .split(";")[0]
+    ?.trim()
+    .toLowerCase() ?? "";
+
+/**
  * Replies also lose what identifies the user's own machine and mail client (PLAN.md §3.4), `To`,
- * which held the reverse alias, and `Message-ID`, whose domain names the user's mail provider. `Received` is kept on forwarded mail: it is the sender's
- * trace, not the user's, and hop counting depends on it.
+ * which held the reverse alias, `Message-ID`, whose domain names the user's mail provider, and
+ * our forward marker, which names the alias the contact may not know. `Received` is kept on
+ * forwarded mail: it is the sender's trace, not the user's, and hop counting depends on it.
  */
 const REPLY_REMOVED = HashSet.make(
   "received",
@@ -105,14 +121,18 @@ const REPLY_REMOVED = HashSet.make(
   "x-mailer",
   "to",
   "message-id",
+  FORWARD_MARKER.toLowerCase(),
 );
 
-const isReplyRemoved = (name: string) => isAlwaysRemoved(name) || HashSet.has(REPLY_REMOVED, name);
+const isReplyRemoved = (field: Headers.Field) =>
+  isAlwaysRemoved(field) || HashSet.has(REPLY_REMOVED, field.name);
 
 /**
  * Prepares inbound mail for the alias owner. `From` and `Reply-To` become
  * `"Name (sender@x)" <alias+r.<token>@domain>`, so the user sees who wrote and a reply goes
- * back through the reverse alias. The token comes from `ReverseToken.mint`.
+ * back through the reverse alias. The token comes from `ReverseToken.mint`. An
+ * `X-Alias-Forwarded: <alias>` field marks the copy, and markers from other aliases stay, so a
+ * loop through several aliases is still caught when it comes back to one of them.
  */
 export const forward = Effect.fn("Mail.forward")(function* (
   raw: Uint8Array,
@@ -135,9 +155,15 @@ export const forward = Effect.fn("Mail.forward")(function* (
     }),
   );
   const reverse = Address.format(Address.reverseAddress(options.alias, options.token));
-  return Headers.rewrite(message, isAlwaysRemoved, [
+  const alias = Address.format(options.alias);
+  // The alias's own earlier marker is replaced, so forwarding a forwarded copy changes nothing.
+  const isRemoved = (field: Headers.Field) =>
+    isAlwaysRemoved(field) ||
+    (field.name === FORWARD_MARKER.toLowerCase() && token(Headers.value(field)) === alias);
+  return Headers.rewrite(message, isRemoved, [
     mailboxField("From", display, reverse, message.lineEnding),
     mailboxField("Reply-To", display, reverse, message.lineEnding),
+    `${FORWARD_MARKER}: ${alias}`,
   ]);
 });
 
@@ -163,4 +189,37 @@ export const reply = Effect.fn("Mail.reply")(function* (
     `To: ${sanitize(options.to)}`,
     `Message-ID: <${options.messageId.replace(/[^\w.-]/g, "")}@${options.alias.domain}>`,
   ]);
+});
+
+/** What the header block says about where a message came from, for the loop and bounce checks. */
+export interface Signals {
+  /** Aliases that forwarded this message before, from our `X-Alias-Forwarded` fields, lowercased. */
+  readonly forwardedBy: ReadonlyArray<string>;
+  /** `Received` fields: how many hops the message has made. */
+  readonly hops: number;
+  /**
+   * Sent by a machine, not a person: an RFC 3834 `Auto-Submitted` other than `no`, or a
+   * `Precedence` of `bulk`, `junk` or `list` (the older convention RFC 3834 §3.1.8 mentions).
+   */
+  readonly isAutomated: boolean;
+  /** A report about other mail (RFC 6522 `multipart/report`): delivery status, read receipts. */
+  readonly isReport: boolean;
+}
+
+const BULK_PRECEDENCE = HashSet.make("bulk", "junk", "list");
+
+/** Reads the {@link Signals} from a raw message's header block. */
+export const signals = Effect.fn("Mail.signals")(function* (raw: Uint8Array) {
+  const message = yield* Headers.parse(raw);
+  const tokens = (name: string) =>
+    Arr.filter(Arr.map(Headers.values(message, name), token), Str.isNonEmpty);
+  const result: Signals = {
+    forwardedBy: tokens(FORWARD_MARKER),
+    hops: Headers.values(message, "received").length,
+    isAutomated:
+      Arr.some(tokens("auto-submitted"), (value) => value !== "no") ||
+      Arr.some(tokens("precedence"), (value) => HashSet.has(BULK_PRECEDENCE, value)),
+    isReport: Arr.some(tokens("content-type"), (value) => value === "multipart/report"),
+  };
+  return result;
 });

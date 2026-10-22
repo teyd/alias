@@ -1,6 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
+import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -11,6 +12,7 @@ import * as Stream from "effect/Stream";
 import { DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Attribute from "./Attribute.ts";
+import * as Quota from "./Quota.ts";
 
 const AliasMode = Schema.Literals(["forward", "inbox", "both"]);
 type AliasMode = typeof AliasMode.Type;
@@ -83,6 +85,17 @@ export class AliasRepo extends Context.Service<
       localPart: string,
       counter: Counter,
     ) => Effect.Effect<void, NoSuchAlias | DatabaseError>;
+    /**
+     * Counts one forward against the alias's allowance of `maxPerHour` for the UTC hour `now`
+     * falls in. False, and nothing counted, when the allowance is used up. Concurrent callers
+     * never exceed it.
+     */
+    readonly reserveForward: (
+      domain: string,
+      localPart: string,
+      now: DateTime.Utc,
+      maxPerHour: number,
+    ) => Effect.Effect<boolean, DatabaseError>;
   }
 >()("@alias/db/AliasRepo") {}
 
@@ -90,6 +103,12 @@ export class AliasRepo extends Context.Service<
 const addressKey = (domain: string, localPart: string) => ({
   pk: { S: `ALIAS#${domain.toLowerCase()}#${localPart.toLowerCase()}` },
   sk: { S: "ALIAS" },
+});
+
+/** The alias's forward counter for one UTC hour, next to the alias in its partition. */
+const forwardQuotaKey = (domain: string, localPart: string, hour: string) => ({
+  pk: addressKey(domain, localPart).pk,
+  sk: { S: `FORWARDS#${hour}` },
 });
 
 const userKey = (userId: string) => `USER#${userId}`;
@@ -265,6 +284,16 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         Effect.mapError(missingOn("UpdateItem", domain, localPart)),
         Effect.provide(client),
       ),
+
+    reserveForward: (domain, localPart, now, maxPerHour) => {
+      const hour = Quota.window(now, "hour");
+      return Quota.reserve(
+        table,
+        forwardQuotaKey(domain, localPart, hour.label),
+        hour,
+        maxPerHour,
+      ).pipe(Effect.provide(client));
+    },
   });
 });
 

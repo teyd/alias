@@ -65,6 +65,31 @@ export const readMessage = Effect.fn("Inbound.readMessage")(function* (
 });
 
 /**
+ * The stored message's size in bytes, from S3 `HeadObject` (`Content-Length`), without reading
+ * it. The SES Lambda event carries no size, so this is how the pipeline refuses oversized mail
+ * before it loads the body into memory. A missing object is `MessageGone`: `HeadObject` answers
+ * 404 with no body, which the SDK reports as `NotFound` rather than `NoSuchKey`.
+ * https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html
+ */
+export const messageSize = Effect.fn("Inbound.messageSize")(function* (
+  bucket: string,
+  messageId: string,
+) {
+  const key = spoolObjectKey(messageId);
+  const head = yield* S3.headObject({ Bucket: bucket, Key: key }).pipe(
+    Effect.mapError((error) =>
+      P.isTagged(error, "NotFound")
+        ? new MessageGone({ key })
+        : new SpoolError({ key, reason: String(error) }),
+    ),
+  );
+  return yield* Option.match(Option.fromUndefinedOr(head.ContentLength), {
+    onNone: () => Effect.fail(new SpoolError({ key, reason: "HeadObject returned no size" })),
+    onSome: Effect.succeed,
+  });
+});
+
+/**
  * Removes the stored message once it is processed, so forward-only mail leaves no content behind
  * (PLAN.md §3.4). Deleting a message that is already gone succeeds, as S3 `DeleteObject` does.
  */

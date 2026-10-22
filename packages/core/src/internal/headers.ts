@@ -19,7 +19,7 @@ class MalformedMessage extends Schema.TaggedError<MalformedMessage>()("Malformed
 
 export type LineEnding = "\r\n" | "\n";
 
-interface Field {
+export interface Field {
   /** Lowercased field name, for matching. */
   readonly name: string;
   readonly bytes: Uint8Array;
@@ -102,17 +102,38 @@ export const parse = Effect.fn("Headers.parse")(function* (raw: Uint8Array) {
   return message;
 });
 
+const latin1 = new TextDecoder("latin1");
+
 /**
- * Drops the fields `isRemoved` matches (by lowercase name), puts `prepend` (complete fields without
- * their line ending) in front, and keeps every other byte as it was.
+ * A field's value: the text after the colon, unfolded and trimmed. Bytes are read one char
+ * each, which is exact for the ASCII tokens callers compare against.
+ */
+export const value = (field: Field): string => {
+  const text = latin1.decode(field.bytes);
+  return text
+    .slice(text.indexOf(":") + 1)
+    .replace(/\r?\n(?=[ \t])/g, "")
+    .trim();
+};
+
+/** The values of every field called `name` (case-insensitive), in order. */
+export const values = (message: Message, name: string): ReadonlyArray<string> =>
+  Arr.map(
+    Arr.filter(message.fields, (field) => field.name === name.toLowerCase()),
+    value,
+  );
+
+/**
+ * Drops the fields `isRemoved` matches, puts `prepend` (complete fields without their line
+ * ending) in front, and keeps every other byte as it was.
  */
 export const rewrite = (
   message: Message,
-  isRemoved: (name: string) => boolean,
+  isRemoved: (field: Field) => boolean,
   prepend: ReadonlyArray<string>,
 ): Uint8Array =>
   concat([
     ...Arr.map(prepend, (field) => utf8(`${field}${message.lineEnding}`)),
-    ...Arr.filter(message.fields, (field) => !isRemoved(field.name)).map((field) => field.bytes),
+    ...Arr.filter(message.fields, (field) => !isRemoved(field)).map((field) => field.bytes),
     message.rest,
   ]);

@@ -1,10 +1,12 @@
 import type { DynamoDbEndpoint, EmulatorFailure } from "@alias/aws-emulators";
 import { describe, expect, it } from "@effect/vitest";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { AliasRepo, Table } from "../../src/index.ts";
+import { AliasRepo, Dynamo, Table } from "../../src/index.ts";
 import { freshTable } from "./database.ts";
 
 const alias = (overrides: Partial<AliasRepo.NewAlias> = {}): AliasRepo.NewAlias => ({
@@ -173,6 +175,65 @@ export const aliasRepoSuite = (
             );
           }),
         ),
+      );
+
+      const at = (iso: string) => DateTime.makeUnsafe(iso);
+
+      it.effect("allows up to the hourly forward cap per alias, and the next hour afresh", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const nine = at("2026-10-22T09:00:00Z");
+            const late = at("2026-10-22T09:59:59.999Z");
+            expect(yield* repo.reserveForward("alias.test", "shop", nine, 2)).toBe(true);
+            expect(yield* repo.reserveForward("ALIAS.test", "Shop", late, 2)).toBe(true);
+            expect(yield* repo.reserveForward("alias.test", "shop", late, 2)).toBe(false);
+            // Another alias has its own allowance, and 10:00 starts a new hour.
+            expect(yield* repo.reserveForward("alias.test", "news", late, 2)).toBe(true);
+            expect(
+              yield* repo.reserveForward("alias.test", "shop", at("2026-10-22T10:00:00Z"), 2),
+            ).toBe(true);
+          }),
+        ),
+      );
+
+      it.effect("never lets concurrent forwards past the cap", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const now = at("2026-10-22T09:30:00Z");
+            const results = yield* Effect.all(
+              Arr.replicate(repo.reserveForward("alias.test", "shop", now, 3), 8),
+              { concurrency: "unbounded" },
+            );
+            expect(results.filter((isReserved) => isReserved)).toHaveLength(3);
+          }),
+        ),
+      );
+
+      it.effect(
+        "keeps the forward counter apart from the alias, expiring an hour after its hour",
+        () =>
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            const table = yield* Dynamo.DynamoTable;
+            yield* repo.insert(alias());
+            yield* repo.reserveForward("alias.test", "shop", at("2026-10-22T09:30:00Z"), 5);
+
+            const { Item } = yield* DynamoDB.getItem({
+              TableName: table.name,
+              Key: { pk: { S: "ALIAS#alias.test#shop" }, sk: { S: "FORWARDS#2026-10-22T09" } },
+              ConsistentRead: true,
+            });
+            expect(Item).toMatchObject({
+              count: { N: "1" },
+              expiresAt: { N: String(DateTime.toEpochMillis(at("2026-10-22T11:00:00Z")) / 1000) },
+            });
+            expect(yield* repo.listByUser("usr_1")).toHaveLength(1);
+            expect(yield* repo.findByAddress("alias.test", "shop")).toEqual(
+              Option.some(expect.objectContaining({ forwardedCount: 0 })),
+            );
+          }).pipe(Effect.provide(AliasRepo.layer.pipe(Layer.provideMerge(freshTable())))),
       );
 
       it.effect("counting a deleted alias fails instead of recreating it", () =>

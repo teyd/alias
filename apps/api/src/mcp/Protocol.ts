@@ -20,6 +20,7 @@ export const SUPPORTED_VERSIONS = [...MODERN_VERSIONS, ...LEGACY_VERSIONS];
 export const META = {
   protocolVersion: "io.modelcontextprotocol/protocolVersion",
   serverInfo: "io.modelcontextprotocol/serverInfo",
+  clientCapabilities: "io.modelcontextprotocol/clientCapabilities",
 } as const;
 
 /** JSON-RPC 2.0 and MCP error codes (2026-07-28 "Error codes"). */
@@ -65,6 +66,25 @@ export const declaredVersion = (params: Message["params"]): Option.Option<string
   Option.flatMap(Schema.decodeUnknownOption(RequestMeta)(params ?? {}), (meta) =>
     Option.fromUndefinedOr(meta._meta?.[META.protocolVersion]),
   );
+
+/** The capability a URL-mode elicitation needs (2026-07-28 "Elicitation", in `_meta`). */
+const UrlElicitation = Schema.Struct({
+  _meta: Schema.Struct({
+    [META.clientCapabilities]: Schema.Struct({
+      elicitation: Schema.Struct({ url: Schema.Json }),
+    }),
+  }),
+});
+
+/** True when the request's client can open a URL for its user (modern clients only). */
+export const canOpenUrl = (params: Message["params"]): boolean =>
+  Option.isSome(Schema.decodeUnknownOption(UrlElicitation)(params ?? {}));
+
+/** The user's answer to the `approve` input request, on an MRTR retry (2026-07-28). */
+export const Approval = Schema.Struct({
+  approve: Schema.Struct({ action: Schema.Literals(["accept", "decline", "cancel"]) }),
+});
+export type Approval = typeof Approval.Type;
 
 export const InitializeParams = Schema.Struct({ protocolVersion: Schema.String });
 export type InitializeParams = typeof InitializeParams.Type;

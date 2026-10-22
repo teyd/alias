@@ -283,6 +283,9 @@ export default Alchemy.Stack(
       Action: ["ses:SendEmail", "ses:SendRawEmail"],
       Resource: [identityArn("*"), configurationSetArn],
     };
+    // Drafts an MCP client wrote go out from the API when their owner sends them in the web app
+    // (PLAN.md §20.24): from an alias, to one of its contacts, like a reply.
+    yield* api.bind("SendDrafts", { policyStatements: [sendFromAliasDomains] });
 
     // The image proxy (`apps/image-proxy`, PLAN.md §20.19): its own function and role, because it
     // fetches URLs that come from mail. The role can read its keys and nothing else: no table, no

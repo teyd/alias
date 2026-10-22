@@ -1,4 +1,3 @@
-import type { Scope } from "@alias/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as Arr from "effect/Array";
@@ -14,26 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { callDevice, deviceRequestQuery } from "@/lib/device";
+import { SCOPE_LABELS } from "@/lib/scopes";
 
 /** `alias login` links here with its code; the outcome stays in the URL too. */
 const Search = Schema.Struct({
   code: Schema.optionalKey(Schema.String),
   result: Schema.optionalKey(Schema.Literals(["approved", "denied"])),
 });
-
-/** What each scope lets the device do, in plain words. */
-const scopeText = {
-  "aliases:read": "See your aliases",
-  "aliases:write": "Create, change and delete aliases",
-  "contacts:read": "See who wrote to your aliases",
-  "contacts:write": "Block, unblock and remove contacts",
-  "domains:read": "See your custom domains",
-  "domains:write": "Add, check and remove custom domains",
-  "recipients:read": "See your forwarding addresses",
-  "recipients:write": "Add and remove forwarding addresses",
-  "settings:read": "See your settings",
-  "settings:write": "Change your settings",
-} satisfies Record<Scope, string>;
 
 const EnterCode = () => {
   const navigate = useNavigate({ from: Route.fullPath });
@@ -116,7 +102,7 @@ const Decide = ({ code }: { readonly code: string }) => {
           <span className="text-muted-foreground">It will be able to:</span>
           <ul className="list-inside list-disc" aria-label="Requested access">
             {Arr.map(found.scopes, (scope) => (
-              <li key={scope}>{scopeText[scope]}</li>
+              <li key={scope}>{SCOPE_LABELS[scope]}</li>
             ))}
           </ul>
           <span className="text-xs text-muted-foreground">

@@ -6,9 +6,12 @@ import * as Schema from "effect/Schema";
  * (everything else); a write scope does not imply the read one. Contacts are their own resource
  * because they hold third parties' addresses.
  *
+ * `mail:send` lets an MCP client draft mail from an alias to one of its contacts. It sends nothing
+ * by itself: every draft waits for the signed-in owner to send it from the web app (PLAN.md
+ * §20.24), and no HTTP endpoint takes it.
+ *
  * Planned with phase 9 (MCP) in mind, and added together with their endpoints: `inboxes:read` and
- * `inboxes:write` for temp mail alone, so an assistant can hold a "temp-only" token, and a send
- * scope whose sends wait for the owner's confirmation.
+ * `inboxes:write` for temp mail alone, so an assistant can hold a "temp-only" token.
  */
 export const Scope = Schema.Literals([
   "aliases:read",
@@ -21,6 +24,7 @@ export const Scope = Schema.Literals([
   "recipients:write",
   "settings:read",
   "settings:write",
+  "mail:send",
 ]);
 export type Scope = typeof Scope.Type;
 

@@ -3,6 +3,7 @@ export * from "./Auth.ts";
 export * from "./Device.ts";
 export * from "./Domains.ts";
 export * from "./OAuth.ts";
+export * from "./Outbox.ts";
 export * from "./Recipients.ts";
 export * from "./Scopes.ts";
 export * from "./Settings.ts";

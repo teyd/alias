@@ -19,6 +19,7 @@ import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as AppDomainsRouteImport } from './routes/_app/domains'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
+import { Route as OutboxDraftIdRouteImport } from './routes/outbox.$draftId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -69,6 +70,11 @@ const OauthAuthorizeRoute = OauthAuthorizeRouteImport.update({
   path: '/oauth/authorize',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutboxDraftIdRoute = OutboxDraftIdRouteImport.update({
+  id: '/outbox/$draftId',
+  path: '/outbox/$draftId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/domains': typeof AppDomainsRoute
   '/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
+  '/outbox/$draftId': typeof OutboxDraftIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/domains': typeof AppDomainsRoute
   '/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
+  '/outbox/$draftId': typeof OutboxDraftIdRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/_app/domains': typeof AppDomainsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
+  '/outbox/$draftId': typeof OutboxDraftIdRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/domains'
     | '/settings'
     | '/oauth/authorize'
+    | '/outbox/$draftId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/domains'
     | '/settings'
     | '/oauth/authorize'
+    | '/outbox/$draftId'
     | '/'
   id:
     | '__root__'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/_app/domains'
     | '/_app/settings'
     | '/oauth/authorize'
+    | '/outbox/$draftId'
     | '/_app/'
   fileRoutesById: FileRoutesById
 }
@@ -147,6 +159,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   OauthAuthorizeRoute: typeof OauthAuthorizeRoute
+  OutboxDraftIdRoute: typeof OutboxDraftIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OauthAuthorizeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outbox/$draftId': {
+      id: '/outbox/$draftId'
+      path: '/outbox/$draftId'
+      fullPath: '/outbox/$draftId'
+      preLoaderRoute: typeof OutboxDraftIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -249,6 +269,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   OauthAuthorizeRoute: OauthAuthorizeRoute,
+  OutboxDraftIdRoute: OutboxDraftIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

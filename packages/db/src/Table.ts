@@ -40,6 +40,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | DeviceRequests    | `DEVICEAUTH#<sha256(ip)>`    | `REQUESTS#<hour>`      |                            |                           | `expiresAt` |
  * | DeviceMisses      | `USER#<userId>`              | `DEVICE-MISSES#<hour>` |                            |                           | `expiresAt` |
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
+ * | Draft             | `USER#<userId>`              | `DRAFT#<id>`           |                            |                           | `expiresAt` |
+ * | SendQuota         | `USER#<userId>`              | `SENDS#<date>`         |                            |                           | `expiresAt` |
  * | OAuthClient       | `OAUTH-CLIENT#<clientId>`    | `CLIENT`               |                            |                           |             |
  * | Registrations     | `OAUTHREG#<sha256(ip)>`      | `REGISTRATIONS#<hour>` |                            |                           | `expiresAt` |
  * | OAuthCode         | `OAUTH-CODE#<sha256(code)>`  | `CODE`                 | `OAUTH#<userId>`           | `CODE#<sha256(code)>`     | `expiresAt` |
@@ -120,6 +122,11 @@ import { DynamoTable } from "./Dynamo.ts";
  * grants (`begins_with(gsi1sk, "GRANT#")`), codes and tokens, and which erasing the account
  * empties.
  * Registrations counts client registrations per hashed client address and UTC hour.
+ *
+ * A Draft is mail an MCP client drafted, waiting in its user's partition for the user to send or
+ * discard it in the web app (one GetItem to show it); leaving `pending` is one conditional
+ * UpdateItem, so a draft goes out at most once. SendQuota counts sent drafts per user and UTC day
+ * like the other quotas. Erasing the account deletes both with the rest of the partition.
  *
  * A Webhook is one of the user's webhook endpoints, in their partition: every published event
  * lists the user's webhooks with one strongly consistent Query (`begins_with(sk, "WEBHOOK#")`),

@@ -3,6 +3,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/ht
 import { AccountGroup, AuthGroup, Authentication } from "./Auth.ts";
 import { DeviceGroup, OAuthGroup } from "./Device.ts";
 import { ConsentGroup } from "./OAuth.ts";
+import { OutboxGroup } from "./Outbox.ts";
 import { requires } from "./Scopes.ts";
 import { DomainsGroup } from "./Domains.ts";
 import { RecipientsGroup } from "./Recipients.ts";
@@ -216,4 +217,5 @@ export const Api = HttpApi.make("alias")
   .add(WebhooksGroup)
   .add(OAuthGroup)
   .add(DeviceGroup)
-  .add(ConsentGroup);
+  .add(ConsentGroup)
+  .add(OutboxGroup);

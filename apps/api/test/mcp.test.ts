@@ -12,7 +12,7 @@ import * as TestApi from "./support/TestApi.ts";
 
 const issuer = Browser.origin;
 const metadataUrl = `${issuer}/.well-known/oauth-protected-resource/mcp`;
-const allScopes = ["aliases:read", "aliases:write", "contacts:read", "contacts:write"];
+const allScopes = ["aliases:read", "aliases:write", "contacts:read", "contacts:write", "mail:send"];
 
 /** The API, Ada signed in, and an MCP client she connected with `scopes`. */
 const connected = Effect.fn("connected")(function* (scopes: ReadonlyArray<string> = allScopes) {
@@ -134,6 +134,8 @@ describe("MCP endpoint (API handler on fakecloud)", () => {
         "set_alias_active",
         "list_contacts",
         "block_contact",
+        "send_mail",
+        "get_send_status",
       ]);
       expect(tools.every((tool) => tool.description.includes("untrusted-mail-data"))).toBe(true);
     }),

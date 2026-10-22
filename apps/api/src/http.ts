@@ -8,6 +8,7 @@ import {
   DomainRepo,
   type Dynamo,
   OAuthRepo,
+  OutboxRepo,
   PasskeyRepo,
   RecipientRepo,
   SessionRepo,
@@ -32,6 +33,7 @@ import { DomainsLive } from "./domains.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { ConsentLive } from "./consent.ts";
 import * as Mcp from "./mcp/Endpoint.ts";
+import { OutboxLive } from "./outbox.ts";
 import * as OAuthEndpoints from "./oauth/Endpoints.ts";
 import * as Issuer from "./oauth/Issuer.ts";
 import { RecipientsLive } from "./recipients.ts";
@@ -58,6 +60,7 @@ const Repositories = Layer.mergeAll(
   ContactRepo.layer,
   DeviceRepo.layer,
   OAuthRepo.layer,
+  OutboxRepo.layer,
   UserRepo.layer,
   PasskeyRepo.layer,
   SessionRepo.layer,
@@ -103,6 +106,7 @@ const ApiLive = Layer.mergeAll(
     SettingsLive,
     TokensLive,
     OAuthLive,
+    OutboxLive,
     WebhooksLive,
     ConsentLive,
     DeviceLive,

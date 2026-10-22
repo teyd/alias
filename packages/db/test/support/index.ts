@@ -4,6 +4,7 @@ export { authRepoSuite } from "./authRepoSuite.ts";
 export { deliveryRepoSuite } from "./deliveryRepoSuite.ts";
 export { freshTable } from "./database.ts";
 export { oauthRepoSuite } from "./oauthRepoSuite.ts";
+export { outboxRepoSuite } from "./outboxRepoSuite.ts";
 export { recipientRepoSuite } from "./recipientRepoSuite.ts";
 export { contactRepoSuite } from "./contactRepoSuite.ts";
 export { tokenRepoSuite } from "./tokenRepoSuite.ts";

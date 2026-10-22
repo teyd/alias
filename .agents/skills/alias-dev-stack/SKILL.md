@@ -33,6 +33,7 @@ MCP (PLAN.md §20.24): the remote MCP server is `http://localhost:$ALIAS_WEB_POR
 
 - **Claude Code:** `claude mcp add --transport http alias http://localhost:$ALIAS_WEB_PORT/mcp`, then `/mcp` in a session and pick `alias` → Authenticate. Claude Code listens on a loopback port for the redirect, which the server allows on any port.
 - **Claude Desktop:** its remote connectors connect from Anthropic's servers, which can't reach your machine. Use a local stdio bridge in `claude_desktop_config.json` instead: `{"mcpServers": {"alias": {"command": "npx", "args": ["mcp-remote", "http://localhost:<ALIAS_WEB_PORT>/mcp"]}}}`. A public tunnel won't do: passkeys and the issuer are bound to `localhost`.
+- **Sending:** `send_mail` only drafts; open the link it returns (or the one Claude shows) at `/outbox/<draftId>` signed in and press Send. The mail appears in fakecloud's sent mail from the alias.
 - **By hand:** `curl -si -X POST localhost:$ALIAS_WEB_PORT/mcp` shows the `WWW-Authenticate` challenge; with a token from the flow, `curl -s localhost:$ALIAS_WEB_PORT/mcp -H "authorization: Bearer $TOKEN" -H "content-type: application/json" -H "mcp-protocol-version: 2026-07-28" -H "mcp-method: tools/list" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'`. The stack test (`e2e`) drives the whole dance with the official TypeScript SDK client.
 
 ## Common tasks

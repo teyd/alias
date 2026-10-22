@@ -2,27 +2,12 @@ import {
   type AuthorizationRequest,
   ConnectedAppNotFound,
   InvalidAuthorizationRequest,
-  type Scope,
 } from "@alias/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { type Client, callApi } from "./api";
-
-/** What each scope lets a connected app do, for the consent screen. */
-export const SCOPE_LABELS: Record<Scope, string> = {
-  "aliases:read": "See your aliases and their counters",
-  "aliases:write": "Create, deactivate and delete aliases",
-  "contacts:read": "See who wrote to your aliases (their addresses and names)",
-  "contacts:write": "Block, unblock and remove contacts",
-  "domains:read": "See your custom domains and their DNS status",
-  "domains:write": "Add, check and remove custom domains",
-  "recipients:read": "See your forwarding addresses",
-  "recipients:write": "Add and remove forwarding addresses",
-  "settings:read": "See your account settings",
-  "settings:write": "Change your account settings",
-};
 
 /** Why an OAuth action failed, worded for the person at the keyboard. */
 class OAuthActionFailed extends Schema.TaggedError<OAuthActionFailed>()("OAuthActionFailed", {

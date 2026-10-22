@@ -146,7 +146,8 @@ export default Alchemy.Stack(
           "ses:PutEmailIdentityMailFromAttributes",
           "ses:PutEmailIdentityFeedbackAttributes",
         ],
-        Resource: sharedDomains.flatMap((domain) => [
+        // The temp-mail domains are the service's too (PLAN.md §20.25).
+        Resource: [...sharedDomains, ...tempDomains].flatMap((domain) => [
           identityArn(domain),
           identityArn(`*.${domain}`),
         ]),
@@ -322,7 +323,7 @@ export default Alchemy.Stack(
         {
           Effect: "Allow",
           Action: ["ses:SendEmail", "ses:SendRawEmail"],
-          Resource: [`arn:aws:ses:eu-west-1:*:identity/${appDomain}`, configurationSetArn],
+          Resource: [identityArn(appDomain), configurationSetArn],
         },
         {
           // Re-adding a bounced address takes it off the suppression list once (§20.11).
@@ -353,9 +354,27 @@ export default Alchemy.Stack(
       Action: ["ses:SendEmail", "ses:SendRawEmail"],
       Resource: [identityArn("*"), configurationSetArn],
     };
+    // Temp-mail domains are receive-only (PLAN.md §20.22.2): `identity/*` above would cover them,
+    // so an explicit deny keeps a bug from sending as one.
+    const denySendFromTempDomains =
+      tempDomains.length > 0
+        ? [
+            {
+              Effect: "Deny" as const,
+              Sid: "NoSendFromTempDomains",
+              Action: ["ses:SendEmail", "ses:SendRawEmail"],
+              Resource: tempDomains.flatMap((domain) => [
+                identityArn(domain),
+                identityArn(`*.${domain}`),
+              ]),
+            },
+          ]
+        : [];
     // Drafts an MCP client wrote go out from the API when their owner sends them in the web app
     // (PLAN.md §20.24): from an alias, to one of its contacts, like a reply.
-    yield* api.bind("SendDrafts", { policyStatements: [sendFromAliasDomains] });
+    yield* api.bind("SendDrafts", {
+      policyStatements: [sendFromAliasDomains, ...denySendFromTempDomains],
+    });
 
     // The image proxy (`apps/image-proxy`, PLAN.md §20.19): its own function and role, because it
     // fetches URLs that come from mail. The role can read its keys and nothing else: no table, no
@@ -491,7 +510,9 @@ export default Alchemy.Stack(
         { Effect: "Allow", Action: ["s3:ListBucket"], Resource: `arn:aws:s3:::${spoolBucketName}` },
       ],
     });
-    yield* inbound.bind("SendMail", { policyStatements: [sendFromAliasDomains] });
+    yield* inbound.bind("SendMail", {
+      policyStatements: [sendFromAliasDomains, ...denySendFromTempDomains],
+    });
     yield* inbound.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
     // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
     // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of
@@ -620,7 +641,7 @@ export default Alchemy.Stack(
       }),
     );
     // Temp-mail domains only receive (the receipt rule covers every verified domain); nothing
-    // is ever sent from them, so no sending policy names them.
+    // is ever sent from them, and the sending policies deny them explicitly.
     yield* Effect.forEach(tempDomains, (domain) =>
       AWS.SES.EmailIdentity(`Temp-${domain}`, {
         emailIdentity: domain,

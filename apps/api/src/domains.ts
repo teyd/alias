@@ -9,7 +9,7 @@ import {
   InvalidDomain,
   TooManyDomains,
 } from "@alias/contracts";
-import { Address, SharedDomains } from "@alias/core";
+import { Address, SharedDomains, TempDomains } from "@alias/core";
 import { AliasRepo, DomainRepo } from "@alias/db";
 import { type Doh, DomainSetup } from "@alias/dns";
 import * as Arr from "effect/Array";
@@ -50,12 +50,13 @@ const view = (domain: DomainRepo.Domain): Domain => ({
 });
 
 /**
- * `Example.COM.` → `example.com`. Refuses non-domains, the shared domains, their subdomains and
- * their parents: an SES identity covers its subdomains, so either way one user's identity would
- * cover the service's own mail.
+ * `Example.COM.` → `example.com`. Refuses non-domains, the service's own domains (shared and
+ * temp-mail), their subdomains and their parents: an SES identity covers its subdomains, so either
+ * way one user's identity would cover the service's own mail, and removing the claim (or its
+ * expiry) would delete the service's identity (PLAN.md §20.25).
  */
 const normalize = Effect.fn("domains.normalize")(function* (requested: string) {
-  const shared = yield* SharedDomains.SharedDomains;
+  const shared = [...(yield* SharedDomains.SharedDomains), ...(yield* TempDomains.TempDomains)];
   const trimmed = Str.toLowerCase(Str.trim(requested));
   const domain = trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
   if (!Address.isDomain(domain)) {
@@ -164,7 +165,8 @@ type DomainServices =
   | AliasRepo.AliasRepo
   | Identities.Identities
   | Doh.Resolver
-  | SharedDomains.SharedDomains;
+  | SharedDomains.SharedDomains
+  | TempDomains.TempDomains;
 
 export const DomainsLive = HttpApiBuilder.group(Api, "domains", (handlers) =>
   Effect.gen(function* () {

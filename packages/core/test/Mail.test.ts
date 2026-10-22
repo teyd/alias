@@ -1,0 +1,350 @@
+import { NodeCrypto } from "@effect/platform-node";
+import { describe, expect, it, layer } from "@effect/vitest";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import { Address, Mail, ReverseToken } from "../src/index.ts";
+import { newsletter, newsletterBody, newsletterHeaders, ownerReply } from "./support/fixtures.ts";
+import { binary, bytes, mailbox, split, values } from "./support/mime.ts";
+
+const alias: Address.MailAddress = { local: "k7m2qx9p", domain: "alias.test" };
+const token = "ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc";
+const reverse = `k7m2qx9p+r.${token}@alias.test`;
+const cafe: Mail.Sender = { name: Option.some("Café Müller"), address: "news@cafe.example" };
+
+const forwardWith = (raw: Uint8Array, sender: Mail.Sender = cafe) =>
+  Mail.forward(raw, { alias, sender, token });
+
+/** Right-to-left override and pop directional formatting, written out so they stay visible. */
+const RLO = String.fromCodePoint(0x202e);
+const PDF = String.fromCodePoint(0x202c);
+
+const names = (data: Uint8Array) => split(data).fields.map((field) => field.name.toLowerCase());
+
+const physicalLines = (data: Uint8Array) => split(data).headerText.split(/\r?\n/);
+
+/** The display text of the rewritten `From`, decoded the way a mail client would. */
+const fromDisplay = (sender: Mail.Sender) =>
+  Effect.map(forwardWith(bytes("Subject: x\r\n\r\nbody"), sender), (out) => {
+    const [from] = values(out, "From");
+    return mailbox(from ?? "").display;
+  });
+
+describe("Mail.forward", () => {
+  describe.each([
+    ["CRLF", "\r\n"],
+    ["LF", "\n"],
+  ])("with %s line endings", (_, eol) => {
+    it.effect("sets From and Reply-To to the reverse alias with the sender in the name", () =>
+      Effect.gen(function* () {
+        const out = yield* forwardWith(newsletter(eol));
+        const from = values(out, "From");
+        const replyTo = values(out, "Reply-To");
+        expect(from).toHaveLength(1);
+        expect(replyTo).toEqual(from);
+        expect(mailbox(from[0] ?? "")).toEqual({
+          display: "Café Müller (news@cafe.example)",
+          address: reverse,
+        });
+      }),
+    );
+
+    it.effect("removes signatures, verdicts, bounce and receipt addresses", () =>
+      Effect.gen(function* () {
+        const out = yield* forwardWith(newsletter(eol));
+        expect(names(out)).toEqual([
+          "from",
+          "reply-to",
+          "received",
+          "to",
+          "subject",
+          "date",
+          "message-id",
+          "list-unsubscribe",
+          "list-unsubscribe-post",
+          "mime-version",
+          "content-type",
+        ]);
+        // No orphaned continuation lines from the folded signatures.
+        expect(binary(out)).not.toMatch(/dGhlIG9yaWdpbmFs|bh=47DEQ|cv=none/);
+      }),
+    );
+
+    it.effect("keeps the subject, the other fields and every body byte as they were", () =>
+      Effect.gen(function* () {
+        const raw = newsletter(eol);
+        const out = yield* forwardWith(raw);
+        expect(split(out).rest).toEqual(newsletterBody(eol));
+        expect(split(out).rest).toEqual(split(raw).rest);
+        const subject = `Subject: =?UTF-8?B?8J+NsCBEaWUgS3VjaGVuLVdvY2hl?= ist da:${eol} neue Rezepte und =?ISO-8859-1?Q?=C4pfel?=${eol}`;
+        expect(binary(out)).toContain(subject);
+        const received = newsletterHeaders(eol).split(eol).slice(1, 4).join(eol);
+        expect(binary(out)).toContain(received);
+      }),
+    );
+
+    it.effect("writes new fields with the message's own line ending", () =>
+      Effect.gen(function* () {
+        const out = yield* forwardWith(newsletter(eol));
+        const head = split(out).headerText;
+        expect(eol === "\n" ? head.includes("\r") : /[^\r]\n/.test(head)).toBe(false);
+      }),
+    );
+
+    it.effect("is idempotent: forwarding the output again changes nothing", () =>
+      Effect.gen(function* () {
+        const once = yield* forwardWith(newsletter(eol));
+        expect(yield* forwardWith(once)).toEqual(once);
+      }),
+    );
+  });
+
+  it.effect("keeps raw 8-bit header values (RFC 6532) byte for byte", () =>
+    Effect.gen(function* () {
+      const raw = Uint8Array.from([
+        ...bytes("From: a@b.example\r\nSubject: Grüße "),
+        0xff,
+        0xfe,
+        ...bytes("\r\n\r\n"),
+        0xe9,
+      ]);
+      const out = yield* forwardWith(raw);
+      expect(binary(out)).toContain(binary(raw.subarray(19, raw.length)));
+    }),
+  );
+
+  it.effect("accepts a message with no body and no blank line", () =>
+    Effect.gen(function* () {
+      const out = yield* forwardWith(bytes("From: a@b.example\r\nSubject: hi"));
+      expect(names(out)).toEqual(["from", "reply-to", "subject"]);
+      expect(binary(out).endsWith("\r\nSubject: hi")).toBe(true);
+    }),
+  );
+
+  it.effect("handles huge header blocks in linear time", () =>
+    Effect.gen(function* () {
+      const received = Array.from(
+        { length: 20_000 },
+        (_, i) =>
+          `Received: from hop${i}.relay.example by hop${i + 1}.relay.example;\r\n Tue, 21 Oct 2026 09:14:02 +0000`,
+      );
+      const references = `References:${Array.from({ length: 5_000 }, (_, i) => ` <${i}.thread@lists.example>`).join("\r\n")}`;
+      const raw = bytes(
+        [
+          ...received,
+          references,
+          "DKIM-Signature: v=1;\r\n b=x",
+          "From: a@b.example",
+          "",
+          "body",
+        ].join("\r\n"),
+      );
+      const out = yield* forwardWith(raw);
+      expect(values(out, "Received")).toHaveLength(20_000);
+      expect(values(out, "DKIM-Signature")).toHaveLength(0);
+      expect(binary(out)).toContain(references);
+      expect(binary(out).endsWith("\r\n\r\nbody")).toBe(true);
+    }),
+  );
+
+  it.effect("rejects input that is not a message", () =>
+    Effect.gen(function* () {
+      const reason = (raw: string) =>
+        Effect.map(Effect.flip(forwardWith(bytes(raw))), (error) => error.reason);
+      expect(yield* reason("")).toBe("no header fields");
+      expect(yield* reason("\r\nbody")).toBe("no header fields");
+      expect(yield* reason(" continued: x\r\n\r\n")).toBe("no header fields");
+      // An mbox separator left in front of the message.
+      expect(yield* reason("From sender@x Tue Oct 21 09:14:02 2026\r\nSubject: x\r\n\r\n")).toBe(
+        "header line without a field name",
+      );
+    }),
+  );
+
+  describe("display names", () => {
+    it.effect("quotes short ASCII names and escapes quotes and backslashes", () =>
+      Effect.gen(function* () {
+        const out = yield* forwardWith(bytes("Subject: x\r\n\r\n"), {
+          name: Option.some('Acme "Support" \\ Team'),
+          address: "help@acme.example",
+        });
+        expect(binary(out)).toContain(
+          `From: "Acme \\"Support\\" \\\\ Team (help@acme.example)"\r\n <${reverse}>\r\n`,
+        );
+      }),
+    );
+
+    it.effect.each([
+      ["no name", Option.none<string>(), "help@acme.example"],
+      ["an empty name", Option.some("  "), "help@acme.example"],
+      ["the address as name", Option.some("Help@Acme.example"), "help@acme.example"],
+      [
+        "CJK",
+        Option.some("株式会社 ハローワールド"),
+        "株式会社 ハローワールド (help@acme.example)",
+      ],
+      ["emoji", Option.some("👩‍👩‍👧 Family Shop"), "👩‍👩‍👧 Family Shop (help@acme.example)"],
+      [
+        "an encoded-word lookalike",
+        Option.some("=?UTF-8?B?SGk=?="),
+        "=?UTF-8?B?SGk=?= (help@acme.example)",
+      ],
+      [
+        "header injection",
+        Option.some("Evil\r\nBcc: victim@x.example"),
+        "Evil Bcc: victim@x.example (help@acme.example)",
+      ],
+      [
+        "bidi overrides",
+        Option.some(`Bank${RLO} moc.evil${PDF}`),
+        "Bank moc.evil (help@acme.example)",
+      ],
+    ] satisfies ReadonlyArray<readonly [string, Option.Option<string>, string]>)(
+      "handles %s",
+      ([, name, expected]) =>
+        Effect.gen(function* () {
+          expect(yield* fromDisplay({ name, address: "help@acme.example" })).toBe(expected);
+        }),
+    );
+
+    it.effect("encodes long names as several words on lines of at most 78 characters", () =>
+      Effect.gen(function* () {
+        const name = "Ünïcödé ".repeat(12).trim();
+        const out = yield* forwardWith(bytes("Subject: x\r\n\r\n"), {
+          name: Option.some(name),
+          address: "news@cafe.example",
+        });
+        const lines = physicalLines(out);
+        const fromLines = lines.slice(
+          0,
+          lines.findIndex((line) => line.startsWith("Reply-To:")),
+        );
+        expect(fromLines.length).toBeGreaterThan(2);
+        expect(lines.every((line) => line.length <= 78)).toBe(true);
+        expect(
+          binary(out)
+            .match(/=\?UTF-8\?B\?[^?]*\?=/g)
+            ?.every((word) => word.length <= 75),
+        ).toBe(true);
+        expect(mailbox(values(out, "From")[0] ?? "").display).toBe(`${name} (news@cafe.example)`);
+      }),
+    );
+
+    it.effect("caps absurdly long names", () =>
+      Effect.gen(function* () {
+        const display = yield* fromDisplay({
+          name: Option.some("x".repeat(5000)),
+          address: "a@b.example",
+        });
+        expect(display).toBe(`${"x".repeat(127)}… (a@b.example)`);
+      }),
+    );
+
+    it.effect.prop(
+      "any name decodes back to its one-line, control-free form",
+      [
+        Arbitrary.map(Arbitrary.schema(Schema.String.check(Schema.isMaxLength(100))), (text) =>
+          text.replace(/\p{Surrogate}/gu, ""),
+        ),
+      ],
+      ([name]) =>
+        Effect.gen(function* () {
+          const display = yield* fromDisplay({ name: Option.some(name), address: "a@b.example" });
+          const shown = name
+            .replace(/[\p{Cc}\p{Bidi_Control}]/gu, " ")
+            .replace(/\s+/gu, " ")
+            .trim();
+          expect(display).toBe(
+            shown === "" || shown.toLowerCase() === "a@b.example"
+              ? "a@b.example"
+              : `${shown} (a@b.example)`,
+          );
+        }),
+    );
+  });
+
+  it.effect.prop("never changes a body byte", [Arbitrary.schema(Schema.Uint8Array)], ([body]) =>
+    Effect.gen(function* () {
+      const raw = Uint8Array.from([
+        ...bytes("From: a@b.example\r\nDKIM-Signature: x\r\n\r\n"),
+        ...body,
+      ]);
+      const out = yield* forwardWith(raw);
+      expect(out.subarray(out.length - body.length - 2)).toEqual(
+        Uint8Array.from([0x0d, 0x0a, ...body]),
+      );
+    }),
+  );
+});
+
+describe("Mail.reply", () => {
+  const contact = "news@cafe.example";
+
+  it.effect("sends as the alias, to the contact, without identifying fields", () =>
+    Effect.gen(function* () {
+      const out = yield* Mail.reply(ownerReply("\r\n", reverse), { alias, to: contact });
+      expect(names(out)).toEqual([
+        "from",
+        "to",
+        "cc",
+        "subject",
+        "in-reply-to",
+        "references",
+        "message-id",
+        "date",
+        "mime-version",
+        "content-type",
+        "content-transfer-encoding",
+      ]);
+      expect(values(out, "From")).toEqual(["k7m2qx9p@alias.test"]);
+      expect(values(out, "To")).toEqual([contact]);
+      expect(binary(out)).not.toMatch(
+        /198\.51\.100\.23|Thunderbird|Apple Mail|jane\.doe|gmail\.example;|d=gmail/,
+      );
+    }),
+  );
+
+  it.effect("keeps the body and the threading fields byte for byte", () =>
+    Effect.gen(function* () {
+      const raw = ownerReply("\n", reverse);
+      const out = yield* Mail.reply(raw, { alias, to: contact });
+      expect(split(out).rest).toEqual(split(raw).rest);
+      expect(binary(out)).toContain("In-Reply-To: <20261021091400.4f2a@cafe.example>\nReferences:");
+      expect(binary(out)).not.toContain("\r");
+    }),
+  );
+});
+
+layer(NodeCrypto.layer)((it) => {
+  it.effect("forward and reply round-trip through a real reverse token", () =>
+    Effect.gen(function* () {
+      const keys = yield* ReverseToken.keyring({
+        current: { version: 1, secret: Redacted.make(new Uint8Array(32).fill(3)) },
+        retired: [],
+      });
+      const minted = yield* ReverseToken.mint(keys, alias, {
+        sender: Option.some(cafe.address),
+        contactId: Option.none(),
+      });
+      const forwarded = yield* Mail.forward(newsletter("\r\n"), {
+        alias,
+        sender: cafe,
+        token: minted,
+      });
+
+      // The owner's client replies to the Reply-To address; the inbound side parses it back.
+      const replyTo = mailbox(values(forwarded, "Reply-To")[0] ?? "").address;
+      const recipient = yield* Address.parse(replyTo);
+      const parts = yield* Effect.fromOption(Address.reverseToken(recipient));
+      const aliasAddress = { local: parts.aliasLocal, domain: recipient.domain };
+      const claims = yield* ReverseToken.verify(keys, aliasAddress, parts.token);
+      const to = yield* Effect.fromOption(claims.sender);
+
+      const sent = yield* Mail.reply(ownerReply("\r\n", replyTo), { alias: aliasAddress, to });
+      expect(values(sent, "From")).toEqual(["k7m2qx9p@alias.test"]);
+      expect(values(sent, "To")).toEqual(["news@cafe.example"]);
+    }),
+  );
+});

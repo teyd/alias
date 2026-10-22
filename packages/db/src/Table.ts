@@ -24,6 +24,10 @@ import { DynamoTable } from "./Dynamo.ts";
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                            |                           |             |
  * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                            |                           | `expiresAt` |
  * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
+
+ * | DomainPointer     | `USER#<userId>`              | `DOMAIN#<domain>`      |                            |                           |             |
+ * | DomainCount       | `USER#<userId>`              | `DOMAINS`              |                            |                           |             |
+ * | Domain            | `DOMAIN#<domain>`            | `DOMAIN`               | `DOMAIN-CHECKS`            | `<nextCheckAt>#<domain>`  |             |
  * | Username          | `USERNAME#<skeleton>`        | `USERNAME`             |                            |                           |             |
  * | Passkey           | `PASSKEY#<credentialId>`     | `PASSKEY`              | `PASSKEYS#<userId>`        | `PASSKEY#<credentialId>`  |             |
  * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              | `SESSIONS#<userId>`        | `SESSION#<sha256(token)>` | `expiresAt` |
@@ -76,6 +80,13 @@ import { DynamoTable } from "./Dynamo.ts";
  * UserSettings holds the user's account choices; a user without one has the defaults. The inbound
  * Lambda finds a subdomain's owner through the Username item (exact username, not just the same
  * skeleton) and reads their settings with a second GetItem.
+ *
+ * A Domain is a custom domain (PLAN.md §20.18), keyed by its lowercased name, so one claim exists
+ * per domain across all users and the inbound Lambda resolves it with one GetItem. It is written
+ * in one transaction with the owner's DomainPointer (listing a user's domains is one Query plus a
+ * GetItem each) and DomainCount (the per-user cap, atomic). Every domain shares the gsi1
+ * partition `DOMAIN-CHECKS`, sorted by when the verification cron should look at it next
+ * (zero-padded epoch millis), so the cron finds due domains with one Query.
  *
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing

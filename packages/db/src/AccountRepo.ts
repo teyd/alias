@@ -15,6 +15,7 @@ import * as Item from "./Item.ts";
 import { userPasskeysKey } from "./PasskeyRepo.ts";
 import * as Purge from "./Purge.ts";
 import { sessionKey, userSessionsKey } from "./SessionRepo.ts";
+import { userTokensKey } from "./TokenRepo.ts";
 import { userKey, usernameKey } from "./UserRepo.ts";
 
 /** The account to erase, as the signed-in session names it. */
@@ -132,16 +133,22 @@ const make = Effect.fn("AccountRepo.make")(function* () {
 
   const erase = Effect.fn("AccountRepo.erase")(function* (account: Account) {
     const current = sessionKey(account.sessionId);
-    // 1. Every other session, so no other device acts on the account while it is erased.
+    // 1. Every other session and every API token, so no other device or script acts on the
+    //    account while it is erased.
     const sessions = yield* Effect.forEach(
       yield* Purge.indexItems(table, userSessionsKey(account.userId)),
       Purge.keyOf,
       { concurrency: "unbounded" },
     );
-    yield* Purge.deleteAll(
-      table,
-      Arr.filter(sessions, (key) => key.pk.S !== current.pk.S),
+    const tokens = yield* Effect.forEach(
+      yield* Purge.indexItems(table, userTokensKey(account.userId)),
+      Purge.keyOf,
+      { concurrency: "unbounded" },
     );
+    yield* Purge.deleteAll(table, [
+      ...Arr.filter(sessions, (key) => key.pk.S !== current.pk.S),
+      ...tokens,
+    ]);
 
     // 2. The username becomes a tombstone: no new aliases on the fly, and nobody gets it again.
     const deletedAt = yield* Schema.encodeEffect(Attribute.EpochMillis)(yield* DateTime.now).pipe(

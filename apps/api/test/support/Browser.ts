@@ -22,11 +22,18 @@ interface Response {
 
 export type Client = ReturnType<typeof make>;
 
+/** How a client other than the browser calls: its own headers and network address. */
+interface Options {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly sourceIp?: string;
+}
+
 /**
  * Calls a function URL handler the way a browser on {@link origin} would: payload-2.0 events
- * with JSON bodies, and a cookie jar that honours `Set-Cookie` (including `Max-Age=0`).
+ * with JSON bodies, and a cookie jar that honours `Set-Cookie` (including `Max-Age=0`). With
+ * `options`, it adds headers (`authorization`, say) and calls from another address.
  */
-export const make = (handle: Handle) => {
+export const make = (handle: Handle, options: Options = {}) => {
   let jar = HashMap.empty<string, string>();
 
   const remember = (setCookie: string) => {
@@ -46,7 +53,12 @@ export const make = (handle: Handle) => {
     path: string,
     body: Option.Option<Schema.Json>,
   ) {
-    const accepts = { accept: "application/json", host: "api.alias.test", origin };
+    const accepts = {
+      accept: "application/json",
+      host: "api.alias.test",
+      origin,
+      ...options.headers,
+    };
     const headers = Option.match(body, {
       onNone: () => accepts,
       onSome: () => ({ ...accepts, "content-type": "application/json" }),
@@ -61,7 +73,7 @@ export const make = (handle: Handle) => {
         domainName: "api.alias.test",
         requestId: "req-1",
         timeEpoch: 0,
-        http: { method, path, sourceIp: "127.0.0.1" },
+        http: { method, path, sourceIp: options.sourceIp ?? "127.0.0.1" },
       },
     };
     const cookies = Arr.map(Arr.fromIterable(jar), ([name, value]) => `${name}=${value}`);

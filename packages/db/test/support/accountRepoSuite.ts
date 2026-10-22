@@ -17,6 +17,7 @@ import {
   Dynamo,
   RecipientRepo,
   SessionRepo,
+  TokenRepo,
   UserRepo,
 } from "../../src/index.ts";
 import { freshTable } from "./database.ts";
@@ -29,6 +30,7 @@ const repos = Layer.mergeAll(
   ContactRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
+  TokenRepo.layer,
   UserRepo.layer,
 );
 
@@ -38,6 +40,7 @@ type Repos =
   | ContactRepo.ContactRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
+  | TokenRepo.TokenRepo
   | UserRepo.UserRepo
   | Dynamo.Database;
 
@@ -93,6 +96,24 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
         createdAt: at(1_000),
         expiresAt: at(9_000_000_000_000),
       }),
+    { concurrency: 1, discard: true },
+  );
+  yield* Effect.forEach(
+    ["cli", "ci"],
+    (purpose) =>
+      TokenRepo.TokenRepo.use((tokens) =>
+        tokens.create({
+          id: `tok_${name}_${purpose}`,
+          hash: `${name}${purpose}`.padEnd(64, "0"),
+          userId,
+          username,
+          name: purpose,
+          scopes: ["aliases:read"],
+          hint: "AbCd",
+          createdAt: at(1_000),
+          expiresAt: Option.none(),
+        }),
+      ),
     { concurrency: 1, discard: true },
   );
   yield* users.updateSettings(userId, { isOnTheFlyEnabled: true });

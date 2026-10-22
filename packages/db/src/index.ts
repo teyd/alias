@@ -9,4 +9,5 @@ export * as PasskeyRepo from "./PasskeyRepo.ts";
 export * as RecipientRepo from "./RecipientRepo.ts";
 export * as SessionRepo from "./SessionRepo.ts";
 export * as Table from "./Table.ts";
+export * as TokenRepo from "./TokenRepo.ts";
 export * as UserRepo from "./UserRepo.ts";

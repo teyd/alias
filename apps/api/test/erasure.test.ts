@@ -130,12 +130,24 @@ describe("data lifecycle over the API (fakecloud)", () => {
         ),
       );
 
+      const minted = yield* ada.browser.post("/v1/tokens", {
+        name: "cli",
+        scopes: ["aliases:read"],
+      });
+      const { token } = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(
+        minted.body,
+      );
+      // Erasure takes a passkey: a token can't start it.
+      expect((yield* handler.withToken(token).post("/v1/me/erase/options")).status).toBe(403);
+
       const erased = yield* erase(ada.browser, ada.authenticator);
       expect(erased.status).toBe(204);
       expect(erased.setCookies).toEqual([expect.stringContaining("Max-Age=0")]);
 
-      // No session works any more, on either device, and the passkey logs nobody in.
+      // No session works any more, on either device, nor the API token, and the passkey logs
+      // nobody in.
       expect((yield* ada.browser.get("/v1/me")).status).toBe(401);
+      expect((yield* handler.withToken(token).get("/v1/me")).status).toBe(401);
       expect((yield* phone.get("/v1/me")).status).toBe(401);
       expect(yield* logIn(open(), ada.authenticator)).toMatchObject({
         status: 400,

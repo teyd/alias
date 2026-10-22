@@ -10,7 +10,7 @@ import * as Browser from "./support/Browser.ts";
 import { TestAuthenticator } from "./support/index.ts";
 import * as TestApi from "./support/TestApi.ts";
 
-const { AuthenticationChallenge, RegistrationChallenge, logIn, signUp } = TestApi;
+const { AuthenticationChallenge, RegistrationChallenge, logIn, signUp, signedIn } = TestApi;
 
 const SESSION = "__Host-alias_session";
 
@@ -45,13 +45,6 @@ const api = Effect.map(TestApi.make, (handler) => ({
 }));
 
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
-
-/** A browser signed in as a freshly registered user. */
-const signedIn = Effect.fn("signedIn")(function* (open: () => Browser.Client, username: string) {
-  const browser = open();
-  const registered = yield* signUp(browser, TestAuthenticator.make(Browser.origin), username);
-  return { browser, ...Schema.decodeUnknownSync(Me)(registered.body) };
-});
 
 const random = (domain: string) => ({ _tag: "Random", domain, mode: "forward" });
 const address = (value: string) => ({ _tag: "Address", address: value, mode: "inbox" });

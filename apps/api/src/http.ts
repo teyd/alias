@@ -8,6 +8,7 @@ import {
   PasskeyRepo,
   RecipientRepo,
   SessionRepo,
+  TokenRepo,
   UserRepo,
 } from "@alias/db";
 import { NodeCrypto } from "@effect/platform-node";
@@ -23,8 +24,9 @@ import { ContactsLive } from "./contacts.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
-import { authenticationLayer } from "./Sessions.ts";
+import { authenticationLayer } from "./Authentication.ts";
 import { SettingsLive } from "./settings.ts";
+import { TokensLive } from "./tokens.ts";
 
 const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
   handlers.handle("health", () => Effect.succeed({ status: "ok" as const })),
@@ -39,6 +41,7 @@ const Repositories = Layer.mergeAll(
   SessionRepo.layer,
   ChallengeRepo.layer,
   RecipientRepo.layer,
+  TokenRepo.layer,
 );
 
 /** What callers provide: the database, the WebAuthn relying party, the shared domains and outgoing mail. */
@@ -62,6 +65,7 @@ const ApiLive = HttpApiBuilder.layer(Api).pipe(
     ContactsLive,
     RecipientsLive,
     SettingsLive,
+    TokensLive,
   ]),
   Layer.provide(authenticationLayer),
   Layer.provide(Repositories),

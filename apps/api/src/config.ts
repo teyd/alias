@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Str from "effect/String";
 import * as MailSettings from "./MailSettings.ts";
 import * as RelyingParty from "./RelyingParty.ts";
+import * as SharedDomains from "./SharedDomains.ts";
 
 /**
  * Lambda environment. The service runs in eu-west-1 only. `AWS_ENDPOINT_URL_DYNAMODB` and
@@ -26,6 +27,11 @@ const RelyingPartyConfig = Config.all({
   id: Config.String("ALIAS_RP_ID"),
   origin: Config.String("ALIAS_WEB_ORIGIN"),
 }).pipe(Config.map(RelyingParty.layer));
+
+/** Comma-separated, e.g. `alias.example,alias2.example`. */
+const SharedDomainsConfig = Config.String("ALIAS_SHARED_DOMAINS").pipe(
+  Config.map(SharedDomains.layer),
+);
 
 const TransportConfig = Config.option(Config.String("AWS_ENDPOINT_URL_SESV2")).pipe(
   Config.map((endpoint) =>
@@ -59,6 +65,7 @@ const MailConfig = Config.all({
 export const ServicesConfig = Config.all([
   DatabaseConfig,
   RelyingPartyConfig,
+  SharedDomainsConfig,
   TransportConfig,
   MailConfig,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));

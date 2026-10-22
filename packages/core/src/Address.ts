@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as Crypto from "effect/Crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -15,7 +16,23 @@ export interface MailAddress {
   readonly domain: string;
 }
 
-const LOCAL_PART = /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/;
+const LOCAL_PART = /^[a-z0-9](?:[a-z0-9._+-]*[a-z0-9])?$/;
+/** RFC 5321 §4.5.3.1.1. */
+const MAX_LOCAL_LENGTH = 64;
+/** RFC 5321 path limit (256) minus the angle brackets. */
+const MAX_ADDRESS_LENGTH = 254;
+const REVERSE_MARKER = "+r.";
+
+/**
+ * Reverse aliases may run past 64 octets because their token carries the sender's address,
+ * the way SRS addresses do. RFC 5321 §4.5.3.1 asks for no length limits where possible, and
+ * only the alias part in front of the token has to fit the usual local-part limit.
+ */
+const isLocalLengthOk = (local: string): boolean => {
+  const marker = local.indexOf(REVERSE_MARKER);
+  return local.length <= MAX_LOCAL_LENGTH || (marker > 0 && marker <= MAX_LOCAL_LENGTH);
+};
+
 const DOMAIN_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export const parse = Effect.fn("Address.parse")(function* (input: string) {
@@ -24,9 +41,12 @@ export const parse = Effect.fn("Address.parse")(function* (input: string) {
   if (at <= 0 || at === normalized.length - 1) {
     return yield* new InvalidAddress({ input, reason: "missing local part or domain" });
   }
+  if (normalized.length > MAX_ADDRESS_LENGTH) {
+    return yield* new InvalidAddress({ input, reason: "address too long" });
+  }
   const local = normalized.slice(0, at);
   const domain = normalized.slice(at + 1);
-  if (!LOCAL_PART.test(local)) {
+  if (!isLocalLengthOk(local) || !LOCAL_PART.test(local)) {
     return yield* new InvalidAddress({ input, reason: "invalid local part" });
   }
   const labels = domain.split(".");
@@ -35,6 +55,30 @@ export const parse = Effect.fn("Address.parse")(function* (input: string) {
   }
   const address: MailAddress = { local, domain };
   return address;
+});
+
+/** Lowercase letters and digits without the lookalikes `0`, `1`, `i`, `l` and `o`: 31 symbols. */
+const RANDOM_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+const RANDOM_LENGTH = 10;
+
+/**
+ * A fresh local part for a shared-domain alias, like `k7m2qx9pzr`. Ten symbols carry about 49
+ * bits, so a collision with an existing alias is rare; callers still retry on one. Bytes at or
+ * above 248 (8 × 31) are skipped so every symbol is equally likely.
+ */
+export const randomLocal = Effect.fn("Address.randomLocal")(function* () {
+  const crypto = yield* Crypto.Crypto;
+  const limit = RANDOM_ALPHABET.length * 8;
+  const pick = Effect.map(crypto.randomBytes(RANDOM_LENGTH * 2), (bytes) =>
+    Arr.map(
+      Arr.filter(Array.from(bytes), (byte) => byte < limit),
+      (byte) => RANDOM_ALPHABET.charAt(byte % RANDOM_ALPHABET.length),
+    ),
+  );
+  const symbols = yield* pick.pipe(
+    Effect.repeat({ until: (picked) => picked.length >= RANDOM_LENGTH }),
+  );
+  return Arr.join(Arr.take(symbols, RANDOM_LENGTH), "");
 });
 
 /**
@@ -72,7 +116,13 @@ export const classify = (address: MailAddress, sharedDomains: ReadonlyArray<stri
     Option.getOrElse(() => Destination.Custom({ address })),
   );
 
-const REVERSE_MARKER = "+r.";
+export const format = (address: MailAddress): string => `${address.local}@${address.domain}`;
+
+/** The reverse alias for `token`, on the alias's own domain: `alias+r.<token>@domain`. */
+export const reverseAddress = (alias: MailAddress, token: string): MailAddress => ({
+  local: `${alias.local}${REVERSE_MARKER}${token}`,
+  domain: alias.domain,
+});
 
 /** Splits `alias+r.<token>` into the alias local part and the reverse-alias token. */
 export const reverseToken = (

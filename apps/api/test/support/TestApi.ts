@@ -5,7 +5,12 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "../../src/index.ts";
+import {
+  MailSettings,
+  RelyingParty,
+  SharedDomains,
+  makeFunctionUrlHandler,
+} from "../../src/index.ts";
 import * as Browser from "./Browser.ts";
 import type * as TestAuthenticator from "./TestAuthenticator.ts";
 
@@ -38,6 +43,8 @@ export const make = Effect.acquireRelease(
         Layer.succeedContext(context),
         Layer.succeed(Clock.Clock, clock),
         RelyingParty.layer({ id: sharedDomain, origin: Browser.origin }),
+        // A second shared domain lets alias tests pick between domains.
+        SharedDomains.layer(`${sharedDomain},alias2.test`),
         MailSettings.layer({ sender: `no-reply@${sharedDomain}`, aliasDomains: [sharedDomain] }),
       ),
     );

@@ -1,4 +1,4 @@
-import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
+import { MailSettings, RelyingParty, SharedDomains, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
 import { AliasRepo, type Dynamo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
@@ -38,6 +38,7 @@ const api = Layer.merge(
         Layer.mergeAll(
           Layer.succeedContext(context),
           RelyingParty.layer({ id: "alias.test", origin }),
+          SharedDomains.layer("alias.test"),
           Transport.ses.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
           MailSettings.layer({ sender: "no-reply@alias.test", aliasDomains: ["alias.test"] }),
         ),

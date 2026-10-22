@@ -6,6 +6,7 @@ import {
   Api,
   CurrentUser,
   InvalidAlias,
+  type NewAlias,
 } from "@alias/contracts";
 import { AliasRepo, DomainRepo } from "@alias/db";
 import { Publisher } from "@alias/webhooks";
@@ -164,61 +165,64 @@ const remove = Effect.fn("aliases.remove")(function* (params: AliasParams) {
   );
 });
 
+/** The caller's aliases, oldest first. */
+export const list = Effect.fn("aliases.list")(function* () {
+  const user = yield* CurrentUser;
+  const repo = yield* AliasRepo.AliasRepo;
+  return Arr.map(yield* Effect.orDie(repo.listByUser(user.userId)), view);
+});
+
+/** Where the caller may create aliases. */
+export const domains = Effect.fn("aliases.domains")(function* () {
+  const user = yield* CurrentUser;
+  const shared = yield* SharedDomains.SharedDomains;
+  const repo = yield* DomainRepo.DomainRepo;
+  const custom = yield* Effect.orDie(repo.listByUser(user.userId));
+  return {
+    shared,
+    subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
+    custom: Arr.map(
+      Arr.filter(custom, (domain) => domain.status === "verified"),
+      (domain) => domain.domain,
+    ),
+  };
+});
+
+export const create = (payload: NewAlias) =>
+  Match.valueTags(payload, {
+    Random: ({ domain, mode }) => createRandom(domain, mode),
+    Address: ({ address, mode }) => createAddress(address, mode),
+  });
+
+/** Changes the caller's alias; only what's given changes. */
+export const update = Effect.fn("aliases.update")(function* (
+  params: AliasParams,
+  changes: { readonly mode?: Mode; readonly isActive?: boolean },
+) {
+  const user = yield* CurrentUser;
+  const repo = yield* AliasRepo.AliasRepo;
+  const updated = yield* repo
+    .update({ userId: user.userId, domain: params.domain, localPart: params.local }, changes)
+    .pipe(
+      Effect.catchTags({
+        NoSuchAlias: () => Effect.fail(notFound(params)),
+        DatabaseError: Effect.die,
+      }),
+    );
+  return view(updated);
+});
+
 export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<AliasServices>();
-    const repo = yield* AliasRepo.AliasRepo;
-    const shared = yield* SharedDomains.SharedDomains;
-    const domains = yield* DomainRepo.DomainRepo;
-    const owned = (params: { readonly domain: string; readonly local: string }) =>
-      Effect.map(Effect.service(CurrentUser), (user) => ({
-        userId: user.userId,
-        domain: params.domain,
-        localPart: params.local,
-      }));
     return handlers
-      .handle("list", () =>
-        Effect.service(CurrentUser).pipe(
-          Effect.flatMap((user) => Effect.orDie(repo.listByUser(user.userId))),
-          Effect.map(Arr.map(view)),
-        ),
-      )
-      .handle("domains", () =>
-        Effect.gen(function* () {
-          const user = yield* CurrentUser;
-          const custom = yield* Effect.orDie(domains.listByUser(user.userId));
-          return {
-            shared,
-            subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
-            custom: Arr.map(
-              Arr.filter(custom, (domain) => domain.status === "verified"),
-              (domain) => domain.domain,
-            ),
-          };
-        }),
-      )
-      .handle("create", ({ payload }) =>
-        Effect.provide(
-          Match.valueTags(payload, {
-            Random: ({ domain, mode }) => createRandom(domain, mode),
-            Address: ({ address, mode }) => createAddress(address, mode),
-          }),
-          services,
-        ),
-      )
+      .handle("list", () => Effect.provide(list(), services))
+      .handle("domains", () => Effect.provide(domains(), services))
+      .handle("create", ({ payload }) => Effect.provide(create(payload), services))
       .handle("lookup", ({ params }) =>
-        ownedAlias(params).pipe(Effect.map(view), Effect.provideService(AliasRepo.AliasRepo, repo)),
+        Effect.provide(Effect.map(ownedAlias(params), view), services),
       )
-      .handle("update", ({ params, payload }) =>
-        owned(params).pipe(
-          Effect.flatMap((address) => repo.update(address, payload)),
-          Effect.map(view),
-          Effect.catchTags({
-            NoSuchAlias: () => Effect.fail(notFound(params)),
-            DatabaseError: Effect.die,
-          }),
-        ),
-      )
+      .handle("update", ({ params, payload }) => Effect.provide(update(params, payload), services))
       .handle("remove", ({ params }) => Effect.provide(remove(params), services));
   }),
 );

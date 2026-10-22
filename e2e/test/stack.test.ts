@@ -16,7 +16,16 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
+import {
+  Client,
+  type OAuthClientProvider,
+  type StoredOAuthClientInformation,
+  type StoredOAuthTokens,
+  StreamableHTTPClientTransport,
+  UnauthorizedError,
+} from "@modelcontextprotocol/client";
 import { apiHandler, layer, sentTo, smtp, smtpRaw, spoolBucket } from "./support/stack.ts";
 import * as openpgp from "openpgp";
 
@@ -91,6 +100,63 @@ const signUp = (username: string) =>
     const cookie = (registered.cookies[0] ?? "").split(";")[0] ?? "";
     return { cookie, userId: String(registered.body.userId), authenticator };
   });
+
+/**
+ * `fetch` for an MCP client from outside: the public origin (`https://alias.test`, CloudFront in
+ * production) is the function URL server here. Nothing else about the requests changes.
+ */
+const viaStack =
+  (url: string): typeof fetch =>
+  (input, init) => {
+    const target = input instanceof Request ? input.url : String(input);
+    expect(input).not.toBeInstanceOf(Request);
+    return fetch(target.replace(origin, url), init);
+  };
+
+/** What an MCP host keeps for one server, as the official SDK asks it to. */
+interface OAuthState {
+  client?: StoredOAuthClientInformation;
+  tokens?: StoredOAuthTokens;
+  verifier: string;
+  authorizationUrl?: URL;
+}
+
+/** An MCP client's OAuth state, in memory. */
+const oauthClient = () => {
+  const state: OAuthState = { verifier: "" };
+  const provider: OAuthClientProvider = {
+    get redirectUrl() {
+      return "http://127.0.0.1:33418/callback";
+    },
+    get clientMetadata() {
+      return {
+        client_name: "SDK stack test",
+        redirect_uris: ["http://127.0.0.1:33418/callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        application_type: "native",
+      };
+    },
+    state: () => "stack-state",
+    clientInformation: () => state.client,
+    saveClientInformation: (client) => {
+      state.client = client;
+    },
+    tokens: () => state.tokens,
+    saveTokens: (tokens) => {
+      state.tokens = tokens;
+    },
+    redirectToAuthorization: (url) => {
+      state.authorizationUrl = url;
+    },
+    saveCodeVerifier: (verifier) => {
+      state.verifier = verifier;
+    },
+    codeVerifier: () => state.verifier,
+  };
+  return { provider, state };
+};
 
 /** Header fields of a raw message, unfolded, in order. */
 const fields = (raw: string) =>
@@ -271,6 +337,102 @@ describe("emulated stack", () => {
         });
         // Metadata only: no content, subject or sender address.
         expect(request?.body).not.toMatch(/store\.example|order/i);
+      }),
+    );
+
+    it.effect("connects the official MCP client through OAuth with PKCE, both protocol eras", () =>
+      Effect.gen(function* () {
+        const { url } = yield* FunctionUrlServer.FunctionUrlServer;
+        const { cookie } = yield* signUp("mcp-user");
+        const oauth = oauthClient();
+        const transport = () =>
+          new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+            authProvider: oauth.provider,
+            fetch: viaStack(url),
+          });
+        const connect = (mode: "auto" | "legacy") =>
+          Effect.promise(async () => {
+            const client = new Client(
+              { name: "stack-test", version: "1.0.0" },
+              { versionNegotiation: { mode } },
+            );
+            await client.connect(transport());
+            return client;
+          });
+
+        // 1. No token: 401 → protected resource metadata → authorization server metadata →
+        //    dynamic registration → PKCE, and the browser is sent to the consent page.
+        const refused = yield* Effect.promise(() =>
+          new Client({ name: "stack-test", version: "1.0.0" }).connect(transport()).then(
+            () => undefined,
+            (error: Error) => error,
+          ),
+        );
+        expect(refused).toBeInstanceOf(UnauthorizedError);
+        const authorize = oauth.state.authorizationUrl ?? new URL("about:blank");
+        expect(`${authorize.origin}${authorize.pathname}`).toBe(`${origin}/oauth/authorize`);
+        const request = R.fromEntries(authorize.searchParams);
+        expect(request).toMatchObject({
+          response_type: "code",
+          client_id: expect.stringMatching(/^mcp_/),
+          code_challenge_method: "S256",
+          redirect_uri: "http://127.0.0.1:33418/callback",
+          resource: `${origin}/mcp`,
+          state: "stack-state",
+        });
+
+        // 2. The user consents in the signed-in web app, granting two of the four scopes.
+        const shown = yield* call("/v1/oauth/authorization", { cookie, body: request });
+        expect(shown.body.client).toMatchObject({ name: "SDK stack test", isLocalRedirect: true });
+        const decided = yield* call("/v1/oauth/authorization/decision", {
+          cookie,
+          body: { request, isApproved: true, scopes: ["aliases:read", "aliases:write"] },
+        });
+        const back = new URL(decided.body.redirectTo);
+
+        // 3. The redirect reaches the client, which checks `iss` and redeems the code.
+        yield* Effect.promise(() => transport().finishAuth(back.searchParams));
+        expect(oauth.state.tokens).toMatchObject({
+          token_type: "Bearer",
+          scope: "aliases:read aliases:write",
+        });
+
+        // 4. A 2026-07-28 client: stateless, with server/discover.
+        const modern = yield* connect("auto");
+        expect(modern.getNegotiatedProtocolVersion()).toBe("2026-07-28");
+        expect(modern.getServerVersion()).toMatchObject({ name: "alias" });
+        const { tools } = yield* Effect.promise(() => modern.listTools());
+        expect(tools.map((tool) => tool.name)).toContain("create_alias");
+        const created = yield* Effect.promise(() =>
+          modern.callTool({
+            name: "create_alias",
+            arguments: { address: "agent@mcp-user.alias.test" },
+          }),
+        );
+        expect(created).toMatchObject({
+          isError: false,
+          structuredContent: { address: "agent@mcp-user.alias.test", isActive: true },
+        });
+        yield* Effect.promise(() => modern.close());
+
+        // 5. A client that opens with `initialize` (the SDK's default) gets the same tools.
+        const legacy = yield* connect("legacy");
+        expect(legacy.getNegotiatedProtocolVersion()).toBe("2025-11-25");
+        const listed = yield* Effect.promise(() =>
+          legacy.callTool({ name: "list_aliases", arguments: {} }),
+        );
+        expect(listed).toMatchObject({
+          structuredContent: { aliases: [{ address: "agent@mcp-user.alias.test" }] },
+        });
+        yield* Effect.promise(() => legacy.close());
+
+        // The web app sees the alias, and the connected app.
+        expect((yield* call("/v1/aliases", { cookie })).body).toMatchObject([
+          { address: "agent@mcp-user.alias.test" },
+        ]);
+        expect((yield* call("/v1/oauth/grants", { cookie })).body).toMatchObject([
+          { clientName: "SDK stack test", scopes: ["aliases:read", "aliases:write"] },
+        ]);
       }),
     );
 

@@ -37,6 +37,7 @@ const NewAlias = Schema.Union([
   Schema.TaggedStruct("Random", { domain: Schema.String, mode: AliasMode }),
   Schema.TaggedStruct("Address", { address: Schema.String, mode: AliasMode }),
 ]);
+export type NewAlias = typeof NewAlias.Type;
 
 /** Only what's given changes. */
 const AliasChanges = Schema.Struct({

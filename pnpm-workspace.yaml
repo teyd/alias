@@ -48,6 +48,8 @@ catalog:
   "@types/nodemailer": 8.0.2
   # api docs: validates the generated OpenAPI document against the official 3.1 schema
   "@seriousme/openapi-schema-validator": 2.11.0
+  # mcp: the official TypeScript SDK's client, an independent MCP client for the stack test
+  "@modelcontextprotocol/client": 2.3.1
   # ui: shadcn (base-nova style on Base UI), lucide icons, self-hosted Geist fonts
   class-variance-authority: ^0.7.1
   cn: ^0.5.0

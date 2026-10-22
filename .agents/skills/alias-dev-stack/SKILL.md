@@ -9,7 +9,7 @@ description: Use when starting, debugging, or poking the local Alias stack (fake
 
 | Offset | Service |
 |---|---|
-| +0 | web (`vp dev`, proxies `/v1` and `/health` to the api) |
+| +0 | web (`vp dev`, proxies `/v1`, `/health`, `/mcp` and `/.well-known` to the api) |
 | +1 | api, the real Lambda handler behind the function URL emulator (`apps/api/bin/dev.ts`) |
 | +2 | ses-emulator SMTP inbound (spools to S3 on fakecloud), each Lambda event handed to the real inbound pipeline (`apps/inbound/bin/dev.ts`) |
 | +4/+5 | Mailpit UI/SMTP (optional) |
@@ -28,6 +28,12 @@ Webhooks (PLAN.md §20.20): the api, inbound and feedback publish to the SQS que
 Custom domains (PLAN.md §20.18): `POST /v1/domains {"domain": "mine.test"}` (signed in) creates the SES identity on fakecloud and lists the records to publish. Publish them in the DoH emulator, e.g. `curl -X PUT localhost:$ALIAS_DOH_PORT/_emulator/zones/mine.test -d '[{"name":"mine.test","type":"TXT","data":"alias-verification=<token>"},{"name":"mine.test","type":"MX","data":"10 inbound-smtp.eu-west-1.amazonaws.com"},{"name":"token1._domainkey.mine.test","type":"CNAME","data":"token1.dkim.amazonses.com"}, …]'` (`PUT` replaces the zone; `GET localhost:$ALIAS_DOH_PORT/_emulator/zones` lists them), then `POST /v1/domains/mine.test/check`, or wait for the api's verification loop (every minute; production runs it every ten). fakecloud verifies every identity at once, so only the published records decide. Worktrees set up before the DoH port existed need `pnpm agent:setup` again.
 
 On-the-fly aliases: turn them on with `PATCH /v1/settings {"isOnTheFlyEnabled": true}` (signed in), then mail any new address on your subdomain; the inbound log shows `inbound alias created on the fly` before `inbound forwarded`.
+
+MCP (PLAN.md §20.24): the remote MCP server is `http://localhost:$ALIAS_WEB_PORT/mcp`, through the web origin like production (the issuer is that origin; the consent page is the app's `/oauth/authorize`). Clients find everything from the 401: `/.well-known/oauth-protected-resource/mcp`, then `/.well-known/oauth-authorization-server`, then they register (`/v1/oauth/register`, or a client ID metadata document), open the consent page in your browser (sign in with your passkey first), and exchange the code. Connected clients are listed under Settings → Connected apps, where you can disconnect them.
+
+- **Claude Code:** `claude mcp add --transport http alias http://localhost:$ALIAS_WEB_PORT/mcp`, then `/mcp` in a session and pick `alias` → Authenticate. Claude Code listens on a loopback port for the redirect, which the server allows on any port.
+- **Claude Desktop:** its remote connectors connect from Anthropic's servers, which can't reach your machine. Use a local stdio bridge in `claude_desktop_config.json` instead: `{"mcpServers": {"alias": {"command": "npx", "args": ["mcp-remote", "http://localhost:<ALIAS_WEB_PORT>/mcp"]}}}`. A public tunnel won't do: passkeys and the issuer are bound to `localhost`.
+- **By hand:** `curl -si -X POST localhost:$ALIAS_WEB_PORT/mcp` shows the `WWW-Authenticate` challenge; with a token from the flow, `curl -s localhost:$ALIAS_WEB_PORT/mcp -H "authorization: Bearer $TOKEN" -H "content-type: application/json" -H "mcp-protocol-version: 2026-07-28" -H "mcp-method: tools/list" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'`. The stack test (`e2e`) drives the whole dance with the official TypeScript SDK client.
 
 ## Common tasks
 

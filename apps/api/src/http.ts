@@ -42,6 +42,7 @@ import { RecipientsLive } from "./recipients.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Authentication.ts";
 import { SettingsLive } from "./settings.ts";
+import { SecurityLive } from "./security.ts";
 import { TokensLive } from "./tokens.ts";
 import { WebhooksLive } from "./webhooks.ts";
 
@@ -111,6 +112,7 @@ const ApiLive = Layer.mergeAll(
     InboxesLive,
     RecipientsLive,
     SettingsLive,
+    SecurityLive,
     TokensLive,
     OAuthLive,
     OutboxLive,

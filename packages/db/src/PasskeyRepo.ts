@@ -1,11 +1,14 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
-import type * as DateTime from "effect/DateTime";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
+import * as Order from "effect/Order";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
@@ -22,6 +25,8 @@ export interface Passkey {
   readonly counter: number;
   readonly transports: ReadonlyArray<string>;
   readonly createdAt: DateTime.Utc;
+  /** The last successful assertion; none before the first. */
+  readonly lastUsedAt: Option.Option<DateTime.Utc>;
 }
 
 /** The credential is gone, e.g. deleted between the lookup and the update. */
@@ -29,17 +34,34 @@ export class PasskeyNotFound extends Schema.TaggedError<PasskeyNotFound>()("Pass
   credentialId: Schema.String,
 }) {}
 
+/**
+ * The assertion's counter isn't above the stored one, though the authenticator counts: another
+ * assertion got there first with a higher one, or the credential was cloned (WebAuthn §6.1.1).
+ */
+export class CounterNotIncreased extends Schema.TaggedError<CounterNotIncreased>()(
+  "CounterNotIncreased",
+  { credentialId: Schema.String },
+) {}
+
 export class PasskeyRepo extends Context.Service<
   PasskeyRepo,
   {
     readonly findById: (
       credentialId: string,
     ) => Effect.Effect<Option.Option<Passkey>, DatabaseError>;
-    /** Stores the counter the last successful assertion reported. */
+    /**
+     * Stores the counter the last successful assertion reported, and when. A counting
+     * authenticator's counter only moves up: a write that wouldn't raise it fails with
+     * `CounterNotIncreased`, so two racing assertions can't both pass (SR-26). A counter of 0
+     * (most passkeys don't count) always passes.
+     */
     readonly recordUse: (
       credentialId: string,
       counter: number,
-    ) => Effect.Effect<void, PasskeyNotFound | DatabaseError>;
+      usedAt: DateTime.Utc,
+    ) => Effect.Effect<void, PasskeyNotFound | CounterNotIncreased | DatabaseError>;
+    /** The user's passkeys, oldest first. */
+    readonly list: (userId: string) => Effect.Effect<ReadonlyArray<Passkey>, DatabaseError>;
   }
 >()("@alias/db/PasskeyRepo") {}
 
@@ -59,6 +81,7 @@ const PasskeyItem = Item.codec(
     counter: Attribute.N,
     transports: Attribute.StringList,
     createdAt: Attribute.EpochMillis,
+    lastUsedAt: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
   }),
   "Passkey",
 );
@@ -76,35 +99,69 @@ const make = Effect.fn("PasskeyRepo.make")(function* () {
   const table = yield* DynamoTable;
   const client = yield* Effect.context<Database>();
 
-  return PasskeyRepo.of({
-    findById: (credentialId) =>
-      DynamoDB.getItem({
-        TableName: table.name,
-        Key: passkeyKey(credentialId),
-        ConsistentRead: true,
-      }).pipe(
-        Effect.mapError(databaseError("GetItem")),
-        Effect.flatMap((result) => PasskeyItem.decodeOption(Option.fromUndefinedOr(result.Item))),
-        Effect.provide(client),
-      ),
+  const findById = (credentialId: string) =>
+    DynamoDB.getItem({
+      TableName: table.name,
+      Key: passkeyKey(credentialId),
+      ConsistentRead: true,
+    }).pipe(
+      Effect.mapError(databaseError("GetItem")),
+      Effect.flatMap((result) => PasskeyItem.decodeOption(Option.fromUndefinedOr(result.Item))),
+      Effect.provide(client),
+    );
 
-    recordUse: (credentialId, counter) =>
-      DynamoDB.updateItem({
+  return PasskeyRepo.of({
+    findById,
+
+    recordUse: Effect.fn("PasskeyRepo.recordUse")(function* (credentialId, counter, usedAt) {
+      const at = yield* Schema.encodeEffect(Attribute.EpochMillis)(usedAt).pipe(
+        Effect.mapError(databaseError("EncodePasskey")),
+      );
+      const outcome = yield* DynamoDB.updateItem({
         TableName: table.name,
         Key: passkeyKey(credentialId),
-        UpdateExpression: "SET #counter = :counter",
-        ConditionExpression: "attribute_exists(pk)",
+        UpdateExpression: "SET #counter = :counter, lastUsedAt = :at",
+        ConditionExpression: "attribute_exists(pk) AND (:counter = :zero OR #counter < :counter)",
         ExpressionAttributeNames: { "#counter": "counter" },
-        ExpressionAttributeValues: { ":counter": { N: String(counter) } },
+        ExpressionAttributeValues: {
+          ":counter": { N: String(counter) },
+          ":zero": { N: "0" },
+          ":at": at,
+        },
       }).pipe(
-        Effect.asVoid,
-        Effect.mapError((error) =>
-          P.isTagged(error, "ConditionalCheckFailedException")
-            ? new PasskeyNotFound({ credentialId })
-            : databaseError("UpdateItem")(error),
+        Effect.as("recorded" as const),
+        Effect.catchIf(
+          (error) => P.isTagged(error, "ConditionalCheckFailedException"),
+          () => Effect.succeed("refused" as const),
         ),
+        Effect.mapError(databaseError("UpdateItem")),
         Effect.provide(client),
-      ),
+      );
+      if (outcome === "recorded") return;
+      // Refused: gone, or the counter didn't go up. One read tells which.
+      const stored = yield* findById(credentialId);
+      return yield* Option.isNone(stored)
+        ? new PasskeyNotFound({ credentialId })
+        : new CounterNotIncreased({ credentialId });
+    }),
+
+    list: (userId) =>
+      DynamoDB.query
+        .items({
+          TableName: table.name,
+          IndexName: "gsi1",
+          KeyConditionExpression: "gsi1pk = :user",
+          ExpressionAttributeValues: { ":user": { S: userPasskeysKey(userId) } },
+        })
+        .pipe(
+          Stream.mapError(databaseError("Query")),
+          Stream.mapEffect(PasskeyItem.decode),
+          Stream.runCollect,
+          Effect.map(
+            Arr.sort(Order.mapInput(DateTime.Order, (passkey: Passkey) => passkey.createdAt)),
+          ),
+          Effect.provide(client),
+        ),
   });
 });
 

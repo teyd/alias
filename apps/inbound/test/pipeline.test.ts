@@ -225,6 +225,7 @@ const subdomainOwner = Effect.fn("subdomainOwner")(function* (isOnTheFlyEnabled:
       counter: 0,
       transports: [],
       createdAt,
+      lastUsedAt: Option.none(),
     },
   );
   yield* users.updateSettings("usr_1", { isOnTheFlyEnabled });

@@ -2,6 +2,7 @@ import { type Inbound, type SesEvent, Transport } from "@alias/aws";
 import { Address, Mail, ReverseToken, SharedDomains } from "@alias/core";
 import {
   AliasRepo,
+  ContactRepo,
   type DatabaseError,
   DeliveryRepo,
   type Dynamo,
@@ -93,6 +94,66 @@ const aliasAddress = (alias: AliasRepo.Alias): Address.MailAddress => ({
   domain: alias.domain,
 });
 
+/**
+ * The alias's contact for `sender`, created on its first message. A concurrent first message
+ * creates it only once; both then use the stored one.
+ */
+const contactFor = Effect.fn("Pipeline.contactFor")(function* (
+  alias: AliasRepo.Alias,
+  sender: Mail.Sender,
+) {
+  const contacts = yield* ContactRepo.ContactRepo;
+  const found = yield* contacts.findByAddress(alias.id, sender.address);
+  if (Option.isSome(found)) return found.value;
+  const created: ContactRepo.Contact = {
+    id: yield* Effect.orDie(ReverseToken.newContactId()),
+    aliasId: alias.id,
+    address: sender.address,
+    name: sender.name,
+    createdAt: yield* DateTime.now,
+    isBlocked: false,
+  };
+  return yield* contacts.create(created).pipe(
+    Effect.as(created),
+    Effect.catchTag("ContactExists", () =>
+      Effect.map(
+        contacts.findByAddress(alias.id, sender.address),
+        Option.getOrElse(() => created),
+      ),
+    ),
+  );
+});
+
+/**
+ * Who a verified reverse alias stands for. Tokens name a contact, which must still exist and not
+ * be blocked. Tokens minted before contacts existed name the sender's address; they keep
+ * working, unless the alias has since blocked a contact with that address.
+ */
+const replyTarget = Effect.fn("Pipeline.replyTarget")(function* (
+  alias: AliasRepo.Alias,
+  claims: ReverseToken.Claims,
+) {
+  const contacts = yield* ContactRepo.ContactRepo;
+  const contact = Option.isSome(claims.contactId)
+    ? yield* contacts.findById(alias.id, claims.contactId.value)
+    : Option.isSome(claims.sender)
+      ? yield* contacts.findByAddress(alias.id, claims.sender.value)
+      : Option.none();
+  if (Option.exists(contact, (found) => found.isBlocked)) {
+    return Result.fail<Policy.DropReason>("blocked-contact");
+  }
+  return Option.match(
+    Option.orElse(
+      Option.map(contact, (found) => found.address),
+      () => claims.sender,
+    ),
+    {
+      onNone: () => Result.fail<Policy.DropReason>("unknown-contact"),
+      onSome: Result.succeed,
+    },
+  );
+});
+
 const planForward = Effect.fn("Pipeline.planForward")(function* (
   record: Record,
   alias: AliasRepo.Alias,
@@ -103,10 +164,17 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   if (Option.isNone(target)) return Plan.Drop({ reason: "no-recipient" });
   const sender = Policy.sender(record.ses.mail);
   if (Option.isNone(sender)) return Plan.Drop({ reason: "no-sender" });
+  if (!Policy.isStorableAddress(sender.value.address)) {
+    return Plan.Drop({ reason: "unencodable-sender" });
+  }
+  const contact = yield* contactFor(alias, sender.value);
+  if (contact.isBlocked) return Plan.Block({ alias, reason: "blocked-contact" });
   const address = aliasAddress(alias);
+  // The token names the contact, not the sender: short whatever the address, and revoked with
+  // the contact.
   const token = yield* ReverseToken.mint(yield* ReverseKeys, address, {
-    sender: Option.some(sender.value.address),
-    contactId: Option.none(),
+    sender: Option.none(),
+    contactId: Option.some(contact.id),
   }).pipe(Effect.option);
   if (Option.isNone(token)) return Plan.Drop({ reason: "unencodable-sender" });
   const aliases = yield* AliasRepo.AliasRepo;
@@ -144,9 +212,10 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
 ) {
   const address = aliasAddress(alias);
   const claims = yield* ReverseToken.verify(yield* ReverseKeys, address, token).pipe(Effect.option);
-  // Tokens naming only a contact arrive with the contacts table (roadmap phase 4).
-  const contact = Option.flatMap(claims, (verified) => verified.sender);
-  if (Option.isNone(contact)) return Plan.Drop({ reason: "bad-token" });
+  if (Option.isNone(claims)) return Plan.Drop({ reason: "bad-token" });
+  const target = yield* replyTarget(alias, claims.value);
+  if (Result.isFailure(target)) return Plan.Drop({ reason: target.failure });
+  const contact = target.success;
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
   const from = Option.fromUndefinedOr(record.ses.mail.commonHeaders.from).pipe(
     Option.flatMap(Arr.head),
@@ -164,8 +233,8 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
           Option.map((reason): Refusal => Plan.Drop({ reason })),
         ),
       ),
-    rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact.value, messageId }),
-    envelope: { from: Address.format(address), to: [contact.value] },
+    rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId }),
+    envelope: { from: Address.format(address), to: [contact] },
   });
 });
 
@@ -365,6 +434,7 @@ export const layer = <E, R>(
 ) =>
   Layer.mergeAll(
     AliasRepo.layer,
+    ContactRepo.layer,
     RecipientRepo.layer,
     DeliveryRepo.layer,
     UserRepo.layer,

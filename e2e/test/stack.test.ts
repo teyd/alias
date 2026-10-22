@@ -109,7 +109,7 @@ const call = (
   init: {
     readonly body?: Schema.Json;
     readonly cookie?: string;
-    readonly method?: "GET" | "POST" | "PATCH";
+    readonly method?: "GET" | "POST" | "PATCH" | "DELETE";
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -469,6 +469,56 @@ describe("emulated stack", () => {
         expect(yield* invoke(yield* mail("club@frank.alias.test"))).toEqual([
           { _tag: "Dropped", reason: "unknown-alias" },
         ]);
+      }),
+    );
+
+    it.effect("drops a blocked sender's mail, and replies to a deleted contact", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const gil = yield* owner("gil");
+        const write = (from: string) =>
+          smtp({ from, to: gil.alias, subject: "Hello", text: `From ${from}` });
+        expect(yield* invoke(yield* write("spam@pushy.example"))).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* invoke(yield* write("friend@pal.example"))).toEqual([{ _tag: "Forwarded" }]);
+        const friendReverse = (yield* sentTo(gil.mailbox)).at(-1)?.from ?? "";
+
+        const contactsPath = `/v1/aliases/gil.alias.test/shop/contacts`;
+        const listed = yield* call(contactsPath, { cookie: gil.cookie });
+        const contacts = Schema.decodeUnknownSync(
+          Schema.Array(Schema.Struct({ id: Schema.String, address: Schema.String })),
+        )(listed.body);
+        expect(contacts).toHaveLength(2);
+        const idOf = (address: string) =>
+          contacts.find((contact) => contact.address === address)?.id ?? "";
+        const spammer = { id: idOf("spam@pushy.example") };
+        const friend = { id: idOf("friend@pal.example") };
+
+        const blocked = yield* call(`${contactsPath}/${spammer?.id}`, {
+          cookie: gil.cookie,
+          method: "PATCH",
+          body: { isBlocked: true },
+        });
+        expect(blocked).toMatchObject({ status: 200, body: { isBlocked: true } });
+        expect(yield* invoke(yield* write("spam@pushy.example"))).toEqual([
+          { _tag: "Dropped", reason: "blocked-contact" },
+        ]);
+
+        const deleted = yield* call(`${contactsPath}/${friend?.id}`, {
+          cookie: gil.cookie,
+          method: "DELETE",
+        });
+        expect(deleted.status).toBe(204);
+        const reply = yield* smtp({
+          from: gil.mailbox,
+          to: friendReverse,
+          subject: "Re: Hello",
+          text: "Still there?",
+        });
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Dropped", reason: "unknown-contact" }]);
+
+        expect(yield* sentTo("friend@pal.example")).toEqual([]);
+        // The confirmation mail and the two first forwards.
+        expect(yield* sentTo(gil.mailbox)).toHaveLength(3);
       }),
     );
 

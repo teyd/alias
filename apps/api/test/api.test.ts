@@ -1,7 +1,9 @@
-import { AliasRepo } from "@alias/db";
+import { AliasRepo, ContactRepo } from "@alias/db";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Browser from "./support/Browser.ts";
@@ -18,6 +20,14 @@ const api = Effect.map(TestApi.make, (handler) => ({
   seedAlias: (alias: AliasRepo.NewAlias) =>
     AliasRepo.make().pipe(
       Effect.flatMap((repo) => repo.insert(alias)),
+      Effect.provide(handler.context),
+    ),
+  seedContact: (contact: ContactRepo.NewContact) =>
+    ContactRepo.layer.pipe(
+      Layer.build,
+      Effect.flatMap((context) =>
+        ContactRepo.ContactRepo.use((repo) => repo.create(contact)).pipe(Effect.provide(context)),
+      ),
       Effect.provide(handler.context),
     ),
   findAlias: (domain: string, localPart: string) =>
@@ -480,6 +490,97 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
       expect((yield* anonymous.patch("/v1/settings", { isOnTheFlyEnabled: true })).status).toBe(
         401,
       );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lists an alias's contacts and blocks, unblocks and deletes them", () =>
+    Effect.gen(function* () {
+      const { browser: open, seedAlias, seedContact } = yield* api;
+      const ada = yield* signedIn(open, "ada");
+      const shop = { domain: "alias.test", localPart: "shop", mode: "forward" as const };
+      yield* seedAlias({ ...shop, id: "al_shop", userId: ada.userId, createdAt: 1 });
+      yield* seedAlias({
+        ...shop,
+        id: "al_bank",
+        userId: "usr_other",
+        localPart: "bank",
+        createdAt: 1,
+      });
+      const contact = (id: string, address: string, aliasId = "al_shop") =>
+        seedContact({
+          id,
+          aliasId,
+          address,
+          name: id === "c1" ? Option.some("Store") : Option.none(),
+          createdAt: DateTime.makeUnsafe(id === "c1" ? 1_000 : 2_000),
+        });
+      yield* contact("c1", "orders@store.example");
+      yield* contact("c2", "news@store.example");
+      yield* contact("c3", "boss@bank.example", "al_bank");
+
+      const listed = yield* ada.browser.get("/v1/aliases/alias.test/shop/contacts");
+      expect(listed).toMatchObject({
+        status: 200,
+        body: [
+          {
+            id: "c1",
+            address: "orders@store.example",
+            name: "Store",
+            isBlocked: false,
+            createdAt: "1970-01-01T00:00:01.000Z",
+          },
+          { id: "c2", address: "news@store.example", isBlocked: false },
+        ],
+      });
+      // A contact that wrote without a display name has none.
+      expect(listed.body).toEqual([
+        expect.anything(),
+        expect.not.objectContaining({ name: expect.anything() }),
+      ]);
+
+      const path = "/v1/aliases/alias.test/shop/contacts/c1";
+      expect(yield* ada.browser.patch(path, { isBlocked: true })).toMatchObject({
+        status: 200,
+        body: { id: "c1", isBlocked: true },
+      });
+      expect(yield* ada.browser.get("/v1/aliases/alias.test/shop/contacts")).toMatchObject({
+        body: [
+          { id: "c1", isBlocked: true },
+          { id: "c2", isBlocked: false },
+        ],
+      });
+      expect(yield* ada.browser.patch(path, { isBlocked: false })).toMatchObject({
+        body: { isBlocked: false },
+      });
+      expect((yield* ada.browser.patch(path, { isBlocked: "no" })).status).toBe(400);
+      expect((yield* ada.browser.delete(path)).status).toBe(204);
+      expect(yield* ada.browser.delete(path)).toMatchObject({
+        status: 404,
+        body: { _tag: "ContactNotFound", contactId: "c1" },
+      });
+      expect(yield* ada.browser.get("/v1/aliases/alias.test/shop/contacts")).toMatchObject({
+        body: [{ id: "c2" }],
+      });
+
+      // Another user's alias, and its contacts, look like nothing at all.
+      const notFound = { status: 404, body: { _tag: "AliasNotFound", address: "bank@alias.test" } };
+      expect(yield* ada.browser.get("/v1/aliases/alias.test/bank/contacts")).toMatchObject(
+        notFound,
+      );
+      expect(
+        yield* ada.browser.patch("/v1/aliases/alias.test/bank/contacts/c3", { isBlocked: true }),
+      ).toMatchObject(notFound);
+      expect(yield* ada.browser.delete("/v1/aliases/alias.test/bank/contacts/c3")).toMatchObject(
+        notFound,
+      );
+      // Contacts belong to one alias: c3 isn't shop's.
+      expect(
+        (yield* ada.browser.patch("/v1/aliases/alias.test/shop/contacts/c3", { isBlocked: true }))
+          .status,
+      ).toBe(404);
+
+      const anonymous = open();
+      expect((yield* anonymous.get("/v1/aliases/alias.test/shop/contacts")).status).toBe(401);
     }).pipe(Effect.scoped),
   );
 });

@@ -166,8 +166,9 @@ export default Alchemy.Stack(
         ALIAS_REVERSE_TOKEN_KEYS: reverseTokenKeys,
       },
     });
-    // Least privilege: aliases and recipients are read by key or one partition Query; counters,
-    // forward quotas and delivery claims are single-item writes. No index, no transactions.
+    // Least privilege: aliases, recipients and contacts are read by key or one partition Query;
+    // counters, quotas and delivery claims are single-item writes. A new contact and its id are
+    // one TransactWriteItems, which IAM authorizes per item through PutItem. No index.
     yield* inbound.bind("DataAccess", {
       policyStatements: [
         {

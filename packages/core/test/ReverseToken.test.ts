@@ -2,6 +2,7 @@ import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
+import * as HashSet from "effect/HashSet";
 import { Hex } from "effect/encoding";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
@@ -59,6 +60,36 @@ describe("base32", () => {
 });
 
 layer(NodeCrypto.layer)((it) => {
+  describe("newContactId", () => {
+    it.effect("is 16 base32 characters of fresh randomness that a token carries", () =>
+      Effect.gen(function* () {
+        const ids = yield* Effect.all(
+          Array.from({ length: 50 }, () => ReverseToken.newContactId()),
+          { concurrency: 1 },
+        );
+        expect(ids.every((id) => /^[a-z2-7]{16}$/.test(id))).toBe(true);
+        expect(HashSet.size(HashSet.fromIterable(ids))).toBe(50);
+
+        const keys = yield* ReverseToken.keyring({
+          current: { version: 1, secret: Redacted.make(new Uint8Array(32).fill(5)) },
+          retired: [],
+        });
+        const alias = { local: "shop", domain: "alias.test" };
+        const contactId = ids[0] ?? "";
+        const token = yield* ReverseToken.mint(keys, alias, {
+          sender: Option.none(),
+          contactId: Option.some(contactId),
+        });
+        expect(token).toHaveLength(47);
+        expect(yield* ReverseToken.verify(keys, alias, token)).toEqual({
+          sender: Option.none(),
+          contactId: Option.some(contactId),
+          keyVersion: 1,
+        });
+      }),
+    );
+  });
+
   describe("hmacSha256", () => {
     // RFC 4231 test cases 1, 2 and 6 (a key longer than the block size).
     it.effect.each([

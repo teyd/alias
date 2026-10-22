@@ -3,3 +3,4 @@ export { authRepoSuite } from "./authRepoSuite.ts";
 export { deliveryRepoSuite } from "./deliveryRepoSuite.ts";
 export { freshTable } from "./database.ts";
 export { recipientRepoSuite } from "./recipientRepoSuite.ts";
+export { contactRepoSuite } from "./contactRepoSuite.ts";

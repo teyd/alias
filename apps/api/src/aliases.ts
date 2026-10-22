@@ -80,8 +80,24 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
 /** What the alias handlers use. The group captures them once, at startup. */
 type AliasServices = Crypto.Crypto | AliasRepo.AliasRepo | SharedDomains.SharedDomains;
 
-const notFound = (params: { readonly domain: string; readonly local: string }) =>
+interface AliasParams {
+  readonly domain: string;
+  readonly local: string;
+}
+
+const notFound = (params: AliasParams) =>
   new AliasNotFound({ address: `${params.local}@${params.domain}`.toLowerCase() });
+
+/** The caller's alias at this address. Someone else's looks exactly like a missing one. */
+export const ownedAlias = Effect.fn("aliases.ownedAlias")(function* (params: AliasParams) {
+  const user = yield* CurrentUser;
+  const repo = yield* AliasRepo.AliasRepo;
+  const alias = yield* Effect.orDie(repo.findByAddress(params.domain, params.local));
+  return yield* Option.match(
+    Option.filter(alias, (found) => found.userId === user.userId),
+    { onNone: () => Effect.fail(notFound(params)), onSome: Effect.succeed },
+  );
+});
 
 export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
   Effect.gen(function* () {
@@ -117,17 +133,7 @@ export const AliasesLive = HttpApiBuilder.group(Api, "aliases", (handlers) =>
         ),
       )
       .handle("lookup", ({ params }) =>
-        Effect.gen(function* () {
-          const user = yield* CurrentUser;
-          const alias = yield* Effect.orDie(repo.findByAddress(params.domain, params.local));
-          return yield* Option.match(
-            Option.filter(alias, (found) => found.userId === user.userId),
-            {
-              onNone: () => Effect.fail(notFound(params)),
-              onSome: (found) => Effect.succeed(view(found)),
-            },
-          );
-        }),
+        ownedAlias(params).pipe(Effect.map(view), Effect.provideService(AliasRepo.AliasRepo, repo)),
       )
       .handle("update", ({ params, payload }) =>
         owned(params).pipe(

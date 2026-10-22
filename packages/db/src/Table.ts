@@ -14,6 +14,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | ----------------- | ---------------------------- | ---------------------- | --------------- | ------------------------ | ----------- |
  * | Alias             | `ALIAS#<domain>#<localPart>` | `ALIAS`                | `USER#<userId>` | `ALIAS#<createdAt>#<id>` |             |
  * | ForwardQuota      | `ALIAS#<domain>#<localPart>` | `FORWARDS#<hour>`      |                 |                          | `expiresAt` |
+ * | Contact           | `CONTACTS#<aliasId>`         | `CONTACT#<address>`    |                 |                          |             |
+ * | ContactId         | `CONTACTS#<aliasId>`         | `CONTACT-ID#<id>`      |                 |                          |             |
  * | User              | `USER#<userId>`              | `USER`                 |                 |                          |             |
  * | UserSettings      | `USER#<userId>`              | `SETTINGS`             |                 |                          |             |
  * | AliasQuota        | `USER#<userId>`              | `ALIASES#<date>`       |                 |                          | `expiresAt` |
@@ -46,6 +48,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * UpdateItem on it. It outlives its hour by an hour and is never read after, so a deleted alias
  * leaves nothing behind for long. MailQuota and AliasQuota (aliases created on the fly per user
  * and UTC day) work the same way (`Quota.ts`).
+ *
+ * A Contact is someone who wrote to an alias, keyed by the alias's id (not its address, so an
+ * alias recreated at the same address starts without contacts) and the sender's lowercased
+ * address: each forwarded message finds it with one GetItem, and listing an alias's contacts is
+ * one Query with `begins_with(sk, "CONTACT#")`. Reverse-alias tokens carry the contact's random
+ * id; the ContactId item points from it to the address, written and deleted in the same
+ * transaction as the contact, so a reply costs two GetItems and a deleted contact's id finds
+ * nothing.
  *
  * UserSettings holds the user's account choices; a user without one has the defaults. The inbound
  * Lambda finds a subdomain's owner through the Username item (exact username, not just the same

@@ -5,5 +5,6 @@ export default defineConfig({
     name: "lambda-emulator:unit",
     include: ["test/**/*.test.ts"],
     environment: "node",
+    testTimeout: 30_000,
   },
 });

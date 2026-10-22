@@ -227,7 +227,7 @@ tools/
   aws-emulators/     ✅ fakecloud (S3 + DynamoDB + SESv2 sending, one binary via mise) + Amazon DynamoDB Local (Java)
   lambda-emulator/   ✅ function URL server (HTTP ⇄ payload 2.0)
 e2e/            ✅ whole emulated stack in one process
-infra/          ✅ alchemy.run.ts: DynamoDB, S3 spool, API Lambda, SES rules (not deployed)
+infra/          ✅ alchemy.run.ts: DynamoDB, S3 spool, API + inbound Lambdas, SES rules (not deployed)
 scripts/        ✅ agent-setup.ts, dev.ts, affected.ts, cost-model.ts (+ lib/ports, worktree, devEnv)
 .agents/skills/ ✅ pstack + alias-* skills (symlinked into .claude/skills)
 ```
@@ -835,7 +835,7 @@ The user decided on 2026-10-21 to use AWS for everything except DNS. The require
 | Database               | D1 + SQL migrations                 | DynamoDB single table (`Table.spec`), `AliasRepo` on `@distilled.cloud/aws` (Effect-native, the SDK Alchemy uses)                      |
 | Inbound events         | SNS-style notification              | SES Lambda-action event (`SesEvent`), spool key `prefix + messageId`                                                                   |
 | Local API              | `alchemy dev` (workerd)             | real handler behind `tools/lambda-emulator`                                                                                            |
-| Infra                  | CF D1 + Worker                      | AWS DynamoDB, S3 spool, Lambda + URL, SES rule set (typechecked, not deployed)                                                         |
+| Infra                  | CF D1 + Worker                      | AWS DynamoDB, S3 spool, API Lambda + URL, inbound Lambda, SES rule set (typechecked, not deployed)                                     |
 | Docker / cloud account | none                                | none. Tools (fakecloud, Java 17, Node, pnpm) come from `mise.toml`                                                                     |
 
 ### 20.2 How emulation is verified
@@ -852,7 +852,7 @@ This setup has already caught two problems. The documented function URL sample u
 
 - **Recorded AWS payloads.** Replace doc samples with recorded ones once a sandbox account exists (phase 2). The doc samples stay as a second source.
 - **TTL.** fakecloud can expire items on demand (`/_fakecloud/dynamodb/ttl-processor/tick`), but DynamoDB Local can't. Readers ignore expired items (sessions, challenges, delivery claims), because AWS deletes them late.
-- **Infra** is only typechecked. The IAM ARN uses a fixed table name, the SES rule has no Lambda action yet, and the S3 bucket policy has no `aws:SourceAccount` condition yet. The `SendMail` policy covers only the shared domains and is not attached to a function yet. Review before the first deploy.
+- **Infra** is only typechecked (`tsc -p infra` in `pnpm check`; `vp check` alone skipped it until 2026-10-22). Done since: the receipt rule invokes the inbound Lambda after the S3 action, with a `lambda:InvokeFunction` permission for SES limited to this account; the spool bucket policy has an `aws:SourceAccount` condition; the inbound Lambda gets least-privilege grants (S3 get/delete on `inbound/*`, five single-item DynamoDB actions, no index or transactions) and the shared-domain `SendMail` statements, inline on its role because Alchemy's `Lambda.Function` creates the role and takes no managed policies; IAM ARNs name the account. Still open: the ARNs use the fixed table name, the reverse-token keys are a deploy-time environment secret (§20.6), and the SES `aws:SourceArn` condition needs the rule ARN, which Alchemy can't template into the policy yet. Review before the first deploy.
 - **SES sending error paths fakecloud can't produce** (§20.5). Record them from a sandbox account in phase 2.
 - **fakecloud doesn't let a verified domain cover its subdomains** (§20.5). Tests verify user subdomains explicitly; dev drops mail to `<user>.alias.test` aliases as `rejected`.
 - **Inbound gaps** (§20.6): inbox-mode aliases are dropped until phase 7, senders longer than ~120 characters can't get a reverse alias until contacts exist (phase 4), spam is always dropped (no quarantine yet), and quoted text in replies still carries the owner's address if their client quotes it.

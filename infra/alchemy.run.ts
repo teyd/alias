@@ -3,12 +3,13 @@
  * against emulators (see AGENTS.md), and `pnpm check` typechecks this file.
  *
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
- * and the receipt rule matches the one `tools/ses-emulator/bin/serve.ts` evaluates.
+ * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
  */
 import { Table } from "@alias/db";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import { localState } from "alchemy/State";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 
 const stage = process.env.ALIAS_STAGE ?? "local";
@@ -19,8 +20,22 @@ const appDomain = sharedDomains[0] ?? "alias.test";
 const confirmationSender = `no-reply@${appDomain}`;
 const spoolBucketName = `alias-spool-${stage}`;
 const tableName = `alias-${stage}`;
-// Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
-const tableArn = `arn:aws:dynamodb:eu-west-1:*:table/${tableName}`;
+/** Where SES stores received mail; `Inbound.spoolPrefix` in `@alias/aws`. */
+const spoolPrefix = "inbound/";
+
+/**
+ * Reverse-alias signing keys for the inbound Lambda: `<version>:<base64url secret>` entries, the
+ * first one minting (`ReverseKeys.parse` in `apps/inbound`; secrets of at least 32 bytes). A
+ * deploy-time secret: the deployer (CI) passes it from its secret store, Lambda keeps environment
+ * variables encrypted at rest with KMS, and the Alchemy state backend must stay private because it
+ * records the value too. Rotate by putting a new key first and keeping the old one for as long as
+ * replies to older mail should work. Moving it to Secrets Manager needs an emulator and a contract
+ * test first (AGENTS.md).
+ */
+const reverseTokenKeys = process.env.ALIAS_REVERSE_TOKEN_KEYS;
+if (reverseTokenKeys === undefined || reverseTokenKeys.trim() === "") {
+  throw new Error("Set ALIAS_REVERSE_TOKEN_KEYS (see the comment above it) before planning.");
+}
 
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
@@ -30,6 +45,11 @@ export default Alchemy.Stack(
     state: stage === "local" ? localState() : AWS.state(),
   },
   Effect.gen(function* () {
+    const { accountId } = yield* AWS.AWSEnvironment.current;
+    // Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
+    const tableArn = `arn:aws:dynamodb:eu-west-1:${accountId}:table/${tableName}`;
+    const spoolObjects = `arn:aws:s3:::${spoolBucketName}/${spoolPrefix}*`;
+
     const table = yield* AWS.DynamoDB.Table("Data", {
       tableName,
       partitionKey: Table.spec.partitionKey,
@@ -54,7 +74,7 @@ export default Alchemy.Stack(
         {
           ID: "expire-inbound",
           Status: "Enabled",
-          Filter: { Prefix: "inbound/" },
+          Filter: { Prefix: spoolPrefix },
           Expiration: { Days: 1 },
         },
       ],
@@ -64,7 +84,9 @@ export default Alchemy.Stack(
           Sid: "AllowSESPuts",
           Principal: { Service: "ses.amazonaws.com" },
           Action: ["s3:PutObject"],
-          Resource: `arn:aws:s3:::${spoolBucketName}/inbound/*`,
+          Resource: spoolObjects,
+          // Only SES acting for this account, not another account's receipt rule.
+          Condition: { StringEquals: { "aws:SourceAccount": accountId } },
         },
       ],
     });
@@ -111,15 +133,84 @@ export default Alchemy.Stack(
       ],
     });
 
+    // What `Transport.ses` (`@alias/aws`) needs: SESv2 `SendEmail` with raw content, from the shared
+    // domains only. Both actions, as Alchemy's own `SES.SendEmail` binding grants for raw sends.
+    // Forwarded mail goes out from `alias+r.<token>@<user>.<shared domain>`: SES lets the shared
+    // domain's identity cover its subdomains, and the wildcard covers subdomain identities should
+    // one ever be created on its own. Custom domains (phase 5) add their identity ARNs.
+    const sendFromSharedDomains = {
+      Effect: "Allow" as const,
+      Sid: "SendFromSharedDomains",
+      Action: ["ses:SendEmail", "ses:SendRawEmail"],
+      Resource: sharedDomains.flatMap((domain) => [
+        `arn:aws:ses:eu-west-1:${accountId}:identity/${domain}`,
+        `arn:aws:ses:eu-west-1:${accountId}:identity/*.${domain}`,
+      ]),
+    };
+
+    // The inbound pipeline (`apps/inbound`), invoked by the receipt rule below. Raw mail is held in
+    // memory (SES accepts up to 40 MB) and rewritten once, hence the memory size.
+    const inbound = yield* AWS.Lambda.Function("Inbound", {
+      main: new URL("../apps/inbound/src/handler.ts", import.meta.url).pathname,
+      runtime: "nodejs24.x",
+      architecture: "arm64",
+      memorySize: 512,
+      timeout: Duration.seconds(60),
+      functionUrl: false,
+      // Lambda's defaults, spelled out: the pipeline's claims make retries safe (PLAN.md §20.6).
+      eventInvokeConfig: { maximumRetryAttempts: 2, maximumEventAge: "6 hours" },
+      env: {
+        ALIAS_TABLE_NAME: table.tableName,
+        ALIAS_SPOOL_BUCKET: spool.bucketName,
+        ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
+        ALIAS_REVERSE_TOKEN_KEYS: reverseTokenKeys,
+      },
+    });
+    // Least privilege: aliases and recipients are read by key or one partition Query, counters
+    // and delivery claims are single-item writes. No index, no transactions.
+    yield* inbound.bind("DataAccess", {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: [
+            "dynamodb:GetItem",
+            "dynamodb:Query",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+          ],
+          Resource: [tableArn],
+        },
+      ],
+    });
+    // Read and delete spooled mail, nothing else in the bucket.
+    yield* inbound.bind("Spool", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["s3:GetObject", "s3:DeleteObject"], Resource: spoolObjects },
+      ],
+    });
+    yield* inbound.bind("SendMail", { policyStatements: [sendFromSharedDomains] });
+    // SES checks that it may invoke the function when the rule is created, so the rule waits for
+    // this permission (it takes the function ARN from it).
+    const sesInvoke = yield* AWS.Lambda.Permission("SesInvokesInbound", {
+      action: "lambda:InvokeFunction",
+      functionName: inbound.functionArn,
+      principal: "ses.amazonaws.com",
+      sourceAccount: accountId,
+    });
+
     const ruleSet = yield* AWS.SES.ReceiptRuleSet("Inbound", {});
     // No recipient condition: every verified domain, shared and custom, and their subdomains.
-    // Roadmap phase 3 adds the Lambda action (inbound handler) after the S3 action.
+    // SES stores the message first, then invokes the inbound Lambda with the event (no body).
     yield* AWS.SES.ReceiptRule("AllVerified", {
       ruleSetName: ruleSet.ruleSetName,
       enabled: true,
       scanEnabled: true,
       tlsPolicy: "Optional",
-      actions: [{ S3Action: { BucketName: spool.bucketName, ObjectKeyPrefix: "inbound/" } }],
+      actions: [
+        { S3Action: { BucketName: spool.bucketName, ObjectKeyPrefix: spoolPrefix } },
+        { LambdaAction: { FunctionArn: sesInvoke.functionName, InvocationType: "Event" } },
+      ],
     });
     yield* AWS.SES.ActiveReceiptRuleSet("Active", { ruleSetName: ruleSet.ruleSetName });
 
@@ -127,29 +218,11 @@ export default Alchemy.Stack(
       AWS.SES.EmailIdentity(`Shared-${domain}`, { emailIdentity: domain }),
     );
 
-    // What `Transport.ses` (`@alias/aws`) needs: SESv2 `SendEmail` with raw content, from the shared
-    // domains only. Both actions, as Alchemy's own `SES.SendEmail` binding grants for raw sends.
-    // Roadmap phase 3 attaches it to the inbound Lambda; custom domains add their identity ARNs.
-    const sendMail = yield* AWS.IAM.Policy("SendMail", {
-      description: "Send forwarded mail through SES from the shared domains",
-      policyDocument: {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Sid: "SendFromSharedDomains",
-            Action: ["ses:SendEmail", "ses:SendRawEmail"],
-            Resource: sharedDomains.map((domain) => `arn:aws:ses:eu-west-1:*:identity/${domain}`),
-          },
-        ],
-      },
-    });
-
     return {
       apiUrl: api.functionUrl,
       tableName: table.tableName,
       spoolBucket: spool.bucketName,
-      sendMailPolicyArn: sendMail.policyArn,
+      inboundFunction: inbound.functionName,
     };
   }),
 );

@@ -7,7 +7,7 @@
   "scripts": {
     "agent:setup": "mise trust --yes --quiet && mise exec -- node scripts/agent-setup.ts",
     "dev": "mise exec -- node scripts/dev.ts",
-    "check": "vp check && knip --no-progress",
+    "check": "vp check && tsc -p infra && knip --no-progress",
     "test": "mise exec -- vp run --filter '!alias' test",
     "test:unit": "mise exec -- vp run --filter '!alias' test:unit",
     "test:affected": "mise exec -- node scripts/affected.ts test",

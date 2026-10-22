@@ -29,7 +29,7 @@ TypeScript 7 · Effect v4 · Vite+ (`vp`) · React 19 · TanStack Router/Query/F
 ```sh
 pnpm agent:setup        # once per worktree: mise tools, deps, DynamoDB Local, port block, .dev/env
 pnpm dev                # fakecloud + api (function URL emulator) + web + inbound (ses-emulator → inbound Lambda) on this worktree's ports
-pnpm check              # format + lint + typecheck + knip (dead code), whole repo (~3 s)
+pnpm check              # format + lint + typecheck (incl. infra) + knip (dead code), whole repo (~5 s)
 pnpm test               # every suite, cached per package
 pnpm test:affected      # only packages you changed + their dependents (use this before handing back)
 pnpm --filter @alias/db test:dynamodb-local   # one tier of one package

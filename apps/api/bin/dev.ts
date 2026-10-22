@@ -11,6 +11,10 @@
  * Dev-only hook: when someone signs up, their subdomain of each shared domain is verified as its
  * own SES identity on fakecloud (see `verifySubdomains`).
  *
+ * Sign-up's Turnstile check goes to the Turnstile emulator (`tools/turnstile-emulator/bin/serve.ts`,
+ * on `ALIAS_TURNSTILE_PORT`) with the always-passing test keys, so the web app's widget passes
+ * by itself.
+ *
  * Custom domains: SES identities live on the same fakecloud, DNS checks go to the DoH emulator
  * (`tools/doh-emulator/bin/serve.ts`, on `ALIAS_DOH_PORT`), and the verification cron runs here
  * every minute instead of on EventBridge Scheduler.
@@ -20,6 +24,8 @@ import { SharedDomains, TempDomains } from "@alias/core";
 import { AliasRepo, DomainRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { Doh } from "@alias/dns";
 import { Inbox } from "@alias/inbox";
+import { Turnstile } from "@alias/turnstile";
+import { TestKeys } from "@alias/turnstile-emulator";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { Secrets, UrlPolicy, WebhookQueue } from "@alias/webhooks";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
@@ -27,6 +33,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as DomainVerification from "../src/DomainVerification.ts";
@@ -66,6 +73,11 @@ const relyingParty = RelyingParty.layer({
   id: "localhost",
   origin: `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`,
 });
+const turnstile = Turnstile.layer({
+  url: `http://localhost:${process.env.ALIAS_TURNSTILE_PORT ?? 8054}`,
+  siteKey: TestKeys.siteKeys.passes,
+  secret: Redacted.make(TestKeys.secrets.passes),
+}).pipe(Layer.provide(NodeCrypto.layer));
 /** Where the demo alias forwards to. Read it in fakecloud's sent mail; nothing leaves the machine. */
 const demoRecipient = process.env.ALIAS_DEV_RECIPIENT ?? "demo@mailbox.test";
 
@@ -143,7 +155,7 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
   const { handle } = makeFunctionUrlHandler(
-    Layer.mergeAll(database, relyingParty, mail, webhooks, domains, inbox, tempDomains),
+    Layer.mergeAll(database, relyingParty, mail, webhooks, domains, inbox, tempDomains, turnstile),
   );
   // The verification cron, as EventBridge Scheduler would run it (every ten minutes in infra).
   yield* DomainVerification.runDue().pipe(

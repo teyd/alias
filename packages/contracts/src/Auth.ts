@@ -92,6 +92,35 @@ export class PasskeyRejected extends Schema.TaggedError<PasskeyRejected>()(
   { httpApiStatus: 400 },
 ) {}
 
+/**
+ * The Turnstile token was missing, malformed, expired (tokens live 300 seconds) or redeemed
+ * before. Solve the widget again and retry (PLAN.md §20.27).
+ */
+export class HumanCheckFailed extends Schema.TaggedError<HumanCheckFailed>()(
+  "HumanCheckFailed",
+  {},
+  { httpApiStatus: 400 },
+) {}
+
+/**
+ * Nobody can sign up right now: too many accounts were created in the last hour (`paused`, a
+ * circuit breaker), or Turnstile can't be asked (`human-check-unavailable`). Try again later.
+ */
+export class SignupUnavailable extends Schema.TaggedError<SignupUnavailable>()(
+  "SignupUnavailable",
+  { reason: Schema.Literals(["paused", "human-check-unavailable"]) },
+  { httpApiStatus: 503 },
+) {}
+
+/** What the sign-up form needs before it asks for a challenge: the Turnstile widget to render. */
+const SignupConfig = Schema.Struct({
+  turnstile: Schema.Struct({
+    siteKey: Schema.String,
+    /** Load it as a `<script>`, then call `turnstile.render` (explicit rendering). */
+    scriptUrl: Schema.String,
+  }),
+});
+
 /** A challenge to answer with `navigator.credentials.create()`; send it back with its ID. */
 const RegistrationChallenge = Schema.Struct({
   challengeId: Schema.String,
@@ -107,14 +136,18 @@ const AuthenticationChallenge = Schema.Struct({
 /**
  * Passkey sign-up and login. Each ceremony is two calls: `*Options` issues a single-use challenge
  * (valid for 5 minutes), and the second call verifies the authenticator's answer and sets the
- * session cookie.
+ * session cookie. Sign-up first needs a solved Turnstile widget (`signup` names it): its token goes
+ * with `registerOptions`. Limits (PLAN.md §20.27): challenges per client address and hour, accounts
+ * per client address and day, accounts per hour for everyone, and failed logins per account and
+ * hour; past one, {@link TooManyAttempts} (429) or {@link SignupUnavailable} (503).
  */
 export const AuthGroup = HttpApiGroup.make("auth")
+  .add(HttpApiEndpoint.get("signup", "/signup", { success: SignupConfig }))
   .add(
     HttpApiEndpoint.post("registerOptions", "/register/options", {
-      payload: Schema.Struct({ username: Schema.String }),
+      payload: Schema.Struct({ username: Schema.String, turnstileToken: Schema.String }),
       success: RegistrationChallenge,
-      error: [InvalidUsername, UsernameTaken],
+      error: [InvalidUsername, UsernameTaken, HumanCheckFailed, TooManyAttempts, SignupUnavailable],
     }),
   )
   .add(
@@ -124,12 +157,13 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.RegistrationCredential,
       }),
       success: Me,
-      error: [PasskeyRejected, UsernameTaken],
+      error: [PasskeyRejected, UsernameTaken, TooManyAttempts, SignupUnavailable],
     }),
   )
   .add(
     HttpApiEndpoint.post("loginOptions", "/login/options", {
       success: AuthenticationChallenge,
+      error: TooManyAttempts,
     }),
   )
   .add(
@@ -139,7 +173,7 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.AuthenticationCredential,
       }),
       success: Me,
-      error: PasskeyRejected,
+      error: [PasskeyRejected, TooManyAttempts],
     }),
   )
   .add(

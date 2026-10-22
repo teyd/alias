@@ -13,6 +13,7 @@ import {
   RecipientRepo,
   SentRepo,
   SessionRepo,
+  SignupLimitRepo,
   TokenRepo,
   UserRepo,
   WebhookRepo,
@@ -27,6 +28,7 @@ import type { Identities, MessageQueue, Transport } from "@alias/aws";
 import type { SharedDomains, TempDomains } from "@alias/core";
 import type { Doh } from "@alias/dns";
 import type { Inbox } from "@alias/inbox";
+import type { Turnstile } from "@alias/turnstile";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
 import { ContactsLive } from "./contacts.ts";
@@ -69,6 +71,7 @@ const Repositories = Layer.mergeAll(
   PasskeyRepo.layer,
   SessionRepo.layer,
   ChallengeRepo.layer,
+  SignupLimitRepo.layer,
   RecipientRepo.layer,
   SentRepo.layer,
   TokenRepo.layer,
@@ -79,7 +82,8 @@ const Repositories = Layer.mergeAll(
 /**
  * What callers provide: the database, the WebAuthn relying party, the shared and temp-mail
  * domains, outgoing mail, the webhook queue, URL policy and secret keys, SES identities and a DNS
- * resolver (custom domains), and the inbox store.
+ * resolver (custom domains), the inbox store, and Turnstile (sign-up). They may also provide
+ * `SignupLimits`; the defaults apply otherwise.
  */
 export type Services =
   | Dynamo.Database
@@ -93,7 +97,8 @@ export type Services =
   | UrlPolicy.UrlPolicy
   | Secrets.WebhookKeys
   | Identities.Identities
-  | Doh.Resolver;
+  | Doh.Resolver
+  | Turnstile.Turnstile;
 
 /**
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators

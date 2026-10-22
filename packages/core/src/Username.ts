@@ -97,6 +97,9 @@ const RESERVED: ReadonlyArray<string> = [
   "beta",
   "status",
   "localhost",
+  "noc",
+  "usenet",
+  "uucp",
   // role accounts and product surfaces
   "admin",
   "administrator",
@@ -117,6 +120,7 @@ const RESERVED: ReadonlyArray<string> = [
   "contact",
   "billing",
   "sales",
+  "marketing",
   "legal",
   "privacy",
   "account",

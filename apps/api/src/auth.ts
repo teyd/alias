@@ -3,8 +3,11 @@ import { SharedDomains, Username } from "@alias/core";
 import {
   Api,
   CurrentUser,
+  HumanCheckFailed,
   InvalidUsername,
   PasskeyRejected,
+  SignupUnavailable,
+  TooManyAttempts,
   UsernameTaken,
 } from "@alias/contracts";
 import {
@@ -15,9 +18,11 @@ import {
   PasskeyRepo,
   RecipientRepo,
   type SessionRepo,
+  SignupLimitRepo,
   UserRepo,
 } from "@alias/db";
 import { Inbox } from "@alias/inbox";
+import { Turnstile } from "@alias/turnstile";
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
@@ -28,9 +33,54 @@ import { Base64Url } from "effect/encoding";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import { clientSource } from "./ClientSource.ts";
 import * as Passkeys from "./Passkeys.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import * as Sessions from "./Sessions.ts";
+import { SignupLimits } from "./SignupLimits.ts";
+
+/**
+ * Counts a sign-up or login challenge against the calling client, before anything else is read
+ * or written: each challenge is an item until it is answered or expires, so this also bounds how
+ * many one client can make the table hold (PLAN.md §20.27).
+ */
+const reserveChallenge = Effect.fn("auth.reserveChallenge")(function* () {
+  const limits = yield* SignupLimits;
+  const source = yield* clientSource();
+  const now = yield* DateTime.now;
+  const repo = yield* SignupLimitRepo.SignupLimitRepo;
+  if (!(yield* Effect.orDie(repo.reserveChallenge(source, now, limits.challengesPerHour)))) {
+    return yield* new TooManyAttempts();
+  }
+});
+
+/** The Turnstile token must prove a human solved the widget; we fail closed without an answer. */
+const checkHuman = Effect.fn("auth.checkHuman")(function* (token: string) {
+  const turnstile = yield* Turnstile.Turnstile;
+  const verdict = yield* turnstile.verify(token).pipe(
+    Effect.tapError((error) => Effect.logWarning("Turnstile unavailable", error.reason)),
+    Effect.mapError(() => new SignupUnavailable({ reason: "human-check-unavailable" })),
+  );
+  if (Turnstile.Verdict.guards.NotHuman(verdict)) return yield* new HumanCheckFailed();
+});
+
+/**
+ * One more account for this client today and for everyone this hour. The client's own limit goes
+ * first, so a script hitting it can't also use up everyone's.
+ */
+const reserveSignup = Effect.fn("auth.reserveSignup")(function* () {
+  const limits = yield* SignupLimits;
+  const source = yield* clientSource();
+  const now = yield* DateTime.now;
+  const repo = yield* SignupLimitRepo.SignupLimitRepo;
+  if (!(yield* Effect.orDie(repo.reserveSignup(source, now, limits.signupsPerDay)))) {
+    return yield* new TooManyAttempts();
+  }
+  if (!(yield* Effect.orDie(repo.reserveGlobalSignup(now, limits.signupsPerHour)))) {
+    yield* Effect.logWarning(`sign-ups paused: ${limits.signupsPerHour} this hour`);
+    return yield* new SignupUnavailable({ reason: "paused" });
+  }
+});
 
 /** Issues a fresh single-use challenge and remembers what it was for. */
 const issueChallenge = Effect.fn("auth.issueChallenge")(function* <A extends { challenge: string }>(
@@ -74,9 +124,26 @@ type AuthServices =
   | UserRepo.UserRepo
   | PasskeyRepo.PasskeyRepo
   | SessionRepo.SessionRepo
-  | ChallengeRepo.ChallengeRepo;
+  | ChallengeRepo.ChallengeRepo
+  | SignupLimitRepo.SignupLimitRepo
+  | Turnstile.Turnstile;
 
-const registerOptions = Effect.fn("auth.registerOptions")(function* (requested: string) {
+/** Sign-up starts here: the Turnstile widget to solve first. */
+const signup = Effect.fn("auth.signup")(function* () {
+  const turnstile = yield* Turnstile.Turnstile;
+  return { turnstile: { siteKey: turnstile.siteKey, scriptUrl: turnstile.scriptUrl } };
+});
+
+/**
+ * A registration challenge for a free username, once a human solved the Turnstile widget. The
+ * token is redeemed last, so a taken or invalid username doesn't use it up.
+ */
+const registerOptions = Effect.fn("auth.registerOptions")(function* (payload: {
+  readonly username: string;
+  readonly turnstileToken: string;
+}) {
+  yield* reserveChallenge();
+  const requested = payload.username;
   const username = yield* Username.parse(requested).pipe(
     Effect.mapError((error) => new InvalidUsername({ username: requested, reason: error.reason })),
   );
@@ -84,6 +151,7 @@ const registerOptions = Effect.fn("auth.registerOptions")(function* (requested: 
   if (yield* Effect.orDie(users.isUsernameTaken(username))) {
     return yield* new UsernameTaken({ username });
   }
+  yield* checkHuman(payload.turnstileToken);
   const crypto = yield* Crypto.Crypto;
   const userId = `usr_${(yield* Effect.orDie(crypto.randomULID)).toLowerCase()}`;
   return yield* issueChallenge(ChallengeRepo.Registration({ userId, username }), (challenge) =>
@@ -103,6 +171,7 @@ const register = Effect.fn("auth.register")(function* (payload: {
     credential: payload.credential,
     expectedChallenge: challenge,
   });
+  yield* reserveSignup();
   // Valid when the challenge was issued; parsing again only restores the brand.
   const username = yield* Effect.orDie(Username.parse(ceremony.username));
   const now = yield* DateTime.now;
@@ -125,8 +194,32 @@ const register = Effect.fn("auth.register")(function* (payload: {
   return yield* Effect.orDie(Sessions.start(user));
 });
 
-const loginOptions = () =>
-  issueChallenge(ChallengeRepo.Authentication(), Passkeys.authenticationOptions).pipe(Effect.orDie);
+const loginOptions = Effect.fn("auth.loginOptions")(function* () {
+  yield* reserveChallenge();
+  return yield* issueChallenge(ChallengeRepo.Authentication(), Passkeys.authenticationOptions).pipe(
+    Effect.orDie,
+  );
+});
+
+/**
+ * Logins with discoverable passkeys name no username, so the per-user throttle counts failed
+ * assertions against the account whose passkey was presented. Credential IDs are never handed
+ * out (no `allowCredentials`), so only someone holding one can lock its account for the hour.
+ */
+const throttled = Effect.fn("auth.throttled")(function* (userId: string) {
+  const limits = yield* SignupLimits;
+  const repo = yield* SignupLimitRepo.SignupLimitRepo;
+  const failures = yield* Effect.orDie(repo.loginFailures(userId, yield* DateTime.now));
+  if (failures >= limits.loginFailuresPerHour) return yield* new TooManyAttempts();
+});
+
+const recordFailure = Effect.fn("auth.recordFailure")(function* (userId: string) {
+  const limits = yield* SignupLimits;
+  const repo = yield* SignupLimitRepo.SignupLimitRepo;
+  yield* Effect.orDie(
+    repo.recordLoginFailure(userId, yield* DateTime.now, limits.loginFailuresPerHour),
+  );
+});
 
 /**
  * Verifies a passkey assertion answering the challenge `select` accepts, and returns the passkey
@@ -149,14 +242,16 @@ const assertPasskey = Effect.fn("auth.assertPasskey")(function* (
     Option.fromUndefinedOr(payload.credential.response.userHandle),
     (handle) => Result.getOrElse(Base64Url.decodeString(handle), () => ""),
   );
+  yield* throttled(passkey.userId);
   if (Option.exists(claimedUser, (userId) => userId !== passkey.userId)) {
+    yield* recordFailure(passkey.userId);
     return yield* unknownCredential;
   }
   const counter = yield* Passkeys.verifyAuthentication({
     credential: payload.credential,
     expectedChallenge: challenge,
     passkey,
-  });
+  }).pipe(Effect.tapError(() => recordFailure(passkey.userId)));
   yield* passkeys.recordUse(passkey.id, counter, yield* DateTime.now).pipe(
     Effect.catchTags({
       PasskeyNotFound: () => Effect.fail(unknownCredential),
@@ -254,8 +349,9 @@ const erase = Effect.fn("auth.erase")(function* (payload: {
 export const AuthLive = HttpApiBuilder.group(Api, "auth", (handlers) =>
   Effect.map(Effect.context<AuthServices>(), (services) =>
     handlers
+      .handle("signup", () => Effect.provide(signup(), services))
       .handle("registerOptions", ({ payload }) =>
-        Effect.provide(registerOptions(payload.username), services),
+        Effect.provide(registerOptions(payload), services),
       )
       .handle("register", ({ payload }) => Effect.provide(register(payload), services))
       .handle("loginOptions", () => Effect.provide(loginOptions(), services))

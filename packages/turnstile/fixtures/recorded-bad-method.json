@@ -1,0 +1,11 @@
+{
+  "request": {
+    "method": "GET"
+  },
+  "status": 405,
+  "body": {
+    "error-codes": ["bad-request"],
+    "success": false,
+    "messages": ["This API expects POST requests."]
+  }
+}

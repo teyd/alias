@@ -94,11 +94,14 @@ export const keyring = Effect.fn("Parameters.keyring")(function* (name: string) 
 });
 
 /**
- * The keyring whose parameter the environment variable `variable` names, as an Effect to run at
- * cold start, with `AWS_ENDPOINT_URL_SSM` (the AWS-standard endpoint override) only in emulated
- * runs.
+ * `read` applied to the parameter the environment variable `variable` names, as an Effect to run
+ * at cold start, with `AWS_ENDPOINT_URL_SSM` (the AWS-standard endpoint override) only in
+ * emulated runs.
  */
-export const keyringConfig = (variable: string) =>
+const parameterConfig = <A, E>(
+  variable: string,
+  read: (name: string) => Effect.Effect<A, E, AwsClient.AwsClient>,
+) =>
   Config.all({
     // The parameter's name, not a secret.
     // oxlint-disable-next-line effect/prefer-redacted-config
@@ -106,6 +109,18 @@ export const keyringConfig = (variable: string) =>
     endpoint: Config.option(Config.String("AWS_ENDPOINT_URL_SSM")),
   }).pipe(
     Config.map(({ name, endpoint }) =>
-      keyring(name).pipe(Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
+      read(name).pipe(Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint }))),
     ),
+  );
+
+/** The keyring whose parameter the environment variable `variable` names (see {@link keyring}). */
+export const keyringConfig = (variable: string) => parameterConfig(variable, keyring);
+
+/**
+ * The secret in the `SecureString` parameter the environment variable `variable` names, e.g. the
+ * Turnstile secret key (PLAN.md §20.27). Read once per container, like the keyrings.
+ */
+export const secretConfig = (variable: string) =>
+  parameterConfig(variable, (name) =>
+    Effect.map(secureString(name), (parameter) => parameter.value),
   );

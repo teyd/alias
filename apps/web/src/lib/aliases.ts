@@ -17,6 +17,7 @@ const aliasProblems = {
   "domain-not-verified": "That domain isn't verified. Check its DNS records first.",
   "random-only-on-shared-domain": "Shared domains only get random addresses.",
   "reserved-local-part": "Addresses can't contain “+r.”, replies use it.",
+  "role-address": "Role addresses like abuse@ and postmaster@ belong to the service.",
 } as const;
 
 const describe = <E>(error: E): string => {

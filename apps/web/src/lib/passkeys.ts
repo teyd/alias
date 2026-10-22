@@ -1,4 +1,12 @@
-import { InvalidUsername, type Me, PasskeyRejected, UsernameTaken } from "@alias/contracts";
+import {
+  HumanCheckFailed,
+  InvalidUsername,
+  type Me,
+  PasskeyRejected,
+  SignupUnavailable,
+  TooManyAttempts,
+  UsernameTaken,
+} from "@alias/contracts";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -40,6 +48,13 @@ const describe = <E>(error: E): string => {
   if (error instanceof InvalidUsername) return usernameProblems[error.reason];
   if (error instanceof UsernameTaken) return "That username is taken.";
   if (error instanceof PasskeyRejected) return passkeyProblems[error.reason];
+  if (error instanceof HumanCheckFailed) return "The human check expired. Please try again.";
+  if (error instanceof TooManyAttempts) return "Too many attempts. Please try again in an hour.";
+  if (error instanceof SignupUnavailable) {
+    return error.reason === "paused"
+      ? "Sign-ups are paused for a while. Please try again later."
+      : "We can't check that you're human right now. Please try again later.";
+  }
   if (error instanceof PasskeyPromptFailed) {
     return "The passkey prompt was cancelled or isn't available.";
   }
@@ -50,11 +65,17 @@ const describe = <E>(error: E): string => {
 const explain = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.mapError(effect, (error) => new AuthFailed({ message: describe(error) }));
 
-/** Creates an account with a new passkey; the response sets the session cookie. */
-export const signUp = (api: Client, username: string): Effect.Effect<Me, AuthFailed> =>
+/**
+ * Creates an account with a new passkey, once the Turnstile widget handed out `turnstileToken`;
+ * the response sets the session cookie.
+ */
+export const signUp = (
+  api: Client,
+  payload: { readonly username: string; readonly turnstileToken: string },
+): Effect.Effect<Me, AuthFailed> =>
   explain(
     Effect.gen(function* () {
-      const { challengeId, options } = yield* api.auth.registerOptions({ payload: { username } });
+      const { challengeId, options } = yield* api.auth.registerOptions({ payload });
       const credential = yield* prompt(() => startRegistration({ optionsJSON: options }));
       return yield* api.auth.register({ payload: { challengeId, credential } });
     }),

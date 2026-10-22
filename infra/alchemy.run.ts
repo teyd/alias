@@ -147,6 +147,28 @@ const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
  */
 const webhookKeysParameter = `/alias/${stage}/webhook-keys`;
 
+/**
+ * Cloudflare Turnstile at sign-up (PLAN.md §20.27). The site key is public (the web app renders
+ * the widget with it); the secret key is a `SecureString` the API reads at cold start. Create the
+ * widget in the Cloudflare dashboard (Turnstile → Add widget, hostname = the app domain, mode
+ * "Managed"), set `ALIAS_TURNSTILE_SITE_KEY` for the deploy, and put the secret once:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/turnstile-secret --value '<secret key>'
+ *
+ * Rotating it in the dashboard keeps the old secret valid for a grace period; overwrite the
+ * parameter and update the function configuration (new containers read it) within that period.
+ */
+const turnstileSecretParameter = `/alias/${stage}/turnstile-secret`;
+// The local stage may use Turnstile's always-passing test key; a deployed one needs its own.
+const turnstileSiteKey =
+  process.env.ALIAS_TURNSTILE_SITE_KEY ?? (stage === "local" ? "1x00000000000000000000AA" : "");
+if (turnstileSiteKey === "") {
+  throw new Error("ALIAS_TURNSTILE_SITE_KEY is required to deploy a stage (PLAN.md §20.27)");
+}
+/** Sign-ups everyone together may make in an hour before sign-up pauses (the circuit breaker). */
+const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
+
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
   "alias",
@@ -165,6 +187,7 @@ export default Alchemy.Stack(
     const imageProxyKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${imageProxyKeysParameter}`;
     const inboxKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${inboxKeysParameter}`;
     const webhookKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${webhookKeysParameter}`;
+    const turnstileSecretParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${turnstileSecretParameter}`;
     const inboxObjects = `arn:aws:s3:::${inboxBucketName}/*`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
@@ -378,7 +401,16 @@ export default Alchemy.Stack(
         ALIAS_INBOX_BUCKET: inboxBucketName,
         ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
         ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
+        ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
       },
+    });
+    // Sign-up's Turnstile secret, read at cold start.
+    yield* api.bind("TurnstileSecret", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: turnstileSecretParameterArn },
+      ],
     });
     // Stored mail: read, delete one, and list an alias's objects to purge them with the alias or
     // the account (ListBucket also makes a missing key a 404, not a 403). The inbox keys unwrap.

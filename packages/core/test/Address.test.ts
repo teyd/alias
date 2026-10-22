@@ -104,6 +104,27 @@ const scriptedCrypto = (bytes: ReadonlyArray<number>) => {
   );
 };
 
+describe("Address.isRoleLocal", () => {
+  it("knows RFC 2142's mailboxes, the mailer daemon and the CA validation addresses", () => {
+    const roles = ["abuse", "postmaster", "hostmaster", "noc", "security", "info", "www"];
+    expect(roles.filter(Address.isRoleLocal)).toEqual(roles);
+    expect(Address.isRoleLocal("mailer-daemon")).toBe(true);
+    expect(Address.isRoleLocal("admin")).toBe(true);
+    expect(Address.isRoleLocal("administrator")).toBe(true);
+  });
+
+  it("ignores letter case and a +detail", () => {
+    expect(Address.isRoleLocal("Abuse")).toBe(true);
+    expect(Address.isRoleLocal("postmaster+bounces")).toBe(true);
+  });
+
+  it("leaves other local parts alone", () => {
+    expect(Address.isRoleLocal("shop")).toBe(false);
+    expect(Address.isRoleLocal("abused")).toBe(false);
+    expect(Address.isRoleLocal("info.desk")).toBe(false);
+  });
+});
+
 describe("Address.randomLocal", () => {
   it.effect("maps random bytes onto the lookalike-free alphabet", () =>
     Effect.gen(function* () {

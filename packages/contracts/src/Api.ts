@@ -81,6 +81,8 @@ export class InvalidAlias extends Schema.TaggedError<InvalidAlias>()(
       "domain-not-verified",
       "random-only-on-shared-domain",
       "reserved-local-part",
+      // A role mailbox (RFC 2142: abuse, postmaster…) on the caller's subdomain (PLAN.md §20.27).
+      "role-address",
     ]),
   },
   { httpApiStatus: 400 },

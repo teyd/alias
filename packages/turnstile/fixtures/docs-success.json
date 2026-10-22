@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "challenge_ts": "2022-02-28T15:14:30.096Z",
+  "hostname": "example.com",
+  "error-codes": [],
+  "action": "login",
+  "cdata": "sessionid-123456789",
+  "metadata": {
+    "ephemeral_id": "x:9f78e0ed210960d7693b167e"
+  }
+}

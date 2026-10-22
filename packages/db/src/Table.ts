@@ -44,6 +44,10 @@ import { DynamoTable } from "./Dynamo.ts";
  * | UserCode          | `USERCODE#<userCode>`        | `USERCODE`             |                            |                           | `expiresAt` |
  * | DeviceRequests    | `DEVICEAUTH#<sha256(ip)>`    | `REQUESTS#<hour>`      |                            |                           | `expiresAt` |
  * | DeviceMisses      | `USER#<userId>`              | `DEVICE-MISSES#<hour>` |                            |                           | `expiresAt` |
+ * | Challenges        | `AUTHLIMIT#<sha256(ip)>`     | `CHALLENGES#<hour>`    |                            |                           | `expiresAt` |
+ * | Signups           | `AUTHLIMIT#<sha256(ip)>`     | `SIGNUPS#<date>`       |                            |                           | `expiresAt` |
+ * | AllSignups        | `SIGNUPS`                    | `HOUR#<hour>`          |                            |                           | `expiresAt` |
+ * | LoginFailures     | `USER#<userId>`              | `LOGIN-FAILURES#<hour>` |                           |                           | `expiresAt` |
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
  * | Draft             | `USER#<userId>`              | `DRAFT#<id>`           |                            |                           | `expiresAt` |
  * | SendQuota         | `USER#<userId>`              | `SENDS#<date>`         |                            |                           | `expiresAt` |
@@ -175,6 +179,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * redeemed, in the same transaction that creates the token. DeviceRequests counts device
  * authorization requests per hashed client address and hour; DeviceMisses counts unknown user
  * codes a signed-in user tried, in their partition so erasing the account removes it.
+ *
+ * Sign-up and login limits (PLAN.md §20.27) are `Quota` counters too: Challenges (WebAuthn
+ * challenges per hashed client address and hour), Signups (accounts per address and day),
+ * AllSignups (accounts per hour for everyone, the circuit breaker; one hot item, written once per
+ * sign-up) and LoginFailures (failed passkey assertions per account and hour, in the user's
+ * partition like DeviceMisses).
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

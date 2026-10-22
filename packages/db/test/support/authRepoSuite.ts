@@ -6,7 +6,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
-import { ChallengeRepo, PasskeyRepo, SessionRepo, UserRepo } from "../../src/index.ts";
+import {
+  ChallengeRepo,
+  PasskeyRepo,
+  SessionRepo,
+  SignupLimitRepo,
+  UserRepo,
+} from "../../src/index.ts";
 import { freshTable } from "./database.ts";
 
 const at = (millis: number) => DateTime.makeUnsafe(millis);
@@ -34,16 +40,18 @@ const repos = Layer.mergeAll(
   PasskeyRepo.layer,
   SessionRepo.layer,
   ChallengeRepo.layer,
+  SignupLimitRepo.layer,
 );
 
 type Repos =
   | UserRepo.UserRepo
   | PasskeyRepo.PasskeyRepo
   | SessionRepo.SessionRepo
-  | ChallengeRepo.ChallengeRepo;
+  | ChallengeRepo.ChallengeRepo
+  | SignupLimitRepo.SignupLimitRepo;
 
 /**
- * Behaviour the user, passkey, session and challenge repositories must show on every DynamoDB
+ * Behaviour the user, passkey, session, challenge and sign-up limit repositories must show on every DynamoDB
  * engine. Runners pass the emulator; each test gets its own table on it.
  */
 export const authRepoSuite = (
@@ -361,6 +369,85 @@ export const authRepoSuite = (
               yield* challenges.create(challenge);
               yield* TestClock.setTime(300_000);
               expect(Option.isNone(yield* challenges.take("ch_1"))).toBe(true);
+            }),
+          ),
+        );
+      });
+
+      describe("SignupLimitRepo", () => {
+        const hour = 3_600_000;
+
+        it.effect("counts challenges per client and UTC hour, up to the limit", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const limits = yield* SignupLimitRepo.SignupLimitRepo;
+              const now = at(10 * hour);
+              expect(yield* limits.reserveChallenge("src", now, 2)).toBe(true);
+              expect(yield* limits.reserveChallenge("src", at(10 * hour + 59 * 60_000), 2)).toBe(
+                true,
+              );
+              expect(yield* limits.reserveChallenge("src", now, 2)).toBe(false);
+              expect(yield* limits.reserveChallenge("other", now, 2)).toBe(true);
+              // The next hour is a fresh window.
+              expect(yield* limits.reserveChallenge("src", at(11 * hour), 2)).toBe(true);
+            }),
+          ),
+        );
+
+        it.effect("counts sign-ups per client and UTC day, apart from challenges", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const limits = yield* SignupLimitRepo.SignupLimitRepo;
+              const now = at(10 * hour);
+              expect(yield* limits.reserveChallenge("src", now, 1)).toBe(true);
+              expect(yield* limits.reserveSignup("src", now, 1)).toBe(true);
+              expect(yield* limits.reserveSignup("src", at(23 * hour), 1)).toBe(false);
+              expect(yield* limits.reserveSignup("other", now, 1)).toBe(true);
+              expect(yield* limits.reserveSignup("src", at(24 * hour), 1)).toBe(true);
+            }),
+          ),
+        );
+
+        it.effect("counts every client's sign-ups in one hourly counter", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const limits = yield* SignupLimitRepo.SignupLimitRepo;
+              const now = at(10 * hour);
+              expect(yield* limits.reserveGlobalSignup(now, 2)).toBe(true);
+              expect(yield* limits.reserveGlobalSignup(now, 2)).toBe(true);
+              expect(yield* limits.reserveGlobalSignup(now, 2)).toBe(false);
+              expect(yield* limits.reserveGlobalSignup(at(11 * hour), 2)).toBe(true);
+            }),
+          ),
+        );
+
+        it.effect("concurrent reservations never pass the limit", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const limits = yield* SignupLimitRepo.SignupLimitRepo;
+              const now = at(10 * hour);
+              const granted = yield* Effect.forEach(
+                Array.from({ length: 12 }, () => now),
+                (at) => limits.reserveGlobalSignup(at, 5),
+                { concurrency: "unbounded" },
+              );
+              expect(granted.filter(Boolean)).toHaveLength(5);
+            }),
+          ),
+        );
+
+        it.effect("counts failed logins per account and hour, stopping at the limit", () =>
+          withRepos(
+            Effect.gen(function* () {
+              const limits = yield* SignupLimitRepo.SignupLimitRepo;
+              const now = at(10 * hour);
+              expect(yield* limits.loginFailures("usr_1", now)).toBe(0);
+              yield* limits.recordLoginFailure("usr_1", now, 2);
+              yield* limits.recordLoginFailure("usr_1", now, 2);
+              yield* limits.recordLoginFailure("usr_1", now, 2);
+              expect(yield* limits.loginFailures("usr_1", now)).toBe(2);
+              expect(yield* limits.loginFailures("usr_2", now)).toBe(0);
+              expect(yield* limits.loginFailures("usr_1", at(11 * hour))).toBe(0);
             }),
           ),
         );

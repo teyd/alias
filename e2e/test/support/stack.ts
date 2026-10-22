@@ -1,4 +1,4 @@
-import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
+import { MailSettings, RelyingParty, SignupLimits, makeFunctionUrlHandler } from "@alias/api";
 import {
   AwsClient,
   FunctionUrl,
@@ -25,6 +25,8 @@ import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Inbox } from "@alias/inbox";
 import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
+import { Turnstile } from "@alias/turnstile";
+import { TestKeys, TurnstileServer } from "@alias/turnstile-emulator";
 import { Delivery, Egress, Secrets, UrlPolicy } from "@alias/webhooks";
 import { TestQueue, freshQueue } from "@alias/webhooks/testing";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
@@ -48,7 +50,8 @@ import { createTransport } from "nodemailer";
  * - SMTP → SES emulator (receipt rules, verdicts) → S3 spool on fakecloud → SES Lambda event →
  *   the real inbound pipeline → SES sending on fakecloud;
  * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud, SES
- *   identities on fakecloud, DNS checks through the DoH emulator;
+ *   identities on fakecloud, DNS checks through the DoH emulator, sign-up's human check through
+ *   the Turnstile emulator (secret from SSM, as in production);
  * - a proxied image in forwarded mail → function URL emulator → the image proxy Lambda → the
  *   sender's image host.
  * One fakecloud process serves S3, DynamoDB, SES, SNS and SSM, as one AWS account would, and every
@@ -141,6 +144,8 @@ const webhookKeys = Layer.unwrap(
 /** Temporary inboxes live on their own registrable domain. */
 const tempDomains = TempDomains.layer("tmp.test").pipe(Layer.provide(sharedDomains));
 
+const turnstileSecretParameter = "/alias/e2e/turnstile-secret";
+
 /**
  * The real API Lambda handler on the stack's table, queue and SES, for passkeys bound to
  * `relyingParty`. Serve it with `FunctionUrlServer`.
@@ -152,12 +157,32 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty:
   const context = yield* Effect.context<Dynamo.Database>();
   const fakecloud = yield* FakeCloud.FakeCloud;
   const dns = yield* DohServer.DohServer;
+  // The Turnstile secret as production stores it: a SecureString in Parameter Store (§20.27).
+  const turnstileServer = yield* TurnstileServer.TurnstileServer;
+  const turnstileSecret = yield* SSM.putParameter({
+    Name: turnstileSecretParameter,
+    Type: "SecureString",
+    Value: TestKeys.secrets.passes,
+    Overwrite: true,
+  }).pipe(
+    Effect.andThen(Parameters.secureString(turnstileSecretParameter)),
+    Effect.provide(AwsClient.emulator(fakecloud.url)),
+    Effect.orDie,
+  );
   const { handle, dispose } = makeFunctionUrlHandler(
     Layer.mergeAll(
       Layer.succeedContext(context),
       Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
       Doh.layer(dns.url),
       RelyingParty.layer(relyingParty),
+      // Every test in a file signs up from 127.0.0.1 into the one table; `apps/api` tests the
+      // limits themselves.
+      SignupLimits.layer({ challengesPerHour: 1_000, signupsPerDay: 1_000 }),
+      Turnstile.layer({
+        url: turnstileServer.url,
+        siteKey: TestKeys.siteKeys.passes,
+        secret: turnstileSecret.value,
+      }).pipe(Layer.provide(NodeCrypto.layer)),
       Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
         Layer.provide(AwsClient.emulator(fakecloud.url)),
       ),
@@ -319,7 +344,9 @@ export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
     aws,
   ).pipe(
     Layer.provide(NodeCrypto.layer),
-    Layer.provideMerge(Layer.merge(FakeCloud.layer(), DohServer.layer())),
+    Layer.provideMerge(
+      Layer.mergeAll(FakeCloud.layer(), DohServer.layer(), TurnstileServer.layer()),
+    ),
   );
 
 const decoder = new TextDecoder();

@@ -9,19 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ForwardingRouteImport } from './routes/forwarding'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAliasesRouteImport } from './routes/_app/aliases'
+import { Route as AppDestinationsRouteImport } from './routes/_app/destinations'
+import { Route as AppDomainsRouteImport } from './routes/_app/domains'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForwardingRoute = ForwardingRouteImport.update({
-  id: '/forwarding',
-  path: '/forwarding',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -34,55 +32,105 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAliasesRoute = AppAliasesRouteImport.update({
+  id: '/aliases',
+  path: '/aliases',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDestinationsRoute = AppDestinationsRouteImport.update({
+  id: '/destinations',
+  path: '/destinations',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDomainsRoute = AppDomainsRouteImport.update({
+  id: '/domains',
+  path: '/domains',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/forwarding': typeof ForwardingRoute
+  '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/aliases': typeof AppAliasesRoute
+  '/destinations': typeof AppDestinationsRoute
+  '/domains': typeof AppDomainsRoute
+  '/settings': typeof AppSettingsRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/forwarding': typeof ForwardingRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/aliases': typeof AppAliasesRoute
+  '/destinations': typeof AppDestinationsRoute
+  '/domains': typeof AppDomainsRoute
+  '/settings': typeof AppSettingsRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/forwarding': typeof ForwardingRoute
+  '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/_app/aliases': typeof AppAliasesRoute
+  '/_app/destinations': typeof AppDestinationsRoute
+  '/_app/domains': typeof AppDomainsRoute
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/forwarding' | '/login' | '/register'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/aliases'
+    | '/destinations'
+    | '/domains'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/forwarding' | '/login' | '/register'
-  id: '__root__' | '/' | '/forwarding' | '/login' | '/register'
+  to:
+    | '/login'
+    | '/register'
+    | '/aliases'
+    | '/destinations'
+    | '/domains'
+    | '/settings'
+    | '/'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/login'
+    | '/register'
+    | '/_app/aliases'
+    | '/_app/destinations'
+    | '/_app/domains'
+    | '/_app/settings'
+    | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  ForwardingRoute: typeof ForwardingRoute
+  AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forwarding': {
-      id: '/forwarding'
-      path: '/forwarding'
-      fullPath: '/forwarding'
-      preLoaderRoute: typeof ForwardingRouteImport
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -99,12 +147,64 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/aliases': {
+      id: '/_app/aliases'
+      path: '/aliases'
+      fullPath: '/aliases'
+      preLoaderRoute: typeof AppAliasesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/destinations': {
+      id: '/_app/destinations'
+      path: '/destinations'
+      fullPath: '/destinations'
+      preLoaderRoute: typeof AppDestinationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/domains': {
+      id: '/_app/domains'
+      path: '/domains'
+      fullPath: '/domains'
+      preLoaderRoute: typeof AppDomainsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAliasesRoute: typeof AppAliasesRoute
+  AppDestinationsRoute: typeof AppDestinationsRoute
+  AppDomainsRoute: typeof AppDomainsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAliasesRoute: AppAliasesRoute,
+  AppDestinationsRoute: AppDestinationsRoute,
+  AppDomainsRoute: AppDomainsRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  ForwardingRoute: ForwardingRoute,
+  AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
 }

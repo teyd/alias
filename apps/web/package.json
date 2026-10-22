@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@alias/contracts": "workspace:*",
+    "@base-ui/react": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:",
     "@simplewebauthn/browser": "catalog:",
     "@tanstack/react-form": "catalog:",
     "@tanstack/react-query": "catalog:",
@@ -18,7 +21,7 @@
     "class-variance-authority": "catalog:",
     "cn": "catalog:",
     "effect": "catalog:",
-    "radix-ui": "catalog:",
+    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

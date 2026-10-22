@@ -1,6 +1,6 @@
 import { AwsClient, Inbound, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains, Username } from "@alias/core";
+import { Pgp, SharedDomains, Username } from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
@@ -22,6 +22,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Redacted from "effect/Redacted";
+import * as TestClock from "effect/testing/TestClock";
+import * as openpgp from "openpgp";
 import { ImageProxySigner, Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
 
 /**
@@ -195,6 +197,7 @@ const recipient = Effect.fn("recipient")(function* (
         isDefault: false,
         bouncedAt: Option.none(),
         complainedAt: Option.none(),
+        encryption: Option.none(),
       },
       "hash",
       now,
@@ -1053,6 +1056,208 @@ describe("inbound pipeline (fakecloud)", () => {
       }),
     ),
   );
+
+  describe("OpenPGP encryption (PLAN.md §20.21)", () => {
+    const now = DateTime.makeUnsafe("2026-10-22T09:00:00Z");
+
+    /** `keyExpirationTime` in seconds; 0 never expires. */
+    const generate = (keyExpirationTime = 0) =>
+      Effect.promise(() =>
+        openpgp.generateKey({
+          userIDs: [{ email: "ada@mail.example" }],
+          type: "curve25519",
+          date: DateTime.toDate(DateTime.subtract(now, { days: 1 })),
+          keyExpirationTime,
+          format: "object",
+        }),
+      );
+
+    /** Stores the key on ada's recipient the way the API does, at the time the clock shows. */
+    const encryptTo = Effect.fn("encryptTo")(function* (
+      publicKey: openpgp.PublicKey,
+      isSubjectHidden = false,
+    ) {
+      const repo = yield* RecipientRepo.RecipientRepo;
+      const found = yield* Effect.flatMap(
+        repo.find("usr_1", "rcp_ada@mail.example"),
+        Effect.fromOption,
+      );
+      const key = yield* Pgp.readKey(publicKey.armor(), yield* DateTime.now);
+      yield* repo.setEncryption(found, {
+        publicKey: key.armored,
+        fingerprint: key.fingerprint,
+        userIds: key.userIds,
+        expiresAt: key.expiresAt,
+        isSubjectHidden,
+      });
+    });
+
+    const decrypt = (raw: string, privateKey: openpgp.PrivateKey) =>
+      Effect.promise(async () => {
+        const armored = /-----BEGIN PGP MESSAGE-----[\s\S]*-----END PGP MESSAGE-----/.exec(
+          raw,
+        )?.[0];
+        const { data } = await openpgp.decrypt({
+          message: await openpgp.readMessage({ armoredMessage: armored ?? "" }),
+          decryptionKeys: privateKey,
+          format: "binary",
+          date: DateTime.toDate(now),
+        });
+        return new TextDecoder().decode(data);
+      });
+
+    const lastSent = Effect.map(sent, (emails) =>
+      text(Option.flatMap(Arr.last(emails), (email) => email.raw)),
+    );
+
+    it.effect(
+      "forwards PGP/MIME to a recipient with a key, and plain mail once it is removed",
+      () =>
+        withPipeline(
+          Effect.gen(function* () {
+            yield* TestClock.setTime(DateTime.toEpochMillis(now));
+            yield* alias();
+            yield* recipient("ada@mail.example");
+            const { publicKey, privateKey } = yield* generate();
+            yield* encryptTo(publicKey);
+
+            const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+            expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+            const [email] = yield* sent;
+            expect(email?.to).toEqual(["ada@mail.example"]);
+            const raw = yield* lastSent;
+            expect(header(raw, "Content-Type")).toEqual(
+              Option.some(
+                'multipart/encrypted; protocol="application/pgp-encrypted"; boundary="=_alias_pgp_mime"',
+              ),
+            );
+            // Routing stays outside: the reverse alias, the subject, the loop marker.
+            expect(header(raw, "From")).toEqual(header(raw, "Reply-To"));
+            expect(Option.getOrElse(header(raw, "From"), () => "")).toContain(email?.from ?? "-");
+            expect(header(raw, "Subject")).toEqual(Option.some("Order confirmed"));
+            expect(header(raw, "X-Alias-Forwarded")).toEqual(Option.some("shop@alias.test"));
+            expect(raw).not.toContain("Thanks for your order!");
+            // The body (no MIME headers here) decrypts exactly.
+            expect(yield* decrypt(raw, privateKey)).toBe("\r\nThanks for your order!\r\n");
+            expect(yield* counters).toEqual(Option.some([1, 0]));
+
+            const repo = yield* RecipientRepo.RecipientRepo;
+            yield* repo.removeEncryption(
+              yield* Effect.flatMap(repo.find("usr_1", "rcp_ada@mail.example"), Effect.fromOption),
+            );
+            const again = yield* receive({ recipients: ["shop@alias.test"] });
+            yield* Pipeline.handle(again.event);
+            expect(yield* lastSent).toContain("Thanks for your order!");
+            expect(header(yield* lastSent, "Content-Type")).toEqual(Option.none());
+          }),
+        ),
+    );
+
+    it.effect("hides the subject when the owner asked for it", () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(DateTime.toEpochMillis(now));
+          yield* alias();
+          yield* recipient("ada@mail.example");
+          const { publicKey, privateKey } = yield* generate();
+          yield* encryptTo(publicKey, true);
+          const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+          yield* Pipeline.handle(event);
+          const raw = yield* lastSent;
+          expect(header(raw, "Subject")).toEqual(Option.some("[...]"));
+          expect(raw).not.toContain("Order confirmed");
+          const inner = yield* decrypt(raw, privateKey);
+          expect(header(inner, "Subject")).toEqual(Option.some("Order confirmed"));
+          expect(header(inner, "Content-Type")).toEqual(
+            Option.some('text/plain; charset=us-ascii; protected-headers="v1"; hp="cipher"'),
+          );
+        }),
+      ),
+    );
+
+    it.effect("passes mail that is already PGP/MIME encrypted as it is", () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(DateTime.toEpochMillis(now));
+          yield* alias();
+          yield* recipient("ada@mail.example");
+          yield* encryptTo((yield* generate()).publicKey);
+          const body = [
+            "--enc",
+            "Content-Type: application/pgp-encrypted",
+            "",
+            "Version: 1",
+            "",
+            "--enc",
+            "Content-Type: application/octet-stream",
+            "",
+            "-----BEGIN PGP MESSAGE-----",
+            "",
+            "wV4DZmFrZQ==",
+            "-----END PGP MESSAGE-----",
+            "--enc--",
+            "",
+          ].join("\r\n");
+          const { event } = yield* receive({
+            recipients: ["shop@alias.test"],
+            raw: new TextEncoder().encode(
+              [
+                'From: "Shop" <shop@store.example>',
+                "To: shop@alias.test",
+                "Subject: ...",
+                "MIME-Version: 1.0",
+                'Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="enc"',
+                "",
+                body,
+              ].join("\r\n"),
+            ),
+          });
+          expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+          const raw = yield* lastSent;
+          expect(raw.endsWith(`\r\n\r\n${body}`)).toBe(true);
+          expect(raw).not.toContain("alias_pgp_mime");
+        }),
+      ),
+    );
+
+    it.effect("never forwards in the clear once the key has expired: blocked as key-unusable", () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(DateTime.toEpochMillis(now));
+          yield* alias();
+          yield* recipient("ada@mail.example");
+          // Valid for two days from its creation yesterday, then the clock moves past that.
+          yield* encryptTo((yield* generate(2 * 24 * 3600)).publicKey);
+          yield* TestClock.adjust("3 days");
+          const { messageId, event } = yield* receive({ recipients: ["shop@alias.test"] });
+          expect(yield* Pipeline.handle(event)).toEqual([
+            { _tag: "Dropped", reason: "key-unusable" },
+          ]);
+          expect(yield* sent).toEqual([]);
+          expect(yield* counters).toEqual(Option.some([0, 1]));
+          expect(yield* spoolHolds(messageId)).toBe(false);
+        }),
+      ),
+    );
+
+    it.effect("leaves the owner's replies alone: they go to the contact as written", () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(DateTime.toEpochMillis(now));
+          yield* alias();
+          yield* recipient("ada@mail.example");
+          yield* encryptTo((yield* generate()).publicKey);
+          const { reverse } = yield* forwardFrom('"Shop" <shop@store.example>');
+          expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([
+            { _tag: "Replied" },
+          ]);
+          const reply = yield* lastSent;
+          expect(reply).toContain("Thanks for your order!");
+          expect(header(reply, "Content-Type")).toEqual(Option.none());
+        }),
+      ),
+    );
+  });
 });
 
 /**

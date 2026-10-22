@@ -1,0 +1,23 @@
+Content-Type: multipart/signed; micalg=pgp-sha256;
+ protocol="application/pgp-signature"; boundary="sig_b1"
+
+This is an OpenPGP/MIME signed message (RFC 4880 and 3156)
+--sig_b1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello Ada,=20
+the numbers are attached. Gr=C3=BC=C3=9Fe
+--sig_b1
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYIAB0WIQRmYWtlIHNpZ25hdHVyZSBieXRlcyBmb3IgdGVzdHMACgkQAAAA
+AAAAAAAAAAAA
+=AbCd
+-----END PGP SIGNATURE-----
+
+--sig_b1--

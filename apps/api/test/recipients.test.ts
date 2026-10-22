@@ -6,12 +6,14 @@ import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { Hex } from "effect/encoding";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import { NodeCrypto } from "@effect/platform-node";
+import * as openpgp from "openpgp";
 import { CONFIRMATION_MAILS_PER_DAY, MAX_PENDING_RECIPIENTS } from "../src/recipients.ts";
 import * as Browser from "./support/Browser.ts";
 import { TestAuthenticator } from "./support/index.ts";
@@ -386,6 +388,163 @@ describe("forwarding addresses (recipients) on the API handler, fakecloud Dynamo
 
       // The owner's link still works after all that.
       expect((yield* confirm(owner.browser, added.id, token)).status).toBe(200);
+    }).pipe(Effect.scoped),
+  );
+});
+
+describe("OpenPGP keys on forwarding addresses (PLAN.md §20.21)", () => {
+  const now = DateTime.makeUnsafe("2026-10-22T09:00:00Z");
+
+  /** `keyExpirationTime` in seconds; 0 never expires. */
+  const generate = (keyExpirationTime = 0) =>
+    Effect.promise(() =>
+      openpgp.generateKey({
+        userIDs: [{ name: "Ada", email: "ada@example.com" }],
+        type: "curve25519",
+        date: DateTime.toDate(DateTime.subtract(now, { days: 1 })),
+        keyExpirationTime,
+        format: "object",
+      }),
+    );
+
+  const setKey = (browser: Browser.Client, recipientId: string, body: Schema.Json) =>
+    browser.put(`/v1/recipients/${recipientId}/encryption`, body);
+
+  it.effect("stores a valid key, shows its fingerprint, replaces and removes it", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(now));
+      const api = yield* TestApi.make;
+      const { browser } = yield* signedIn(api, "ada");
+      const added = yield* addVerified(api, browser, "ada@example.com");
+      const { publicKey } = yield* generate(365 * 24 * 3600);
+
+      const stored = yield* setKey(browser, added.id, {
+        publicKey: `My key:\n${publicKey.armor()}`,
+        isSubjectHidden: false,
+      });
+      expect(stored).toMatchObject({
+        status: 200,
+        body: {
+          id: added.id,
+          encryption: {
+            fingerprint: publicKey.getFingerprint().toUpperCase(),
+            userIds: ["Ada <ada@example.com>"],
+            expiresAt: "2027-10-21T09:00:00.000Z",
+            isUsable: true,
+            isSubjectHidden: false,
+          },
+        },
+      });
+      // Only the key itself is kept, not the text around it.
+      expect(stored.body).toMatchObject({ encryption: { publicKey: publicKey.armor() } });
+      const { name } = yield* Effect.provide(Effect.service(Dynamo.DynamoTable), api.context);
+      const item = yield* DynamoDB.scan({ TableName: name }).pipe(
+        Effect.provide(api.context),
+        Effect.map(({ Items = [] }) =>
+          Arr.findFirst(Items, (row) => row.sk?.S === "RECIPIENT#ada@example.com"),
+        ),
+      );
+      expect(Option.map(item, (row) => row.encryption?.M?.publicKey?.S)).toEqual(
+        Option.some(publicKey.armor()),
+      );
+
+      const other = yield* generate();
+      const replaced = yield* setKey(browser, added.id, {
+        publicKey: other.publicKey.armor(),
+        isSubjectHidden: true,
+      });
+      expect(replaced.body).toMatchObject({
+        encryption: {
+          fingerprint: other.publicKey.getFingerprint().toUpperCase(),
+          isSubjectHidden: true,
+        },
+      });
+      expect(replaced.body).not.toHaveProperty("encryption.expiresAt");
+      expect(yield* browser.get("/v1/recipients")).toMatchObject({
+        body: [{ id: added.id, encryption: { isSubjectHidden: true } }],
+      });
+
+      // A key that expires: listed as unusable once it has, with nothing uploaded again.
+      const shortLived = yield* generate(3 * 24 * 3600);
+      yield* setKey(browser, added.id, {
+        publicKey: shortLived.publicKey.armor(),
+        isSubjectHidden: false,
+      });
+      expect(yield* browser.get("/v1/recipients")).toMatchObject({
+        body: [{ encryption: { isUsable: true } }],
+      });
+      yield* TestClock.adjust("3 days");
+      expect(yield* browser.get("/v1/recipients")).toMatchObject({
+        body: [{ encryption: { isUsable: false } }],
+      });
+
+      const removed = yield* browser.delete(`/v1/recipients/${added.id}/encryption`);
+      expect(removed.status).toBe(200);
+      expect(removed.body).not.toHaveProperty("encryption");
+      expect((yield* browser.get("/v1/recipients")).body).not.toHaveProperty("0.encryption");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses what can't encrypt, with the reason", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(now));
+      const api = yield* TestApi.make;
+      const { browser } = yield* signedIn(api, "grace");
+      const added = yield* addRecipient(browser, "grace@example.com");
+      const valid = yield* generate();
+      const expired = yield* generate(3600);
+      const cases = [
+        { publicKey: "hello", reason: "malformed" },
+        { publicKey: valid.privateKey.armor(), reason: "private-key" },
+        { publicKey: expired.publicKey.armor(), reason: "expired" },
+        { publicKey: "x".repeat(70_000), reason: "too-large" },
+      ];
+      const responses = yield* Effect.forEach(
+        cases,
+        ({ publicKey }) => setKey(browser, added.id, { publicKey, isSubjectHidden: false }),
+        { concurrency: 1 },
+      );
+      expect(Arr.map(responses, (response) => [response.status, response.body])).toEqual(
+        Arr.map(cases, ({ reason }) => [400, { _tag: "InvalidPublicKey", reason }]),
+      );
+      // A pending address may have a key too: mail only goes to it once it is verified.
+      expect(
+        (yield* setKey(browser, added.id, {
+          publicKey: valid.publicKey.armor(),
+          isSubjectHidden: false,
+        })).status,
+      ).toBe(200);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("only the owner can set or remove a key; tokens need recipients:write", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(DateTime.toEpochMillis(now));
+      const api = yield* TestApi.make;
+      const owner = yield* signedIn(api, "dennis");
+      const added = yield* addRecipient(owner.browser, "dennis@example.com");
+      const { publicKey } = yield* generate();
+      const body = { publicKey: publicKey.armor(), isSubjectHidden: false };
+
+      const { browser: stranger } = yield* signedIn(api, "mallory");
+      const attempts = yield* Effect.all(
+        [
+          setKey(stranger, added.id, body),
+          stranger.delete(`/v1/recipients/${added.id}/encryption`),
+          setKey(owner.browser, "rcp_missing", body),
+        ],
+        { concurrency: 1 },
+      );
+      expect(Arr.map(attempts, (response) => response.status)).toEqual([404, 404, 404]);
+      expect((yield* setKey(api.browser(), added.id, body)).status).toBe(401);
+
+      const minted = yield* owner.browser.post("/v1/tokens", {
+        name: "cli",
+        scopes: ["recipients:read"],
+      });
+      const token = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(minted.body);
+      expect((yield* setKey(api.withToken(token.token), added.id, body)).status).toBe(403);
+      expect(yield* owner.browser.get("/v1/recipients")).not.toHaveProperty("body.0.encryption");
     }).pipe(Effect.scoped),
   );
 });

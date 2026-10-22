@@ -1,0 +1,34 @@
+Received: from mail-a1.sender.example (mail-a1.sender.example [192.0.2.10])
+ by inbound-smtp.eu-west-1.amazonaws.com with SMTP id 4n2l8k;
+ Tue, 21 Oct 2026 09:14:02 +0000 (UTC)
+From: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+Reply-To: "Grace Hopper (grace@sender.example)" <shop+r.ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc@alias.test>
+X-Alias-Forwarded: shop@alias.test
+To: shop@alias.test
+Subject: Signed quarterly report
+Date: Tue, 21 Oct 2026 09:14:00 +0000
+Message-ID: <signed-1@sender.example>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256;
+ protocol="application/pgp-signature"; boundary="sig_b1"
+
+This is an OpenPGP/MIME signed message (RFC 4880 and 3156)
+--sig_b1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello Ada,=20
+the numbers are attached. Gr=C3=BC=C3=9Fe
+--sig_b1
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYIAB0WIQRmYWtlIHNpZ25hdHVyZSBieXRlcyBmb3IgdGVzdHMACgkQAAAA
+AAAAAAAAAAAA
+=AbCd
+-----END PGP SIGNATURE-----
+
+--sig_b1--

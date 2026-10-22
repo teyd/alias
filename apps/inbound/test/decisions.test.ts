@@ -57,6 +57,7 @@ const recipient = (
   isDefault: fields.isDefault ?? false,
   bouncedAt: Option.none(),
   complainedAt: Option.none(),
+  encryption: Option.none(),
 });
 
 describe("route", () => {

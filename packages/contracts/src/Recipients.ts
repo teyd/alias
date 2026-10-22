@@ -1,7 +1,26 @@
+import { PgpKey } from "@alias/core";
 import * as Schema from "effect/Schema";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { Authentication } from "./Auth.ts";
 import { requires } from "./Scopes.ts";
+
+/**
+ * The recipient's OpenPGP public key (PLAN.md §20.21): mail forwarded to it is encrypted as
+ * PGP/MIME. Mail that is already encrypted (PGP/MIME, S/MIME) passes as it is.
+ */
+const Encryption = Schema.Struct({
+  /** The stored key, armored: only the key, re-armored, whatever text was around it. */
+  publicKey: Schema.String,
+  /** The primary key's fingerprint, uppercase hex, for comparing with the owner's own client. */
+  fingerprint: Schema.String,
+  userIds: Schema.Array(Schema.String),
+  /** When the key stops encrypting, as of its upload. */
+  expiresAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
+  /** False once `expiresAt` has passed: mail to this recipient is then not forwarded at all. */
+  isUsable: Schema.Boolean,
+  /** The subject is encrypted too: `[...]` outside, the real one inside (RFC 9788). */
+  isSubjectHidden: Schema.Boolean,
+});
 
 /** A forwarding address: a real mailbox alias mail can be forwarded to once it is verified. */
 const Recipient = Schema.Struct({
@@ -18,6 +37,7 @@ const Recipient = Schema.Struct({
   bouncedAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
   /** When the mailbox last reported forwarded mail as spam. */
   complainedAt: Schema.OptionFromOptionalKey(Schema.DateTimeUtcFromString),
+  encryption: Schema.OptionFromOptionalKey(Encryption),
 });
 export type Recipient = typeof Recipient.Type;
 
@@ -91,6 +111,13 @@ export class MailUnavailable extends Schema.TaggedError<MailUnavailable>()(
   { httpApiStatus: 503 },
 ) {}
 
+/** Not an OpenPGP public key that can encrypt now; `reason` says why. */
+export class InvalidPublicKey extends Schema.TaggedError<InvalidPublicKey>()(
+  "InvalidPublicKey",
+  { reason: PgpKey.KeyProblem },
+  { httpApiStatus: 400 },
+) {}
+
 const recipientId = { recipientId: Schema.String };
 
 /**
@@ -148,6 +175,29 @@ export const RecipientsGroup = HttpApiGroup.make("recipients")
       HttpApiEndpoint.post("makeDefault", "/recipients/:recipientId/default", {
         params: recipientId,
         error: [RecipientNotFound, RecipientNotVerified],
+      }),
+    ),
+  )
+  .add(
+    requires("recipients:write")(
+      HttpApiEndpoint.put("setEncryption", "/recipients/:recipientId/encryption", {
+        params: recipientId,
+        payload: Schema.Struct({
+          /** Armored (`-----BEGIN PGP PUBLIC KEY BLOCK-----`), at most `PgpKey.MAX_KEY_BYTES`. */
+          publicKey: Schema.String,
+          isSubjectHidden: Schema.Boolean,
+        }),
+        success: Recipient,
+        error: [RecipientNotFound, InvalidPublicKey],
+      }),
+    ),
+  )
+  .add(
+    requires("recipients:write")(
+      HttpApiEndpoint.delete("removeEncryption", "/recipients/:recipientId/encryption", {
+        params: recipientId,
+        success: Recipient,
+        error: RecipientNotFound,
       }),
     ),
   )

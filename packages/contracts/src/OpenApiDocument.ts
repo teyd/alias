@@ -62,6 +62,8 @@ const summaries = {
   "recipients.confirm": "Confirm a forwarding address with the token from its link",
   "recipients.resend": "Mail the confirmation link again",
   "recipients.makeDefault": "Make a verified address the default",
+  "recipients.setEncryption": "Encrypt mail to this address to an OpenPGP public key",
+  "recipients.removeEncryption": "Stop encrypting mail to this address",
   "recipients.remove": "Remove a forwarding address",
   "settings.get": "Get your settings",
   "settings.update": "Change your settings",

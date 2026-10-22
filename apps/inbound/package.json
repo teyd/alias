@@ -28,6 +28,7 @@
     "@distilled.cloud/aws": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
+    "openpgp": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
   }

@@ -51,7 +51,7 @@ export const make = (handle: Handle, options: Options = {}) => {
   };
 
   const request = Effect.fn("Browser.request")(function* (
-    method: "GET" | "POST" | "PATCH" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     body: Option.Option<Schema.Json>,
     form?: Readonly<Record<string, string>>,
@@ -105,6 +105,7 @@ export const make = (handle: Handle, options: Options = {}) => {
     /** An OAuth-style `application/x-www-form-urlencoded` POST. */
     postForm: (path: string, fields: Readonly<Record<string, string>>) =>
       request("POST", path, Option.none(), fields),
+    put: (path: string, body: Schema.Json) => request("PUT", path, Option.some(body)),
     patch: (path: string, body: Schema.Json) => request("PATCH", path, Option.some(body)),
     delete: (path: string) => request("DELETE", path, Option.none()),
     cookie: (name: string) => HashMap.get(jar, name),

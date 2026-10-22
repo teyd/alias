@@ -81,6 +81,7 @@ export const recipientRepoSuite = (
               isDefault: false,
               bouncedAt: Option.none(),
               complainedAt: Option.none(),
+              encryption: Option.none(),
             });
             expect(Option.map(yield* repo.find("usr_2", "rcp_other"), (r) => r.address)).toEqual(
               Option.some("ada@example.com"),
@@ -354,6 +355,84 @@ export const recipientRepoSuite = (
               bouncedAt: Option.none(),
               complainedAt: Option.some(at(6_000)),
             });
+          }),
+        ),
+      );
+      const key = (
+        overrides: Partial<RecipientRepo.Encryption> = {},
+      ): RecipientRepo.Encryption => ({
+        publicKey:
+          "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nxjMEZ...\n-----END PGP PUBLIC KEY BLOCK-----\n",
+        fingerprint: "6E2F1B0C5A0D4E9B8C7A6F5E4D3C2B1A09F8E7D6",
+        userIds: ["Ada <ada@example.com>"],
+        expiresAt: Option.some(at(9_000_000)),
+        isSubjectHidden: false,
+        ...overrides,
+      });
+
+      it.effect("stores, replaces and removes a recipient's OpenPGP key", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* RecipientRepo.RecipientRepo;
+            yield* repo.add(recipient(), confirmation(), MAX_PENDING);
+            yield* repo.add(
+              recipient({ id: "rcp_2", address: "b@example.com" }),
+              confirmation(),
+              MAX_PENDING,
+            );
+            const found = yield* get(repo, "usr_1", "rcp_1");
+            yield* repo.setEncryption(found, key());
+            expect((yield* get(repo, "usr_1", "rcp_1")).encryption).toEqual(Option.some(key()));
+            // Only that recipient has it.
+            expect((yield* get(repo, "usr_1", "rcp_2")).encryption).toEqual(Option.none());
+
+            const replacement = key({
+              fingerprint: "AAAA1B0C5A0D4E9B8C7A6F5E4D3C2B1A09F8E7D6",
+              userIds: [],
+              expiresAt: Option.none(),
+              isSubjectHidden: true,
+            });
+            yield* repo.setEncryption(found, replacement);
+            expect((yield* get(repo, "usr_1", "rcp_1")).encryption).toEqual(
+              Option.some(replacement),
+            );
+            // Verifying and making it the default keep the key.
+            yield* repo.confirm(found, "hash_1", at(2_000));
+            const verified = yield* get(repo, "usr_1", "rcp_1");
+            yield* repo.setDefault(verified);
+            expect((yield* get(repo, "usr_1", "rcp_1")).encryption).toEqual(
+              Option.some(replacement),
+            );
+
+            yield* repo.removeEncryption(verified);
+            expect((yield* get(repo, "usr_1", "rcp_1")).encryption).toEqual(Option.none());
+            // Removing twice is fine.
+            yield* repo.removeEncryption(verified);
+          }),
+        ),
+      );
+
+      it.effect("sets no key on a recipient deleted, or re-added, since it was read", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* RecipientRepo.RecipientRepo;
+            yield* repo.add(recipient(), confirmation(), MAX_PENDING);
+            const stale = yield* get(repo, "usr_1", "rcp_1");
+            yield* repo.delete("usr_1", "rcp_1");
+            expect(yield* Effect.flip(repo.setEncryption(stale, key()))).toEqual(
+              new RecipientRepo.RecipientChanged({ recipientId: "rcp_1" }),
+            );
+            expect(yield* repo.list("usr_1")).toEqual([]);
+
+            // The same address added again is a new recipient: the old read can't touch it.
+            yield* repo.add(recipient({ id: "rcp_again" }), confirmation(), MAX_PENDING);
+            expect((yield* Effect.flip(repo.setEncryption(stale, key())))._tag).toBe(
+              "RecipientChanged",
+            );
+            expect((yield* Effect.flip(repo.removeEncryption(stale)))._tag).toBe(
+              "RecipientChanged",
+            );
+            expect((yield* get(repo, "usr_1", "rcp_again")).encryption).toEqual(Option.none());
           }),
         ),
       );

@@ -96,6 +96,7 @@ const recipient = Effect.fn("recipient")(function* (address: string) {
       isDefault: false,
       bouncedAt: Option.none(),
       complainedAt: Option.none(),
+      encryption: Option.none(),
     },
     "hash",
     now,

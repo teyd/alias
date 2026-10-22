@@ -2,6 +2,7 @@ import {
   ConfirmationRateLimited,
   ConfirmationRejected,
   ConfirmationUndeliverable,
+  InvalidPublicKey,
   InvalidRecipientAddress,
   MailUnavailable,
   RecipientAlreadyVerified,
@@ -10,6 +11,7 @@ import {
   RecipientNotVerified,
   TooManyPendingRecipients,
 } from "@alias/contracts";
+import { PgpKey } from "@alias/core";
 import { queryOptions } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -24,7 +26,20 @@ class RecipientActionFailed extends Schema.TaggedError<RecipientActionFailed>()(
 const waitFor = (seconds: number) =>
   seconds < 120 ? `${seconds} seconds` : `${Math.ceil(seconds / 3600)} hours`;
 
+const keyProblems: Record<PgpKey.KeyProblem, string> = {
+  "too-large": `That key is larger than ${PgpKey.MAX_KEY_BYTES / 1024} KB. Export it without third-party signatures (gpg --export-options export-minimal).`,
+  malformed: "That isn't an armored OpenPGP public key (-----BEGIN PGP PUBLIC KEY BLOCK-----).",
+  "multiple-keys": "That block holds more than one key. Paste only the key for this mailbox.",
+  "private-key":
+    "That's a private key. Never share it: paste the public key (gpg --armor --export) instead.",
+  revoked: "That key has been revoked.",
+  expired: "That key has expired. Extend its expiry in your OpenPGP app and export it again.",
+  "no-encryption-key":
+    "That key can't encrypt: it has no valid encryption subkey, or its algorithm is too weak.",
+};
+
 const describe = <E>(error: E): string => {
+  if (error instanceof InvalidPublicKey) return keyProblems[error.reason];
   if (error instanceof InvalidRecipientAddress) {
     return error.reason === "alias-domain"
       ? "That's an alias address. Forward to a mailbox you read elsewhere."

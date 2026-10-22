@@ -42,3 +42,22 @@ text part.
 
 The expected outputs were read back with Python's `email` package: only the trackers and tracking
 parameters listed above differ, and every non-text part decodes to the same bytes.
+
+## PGP corpus (`pgp/`, PLAN.md §20.21)
+
+Messages as `Mail.forward` hands them to `Pgp.encrypt` (CRLF, reverse alias in `From`, our loop
+marker). `Pgp.test.ts` encrypts each `<name>.eml`, compares the result with the armor replaced by
+`<armored OpenPGP message>` to `<name>.expected.eml`, and decrypts it to `<name>.payload.eml`.
+`pgp-mime` and `smime-enveloped` must pass through unchanged and have no expected files.
+
+| File                | Shape                                                                          |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `signed`            | `multipart/signed` (PGP): the signed part must survive byte for byte           |
+| `no-content-type`   | No MIME fields at all: the payload starts with the blank line                  |
+| `smime-signed-data` | S/MIME opaque signed data: not encryption, so it is encrypted                  |
+| `subject-hidden`    | Folded `To`, encoded-word `Subject`, `Keywords`, `Comments`: header protection |
+| `pgp-mime`          | Already PGP/MIME encrypted                                                     |
+| `smime-enveloped`   | Already S/MIME encrypted (`smime-type=enveloped-data`)                         |
+
+Regenerate after a deliberate change from the test's inputs, read every diff, and decrypt the
+payloads with a second implementation (Sequoia, GnuPG) before committing them.

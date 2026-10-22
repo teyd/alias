@@ -45,7 +45,7 @@ const packages = ["apps", "packages", "tools"]
       ? readdirSync(join(root, group)).map((name) => join(group, name))
       : [],
   )
-  .concat(["infra", "e2e"])
+  .concat(["infra", "e2e", "browser"])
   .filter((dir) => existsSync(join(root, dir, "package.json")))
   .map((dir) => {
     const manifest = JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8")) as {

@@ -1,0 +1,25 @@
+{
+  "name": "@alias/browser",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "test": "vp test",
+    "test:browser": "vp test",
+    "install-browser": "playwright install --only-shell chromium"
+  },
+  "devDependencies": {
+    "@alias/e2e": "workspace:*",
+    "@alias/inbound": "workspace:*",
+    "@alias/lambda-emulator": "workspace:*",
+    "@alias/web": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "playwright": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

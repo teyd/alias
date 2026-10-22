@@ -1,35 +1,14 @@
-import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
 import { TestAuthenticator } from "@alias/api/testing";
-import {
-  AwsClient,
-  FunctionUrl,
-  Identities,
-  Inbound,
-  type MessageQueue,
-  Parameters,
-  SesEvent,
-  SnsEvent,
-  SqsEvent,
-  Transport,
-} from "@alias/aws";
-import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains, Username, Webhook } from "@alias/core";
+import { Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
+import { Username, Webhook } from "@alias/core";
 import { Dynamo } from "@alias/db";
-import { freshTable } from "@alias/db/testing";
-import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
-import { Proxy } from "@alias/image-proxy";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
-import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
+import { Feedback, Pipeline } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
-import { Delivery, Egress, UrlPolicy } from "@alias/webhooks";
-import { Receiver, TestQueue, freshQueue } from "@alias/webhooks/testing";
+import { Receiver } from "@alias/webhooks/testing";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
-import * as SNS from "@distilled.cloud/aws/sns";
-import * as SSM from "@distilled.cloud/aws/ssm";
-import { SesEmulator } from "@alias/ses-emulator";
-import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
@@ -38,216 +17,19 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import { createTransport } from "nodemailer";
+import { apiHandler, layer, sentTo, smtp, smtpRaw, spoolBucket } from "./support/stack.ts";
 
-/**
- * The whole emulated stack, every listener on port 0:
- * - SMTP → SES emulator (receipt rules, verdicts) → S3 spool on fakecloud → SES Lambda event →
- *   the real inbound pipeline → SES sending on fakecloud;
- * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud, SES
- *   identities on fakecloud, DNS checks through the DoH emulator;
- * - a proxied image in forwarded mail → function URL emulator → the image proxy Lambda → the
- *   sender's image host.
- * One fakecloud process serves S3, DynamoDB, SES, SNS and SSM, as one AWS account would, and both
- * Lambdas share one table.
- */
-const aws = Layer.unwrap(
-  Effect.map(Effect.service(FakeCloud.FakeCloud), (fakecloud) => AwsClient.emulator(fakecloud.url)),
-);
-const spoolBucket = "alias-spool";
-const spool = Layer.effectDiscard(Inbound.ensureSpool(spoolBucket)).pipe(Layer.provide(aws));
-const database = freshTable();
-/** The webhook queue every producer publishes to and the delivery Lambda polls (PLAN.md §20.20). */
-const webhookQueue = freshQueue();
-/** Webhook receivers in this test listen on 127.0.0.1 over http, which production refuses. */
-const urlPolicy = UrlPolicy.layer({ isLoopbackAllowed: true });
 const origin = "https://alias.test";
-const sharedDomains = SharedDomains.layer("alias.test");
-/** Every send names it; its SNS destination reports bounces and complaints (PLAN.md §20.11). */
-const configurationSet = "alias-events";
-const sending = Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
-  Layer.provide(aws),
-);
-
-/** The configuration set's SNS destination, and the feedback Lambda's subscription to it. */
-const feedbackTopic = Layer.effect(
-  SnsSubscriber.SnsSubscriber,
-  Effect.gen(function* () {
-    const { TopicArn = "" } = yield* SNS.createTopic({ Name: "ses-events" });
-    yield* SESV2.createConfigurationSet({ ConfigurationSetName: configurationSet });
-    yield* SESV2.createConfigurationSetEventDestination({
-      ConfigurationSetName: configurationSet,
-      EventDestinationName: "feedback",
-      EventDestination: {
-        Enabled: true,
-        MatchingEventTypes: ["BOUNCE", "COMPLAINT"],
-        SnsDestination: { TopicArn },
-      },
-    });
-    return yield* SnsSubscriber.make({ topicArn: TopicArn });
-  }),
-).pipe(Layer.provide(aws));
 
 /** The real API Lambda behind the function URL emulator. */
-const api = Layer.unwrap(
-  Effect.gen(function* () {
-    const context = yield* Effect.context<Dynamo.Database>();
-    const fakecloud = yield* FakeCloud.FakeCloud;
-    const dns = yield* DohServer.DohServer;
-    const { handle, dispose } = makeFunctionUrlHandler(
-      Layer.mergeAll(
-        Layer.succeedContext(context),
-        Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
-        Doh.layer(dns.url),
-        RelyingParty.layer({ id: "alias.test", origin }),
-        Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
-          Layer.provide(AwsClient.emulator(fakecloud.url)),
-        ),
-        MailSettings.layer(Option.some("no-reply@alias.test")).pipe(
-          Layer.provideMerge(sharedDomains),
-        ),
-        Layer.succeedContext(yield* Effect.context<MessageQueue.MessageQueue>()),
-        urlPolicy,
-      ),
-    );
-    yield* Effect.addFinalizer(() => Effect.promise(dispose));
-    return FunctionUrlServer.layer({ handler: (event) => Effect.runPromise(handle(event)) });
-  }),
-);
-
-/** The reverse-token keys as production stores them: a SecureString in Parameter Store. */
-const reverseKeysParameter = "/alias/e2e/reverse-token-keys";
-const reverseKeys = Layer.unwrap(
-  SSM.putParameter({
-    Name: reverseKeysParameter,
-    Type: "SecureString",
-    Value: `1:${Buffer.alloc(32, 9).toString("base64url")}`,
-  }).pipe(Effect.as(ReverseKeys.fromParameter(reverseKeysParameter))),
-).pipe(Layer.provide(aws));
-
-/**
- * The image proxy Lambda behind its own function URL (PLAN.md §20.19), keys from Parameter Store
- * like the inbound Lambda's signer, which points at it. Its egress reaches only 127.0.0.1, where
- * a test runs the sender's image host; production's policy is tested in `apps/image-proxy`.
- */
-const imageProxyParameter = "/alias/e2e/image-proxy-keys";
-const imageProxy = Layer.unwrap(
-  Effect.gen(function* () {
-    yield* SSM.putParameter({
-      Name: imageProxyParameter,
-      Type: "SecureString",
-      Value: `1:${Buffer.alloc(32, 11).toString("base64url")}`,
-    });
-    const keys = yield* Parameters.keyring(imageProxyParameter);
-    const services = Layer.mergeAll(
-      Layer.succeed(Proxy.ProxyKeys, keys),
-      ImageProxyTesting.onlyLoopback,
-      NodeCrypto.layer,
-    );
-    const { url } = yield* FunctionUrlServer.make({
-      handler: (event) =>
-        Effect.runPromise(
-          FunctionUrl.decode(event).pipe(Effect.flatMap(Proxy.handle), Effect.provide(services)),
-        ),
-    });
-    return Layer.succeed(ImageProxySigner.ImageProxySigner, { base: url, keys });
-  }),
-).pipe(Layer.provide(aws));
-
-/** The real inbound pipeline on the same table, spool, SES and keys. */
-const inbound = Pipeline.layer(
-  Layer.mergeAll(
-    database,
-    webhookQueue,
-    sending,
-    Spool.layer(spoolBucket).pipe(Layer.provide(aws)),
-    sharedDomains,
-    reverseKeys,
-    imageProxy,
+const stack = layer(
+  Layer.unwrap(
+    Effect.map(apiHandler({ id: "alias.test", origin }), (handler) =>
+      FunctionUrlServer.layer({ handler }),
+    ),
   ),
 );
 
-type Verdicts =
-  NonNullable<SesEmulator.SesEmulatorConfig["verdicts"]> extends (
-    recipients: ReadonlyArray<string>,
-  ) => infer V
-    ? V
-    : never;
-
-const passing: Verdicts = { spam: "PASS", virus: "PASS", spf: "PASS", dkim: "PASS", dmarc: "PASS" };
-
-/** What SES will stamp on the next received message; a test sets it before sending. */
-const verdicts = { next: passing };
-
-/** The shared domain's SES identity, which SES receives for and sends from. */
-const sharedIdentity = Layer.effectDiscard(Transport.ensureIdentity("alias.test")).pipe(
-  Layer.provide(aws),
-);
-
-// Like SES, receives for the account's verified domain identities: the shared domain and each
-// custom domain once the API created its identity.
-const ses = SesEmulator.layer({
-  verifiedDomains: "identities",
-  rules: [
-    {
-      name: "all-verified",
-      enabled: true,
-      recipients: [],
-      s3: { bucket: spoolBucket, objectKeyPrefix: Inbound.spoolPrefix },
-      lambda: {
-        functionArn: "arn:aws:lambda:eu-west-1:000000000000:function:inbound",
-        invocationType: "Event",
-      },
-      scanEnabled: true,
-    },
-  ],
-  verdicts: () => verdicts.next,
-}).pipe(Layer.provide([aws, spool, sharedIdentity]));
-
-/** The feedback Lambda on the same table and SES. */
-const feedback = Feedback.layer(Layer.mergeAll(database, sending, webhookQueue));
-
-/** The webhook delivery Lambda behind the emulated SQS event source mapping of the queue. */
-const delivery = Layer.effect(
-  SqsEventSource.SqsEventSource,
-  Effect.gen(function* () {
-    const { queueUrl } = yield* TestQueue;
-    const context = yield* Layer.build(
-      Delivery.layer(
-        Layer.mergeAll(
-          database,
-          webhookQueue,
-          Delivery.production,
-          NodeCrypto.layer,
-          Egress.layer,
-        ).pipe(Layer.provideMerge(urlPolicy)),
-      ),
-    );
-    return yield* SqsEventSource.make({
-      queueUrl,
-      handler: (event) =>
-        SqsEvent.decode(event).pipe(Effect.flatMap(Delivery.handle), Effect.provide(context)),
-    });
-  }),
-).pipe(Layer.provide(Layer.merge(webhookQueue, aws)));
-
-const stack = Layer.mergeAll(
-  api.pipe(Layer.provide(Layer.merge(database, webhookQueue))),
-  inbound,
-  feedback,
-  delivery,
-  feedbackTopic,
-  ses,
-  aws,
-).pipe(
-  Layer.provide(NodeCrypto.layer),
-  Layer.provideMerge(Layer.merge(FakeCloud.layer(), DohServer.layer())),
-);
-
-/**
- * A browser-ish HTTP call: JSON in and out, the session cookie passed by hand. With `bearer`, a
- * CLI-ish one: an API token in `Authorization` instead.
- */
 const call = (
   path: string,
   init: {
@@ -289,20 +71,6 @@ const signUp = (username: string) =>
     const cookie = (registered.cookies[0] ?? "").split(";")[0] ?? "";
     return { cookie, userId: String(registered.body.userId), authenticator };
   });
-
-const decoder = new TextDecoder();
-
-/** Mail SES sent to `address`, oldest first, as raw text. */
-const sentTo = (address: string) =>
-  Effect.map(FakeCloud.sentEmails(), (emails) =>
-    Arr.map(
-      Arr.filter(emails, (email) => Arr.contains(email.to, address)),
-      (email) => ({
-        ...email,
-        text: decoder.decode(Option.getOrElse(email.raw, () => new Uint8Array())),
-      }),
-    ),
-  );
 
 /** Header fields of a raw message, unfolded, in order. */
 const fields = (raw: string) =>
@@ -353,54 +121,6 @@ const itemsMentioning = (text: string) =>
     const table = yield* Dynamo.DynamoTable;
     const { Items } = yield* DynamoDB.scan({ TableName: table.name, ConsistentRead: true });
     return Arr.filter(Items ?? [], (item) => JSON.stringify(item).includes(text));
-  });
-
-/** Sends one message over SMTP and returns the Lambda event SES emits for it, as JSON. */
-const smtp = (mail: {
-  readonly from: string;
-  readonly to: string;
-  readonly subject: string;
-  readonly text: string;
-  readonly headers?: Record<string, string>;
-  readonly verdicts?: Partial<Verdicts>;
-}) =>
-  Effect.gen(function* () {
-    const emulator = yield* SesEmulator.SesEmulator;
-    verdicts.next = { ...passing, ...mail.verdicts };
-    yield* Effect.tryPromise(() =>
-      createTransport({
-        host: "127.0.0.1",
-        port: emulator.smtpPort,
-        secure: false,
-        ignoreTLS: true,
-      }).sendMail({
-        from: mail.from,
-        to: mail.to,
-        subject: mail.subject,
-        text: mail.text,
-        headers: mail.headers ?? {},
-      }),
-    );
-    verdicts.next = passing;
-    // Lambda passes the event as JSON; the handler parses it as `src/handler.ts` does.
-    const json: unknown = JSON.parse(JSON.stringify(yield* Queue.take(emulator.events)));
-    return yield* SesEvent.decode(json);
-  });
-
-/** Sends a raw message over SMTP as-is (a mailbox's redirect rule) and returns its event. */
-const smtpRaw = (mail: { readonly from: string; readonly to: string; readonly raw: string }) =>
-  Effect.gen(function* () {
-    const emulator = yield* SesEmulator.SesEmulator;
-    yield* Effect.tryPromise(() =>
-      createTransport({
-        host: "127.0.0.1",
-        port: emulator.smtpPort,
-        secure: false,
-        ignoreTLS: true,
-      }).sendMail({ envelope: { from: mail.from, to: [mail.to] }, raw: mail.raw }),
-    );
-    const json: unknown = JSON.parse(JSON.stringify(yield* Queue.take(emulator.events)));
-    return yield* SesEvent.decode(json);
   });
 
 const invoke = Pipeline.handle;

@@ -32,7 +32,7 @@ import {
 import { aliasesQuery, domainsQuery } from "@/lib/aliases";
 import { callApi } from "@/lib/api";
 import { recipientsQuery } from "@/lib/recipients";
-import { meQuery } from "@/lib/session";
+import { forgetSession, meQuery } from "@/lib/session";
 
 type Destination = "/" | "/aliases" | "/destinations" | "/domains" | "/settings";
 
@@ -82,9 +82,7 @@ const Account = () => {
   const logout = useMutation({
     mutationFn: () => callApi((api) => api.auth.logout()),
     onSuccess: () => {
-      // Nothing of this account stays in memory for whoever uses the browser next.
-      queryClient.removeQueries();
-      queryClient.setQueryData(meQuery.queryKey, Option.none());
+      forgetSession(queryClient);
       void navigate({ to: "/" });
     },
   });

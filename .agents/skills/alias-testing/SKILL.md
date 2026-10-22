@@ -1,6 +1,6 @@
 ---
 name: alias-testing
-description: Use when writing, placing, or debugging tests in the Alias repo. Explains the test tiers (unit, repository, contract, stack), the emulators behind them (fakecloud, DynamoDB Local, ses-emulator, lambda-emulator), how to keep tests hermetic so parallel agents can run them, and which command runs which suite.
+description: Use when writing, placing, or debugging tests in the Alias repo. Explains the test tiers (unit, repository, contract, stack, browser), the emulators behind them (fakecloud, DynamoDB Local, ses-emulator, lambda-emulator), how to keep tests hermetic so parallel agents can run them, and which command runs which suite.
 ---
 
 # Testing in Alias
@@ -16,8 +16,9 @@ Everything runs against emulators. There is no AWS account and no Docker in any 
 | contract | Node | Checking AWS payloads (from docs now, recorded later) and emulator output against the schemas production parses with | `packages/aws/test`, `tools/ses-emulator/test/Headers.test.ts` |
 | handler | Node + fakecloud | A Lambda handler called with real-shaped events | `apps/api/test/api.test.ts` |
 | stack | Node + one fakecloud | Paths across services: SMTP → SES emulator → S3, HTTP → function URL emulator → handler → DynamoDB | `e2e/test/stack.test.ts` |
+| browser | Node + the stack + headless Chromium | What a person does in `apps/web`: passkeys, forms, the session cookie, links from mails | `browser/test/destinations.test.ts` |
 
-Prefer the lowest tier that can observe the behaviour, but every new path through the system also gets one stack test.
+Prefer the lowest tier that can observe the behaviour, but every new path through the system also gets one stack test, and every new web flow one browser test.
 
 ## The emulators
 
@@ -34,6 +35,7 @@ Prefer the lowest tier that can observe the behaviour, but every new path throug
 | Lambda function URLs | `FunctionUrlServer.layer({ handler })` | `FunctionUrl` schemas decode AWS-documented payloads; emulator events decode with them |
 | SESv2 identities (custom domains) | `FakeCloud.layer()` through `Identities.layer` | `Identities` decodes the documented responses and fakecloud's; fakecloud verifies at once, with fixed DKIM tokens (`tools/aws-emulators/test/ses-identities.test.ts`) |
 | DNS over HTTPS (not AWS) | `DohServer.layer()` from `@alias/doh-emulator`; set records with `setZone(apex, records)`, resolve with `Doh.layer(server.url)` | `Doh.Response` decodes the documented and recorded Cloudflare/Google answers; the emulator replays the recorded Cloudflare queries field for field (`packages/dns/fixtures`) |
+| The web origin (planned CloudFront: `/v1/*` → function URL, the rest → the SPA; not in infra yet) | `vite preview` with a proxy, in `browser/test/support/browser.ts` | not verified: it only routes by path (PLAN.md §20.17) |
 
 Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. A new AWS dependency needs an emulator and a contract test before any feature uses it.
 
@@ -44,6 +46,21 @@ Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. 
 3. No Docker, no network, no cloud credentials.
 4. Time and randomness come from Effect services (`TestClock`, `Crypto`), not `Date.now()`. Emulators that wait for a real process use `inRealTime`.
 
+## Browser tests
+
+`browser/test/support/browser.ts` gives each file the whole stack from `@alias/e2e/stack` (shared with `e2e`, add helpers there) plus:
+
+- the production bundle of `apps/web`, built into a temp dir and served by `vite preview` on `http://localhost:<port 0>`, which forwards `/v1` and `/health` to the API's function URL emulator. Browsers treat `localhost` as a secure context, so the `Secure` session cookie and WebAuthn work without TLS; the relying party is `localhost` with the preview server's origin;
+- headless Chromium (Playwright, the version pinned in the catalog);
+- `openPage()`: a fresh browser profile per test with a virtual WebAuthn authenticator over CDP (CTAP2, internal transport, discoverable credentials, user verification that always succeeds). `passkeys()` lists what it holds.
+
+Drive the page inside `ui(async () => …)` and mix it with Effect steps (`smtp`, `sentTo`, `Pipeline.handle`). Rules:
+
+1. **Select by role and accessible name only** (`getByRole("button", { name: "Block" })`), so tests survive restyling. If an element has no usable role or name, fix the markup. Scoping a role locator with `.filter({ hasText })` is fine when rows have no names of their own; table rows are named by their cells (`getByRole("row", { name: address })`).
+2. Wait for the state you expect (`getByRole(…, { checked: true }).waitFor()`, `waitFor({ state: "detached" })`); never sleep.
+3. Check what the server stored too, with `api(page, path, schema)`, which calls the API with the page's own cookie.
+4. Chromium is installed by `pnpm agent:setup` (`pnpm --filter @alias/browser install-browser`). If Playwright says the executable doesn't exist, run that.
+
 ## Write once, run on many backends
 
 For anything behind a service interface, put the behaviour in `test/support/<name>Suite.ts`, which takes the backend as a layer. Then add one tiny runner file per backend (`*.fakecloud.test.ts`, `*.dynamodb-local.test.ts`).
@@ -53,6 +70,7 @@ For anything behind a service interface, put the behaviour in `test/support/<nam
 ```sh
 pnpm test:affected                                  # before handing work back
 pnpm --filter @alias/db test:dynamodb-local         # one tier
+pnpm --filter @alias/browser test                   # browser tests (headless Chromium)
 pnpm --filter @alias/api test -- -t "404"           # one test by name
 ```
 
@@ -61,5 +79,6 @@ pnpm --filter @alias/api test -- -t "404"           # one test by name
 ## Known issues
 
 - `@distilled.cloud/aws` treats some "already exists" errors as retryable (for example, DynamoDB `ResourceInUseException`). Idempotent create helpers pass `Retry.none`. See `Table.ensure`.
+- `vp run` (so `pnpm test`) traces file reads by injecting a library into every child process. Chromium's GPU process stops drawing under it, so `browser.ts` launches with `--in-process-gpu`; without it every click times out waiting for the page to be stable.
 - DynamoDB Local rejects port 0, so `DynamoDbLocal.ts` picks a free port first.
 - The AWS doc samples contain placeholders (`<url-id>`); tests substitute realistic values where an invalid URL would otherwise be built.

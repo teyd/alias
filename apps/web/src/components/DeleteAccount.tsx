@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import * as Option from "effect/Option";
 import { FingerprintIcon, Trash2Icon } from "lucide-react";
 import { Problem } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { callApi } from "@/lib/api";
 import { eraseAccount } from "@/lib/passkeys";
-import { meQuery } from "@/lib/session";
+import { forgetSession } from "@/lib/session";
 
 /**
  * The danger zone: erasing the account (PLAN.md §20.15). The dialog, held open by
@@ -36,9 +35,8 @@ export const DeleteAccount = ({
   const erase = useMutation({
     mutationFn: () => callApi(eraseAccount),
     onSuccess: () => {
-      // The response cleared the session cookie; nothing of the account stays in memory either.
-      queryClient.removeQueries();
-      queryClient.setQueryData(meQuery.queryKey, Option.none());
+      // The response cleared the session cookie.
+      forgetSession(queryClient);
       void navigate({ to: "/" });
     },
   });

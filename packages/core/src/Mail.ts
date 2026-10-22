@@ -134,7 +134,7 @@ const PROTECTION_FIELDS = HashSet.make(
  */
 const protectPart = Effect.fn("Mail.protectPart")(function* (
   protection: Protection,
-  signer: ImageProxy.Signer,
+  signer: ImageProxy.AliasSigner,
   part: Mime.TextPart,
 ) {
   const isProxied = (href: string) => ImageProxy.isProxied(signer, href);
@@ -206,7 +206,8 @@ export const forward = Effect.fn("Mail.forward")(function* (
     readonly sender: Sender;
     readonly token: string;
     readonly protection: Protection;
-    readonly imageProxy: ImageProxy.Signer;
+    /** Signs for the alias's mail, so proxied images spend its owner's budget. */
+    readonly imageProxy: ImageProxy.AliasSigner;
   },
 ) {
   const changes = yield* Ref.make(Trackers.noChanges);

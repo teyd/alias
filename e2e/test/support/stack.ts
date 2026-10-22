@@ -13,7 +13,7 @@ import {
 } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, TempDomains } from "@alias/core";
-import { Dynamo } from "@alias/db";
+import { Dynamo, ProxyRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
@@ -185,8 +185,9 @@ const reverseKeys = Layer.unwrap(
 
 /**
  * The image proxy Lambda behind its own function URL (PLAN.md §20.19), keys from Parameter Store
- * like the inbound Lambda's signer, which points at it. Its egress reaches only 127.0.0.1, where
- * a test runs the sender's image host; production's policy is tested in `apps/image-proxy`.
+ * like the inbound Lambda's signer, which points at it, and its fetch budgets in the shared table
+ * (§20.29). Its egress reaches only 127.0.0.1, where a test runs the sender's image host;
+ * production's policy is tested in `apps/image-proxy`.
  */
 const imageProxyParameter = "/alias/e2e/image-proxy-keys";
 const imageProxy = Layer.unwrap(
@@ -199,6 +200,8 @@ const imageProxy = Layer.unwrap(
     const keys = yield* Parameters.keyring(imageProxyParameter);
     const services = Layer.mergeAll(
       Layer.succeed(Proxy.ProxyKeys, keys),
+      Layer.succeed(ProxyRepo.ProxyRepo, yield* ProxyRepo.ProxyRepo),
+      Proxy.defaultBudgets,
       ImageProxyTesting.onlyLoopback,
       NodeCrypto.layer,
     );
@@ -210,7 +213,7 @@ const imageProxy = Layer.unwrap(
     });
     return Layer.succeed(ImageProxySigner.ImageProxySigner, { base: url, keys });
   }),
-).pipe(Layer.provide(aws));
+).pipe(Layer.provide([aws, ProxyRepo.layer.pipe(Layer.provide(database))]));
 
 /** The real inbound pipeline on the same table, spool, SES and keys. */
 const inbound = Pipeline.layer(

@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Order from "effect/Order";
+import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import { Egress, Proxy } from "../src/index.ts";
 import { onlyLoopback, origin, PNG } from "./support/index.ts";
@@ -167,6 +168,34 @@ describe("Egress.fetchImage", () => {
         expect(yield* failure("/stream.png")).toBe("too large");
         expect(yield* failure("/slow.png")).toBe("timed out");
         expect(yield* failure("/missing.png")).toBe("unexpected status");
+      }),
+    ),
+  );
+
+  it.live("gives up on a silent or stalled origin after the idle deadline (real time)", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { url } = yield* origin;
+        const quick = { ...Proxy.limits, idleTimeout: Duration.millis(200) };
+        const failure = (target: string) =>
+          Effect.map(Effect.flip(fetchWith(target, onlyLoopback, quick)), (error) => ({
+            reason: error.reason,
+            unreachable: P.isTagged(error, "UpstreamFailed") ? error.unreachable : undefined,
+          }));
+        // Slow answers depend on the path, which the requester picks: the origin isn't blamed.
+        expect(yield* failure(`${url}/silent`)).toEqual({
+          reason: "no first byte",
+          unreachable: undefined,
+        });
+        expect(yield* failure(`${url}/slow.png`)).toEqual({
+          reason: "stalled",
+          unreachable: undefined,
+        });
+        // Nothing listens on port 1: that origin can't be reached, whatever the path.
+        expect(yield* failure("http://127.0.0.1:1/a.png")).toEqual({
+          reason: "ECONNREFUSED",
+          unreachable: "http://127.0.0.1:1",
+        });
       }),
     ),
   );

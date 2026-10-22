@@ -13,3 +13,4 @@ export { deviceRepoSuite } from "./deviceRepoSuite.ts";
 
 export { domainRepoSuite } from "./domainRepoSuite.ts";
 export { messageRepoSuite } from "./messageRepoSuite.ts";
+export { proxyRepoSuite } from "./proxyRepoSuite.ts";

@@ -361,7 +361,7 @@ describe("proxy-images", () => {
       (url) =>
         Effect.map(
           ImageProxy.verify(signer.keys, url.slice(signer.base.length)),
-          (found) => found.href,
+          (found) => found.url.href,
         ),
       { concurrency: 1 },
     ).pipe(Effect.provide(NodeCrypto.layer));

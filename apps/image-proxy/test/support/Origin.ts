@@ -53,6 +53,8 @@ const routes: R.ReadonlyRecord<string, (response: ServerResponse, url: URL) => v
     response.write(new Uint8Array(64 * 1024));
     response.end(new Uint8Array(64 * 1024));
   },
+  // Takes the request and never answers.
+  "/silent": () => {},
   // Never finishes.
   "/slow.png": (response) => {
     response.writeHead(200, { "content-type": "image/png" });

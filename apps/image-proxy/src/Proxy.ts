@@ -1,17 +1,21 @@
 import { FunctionUrl } from "@alias/aws";
 import { ImageProxy, type Keyring } from "@alias/core";
+import { ProxyRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as R from "effect/Record";
 import * as Egress from "./Egress.ts";
 
 /**
- * The image proxy (PLAN.md §20.19): `GET /img/<key version>/<mac>/<base64url URL>` answers with
- * the image at the URL forwarding signed. Nothing about the reader's request travels on, and
- * nothing about the origin's response comes back but the image bytes.
+ * The image proxy (PLAN.md §20.19, §20.29): `GET /img/<key version>/<tag>/<owner>/<mac>/<base64url
+ * URL>` answers with the image at the URL forwarding signed, within the fetch budgets of the
+ * alias owner and the origin host. Nothing about the reader's request travels on, and nothing
+ * about the origin's response comes back but the image bytes.
  */
 
 /** The keys that verify proxy URLs; the inbound Lambda signs with the same ones. */
@@ -20,12 +24,37 @@ export class ProxyKeys extends Context.Service<ProxyKeys, Keyring.Keyring>()(
 ) {}
 
 /**
+ * How many origin fetches (CloudFront's cache misses) the proxy makes, so that one user, or a
+ * URL shared around, can't take the few reserved slots from everyone (PLAN.md §20.29).
+ */
+export class Budgets extends Context.Service<
+  Budgets,
+  {
+    /** Per alias owner and UTC minute: a newsletter opened is a few dozen. */
+    readonly perOwnerPerMinute: number;
+    /** Per origin host and UTC minute, for all owners together. */
+    readonly perHostPerMinute: number;
+    /** How long an origin that couldn't be reached is left alone. */
+    readonly downFor: Duration.Duration;
+  }
+>()("@alias/image-proxy/Budgets") {}
+
+export const defaultBudgets = Layer.succeed(Budgets, {
+  perOwnerPerMinute: 60,
+  perHostPerMinute: 300,
+  downFor: Duration.minutes(1),
+});
+
+/**
  * Function URL responses are capped at 6 MB, base64 included (4 MiB of image become 5.6 MB), and
  * mail images are far smaller: newsletter heroes run to a few hundred KB.
  */
 export const limits: Egress.Limits = {
   maxBytes: 4 * 1024 * 1024,
   maxRedirects: 3,
+  // A mail image host that takes longer than this to connect or start answering holds one of
+  // the few reserved slots for nothing (PLAN.md §20.29).
+  idleTimeout: Duration.seconds(2),
   timeout: Duration.seconds(5),
 };
 
@@ -90,7 +119,7 @@ const answer = (
       status,
       headers: [
         ...R.toEntries(SECURITY_HEADERS),
-        ["cache-control", `public, max-age=${Duration.toSeconds(maxAge)}`],
+        ["cache-control", `public, max-age=${Math.ceil(Duration.toSeconds(maxAge))}`],
         ...Option.toArray(
           Option.map(image, ({ type }): [string, string] => ["content-type", type]),
         ),
@@ -98,7 +127,53 @@ const answer = (
     },
   );
 
+/** Not now: try again after `wait` (at least a second), which is also how long it may be cached. */
+const later = (status: 429 | 502 | 503, wait: Duration.Duration) => {
+  const seconds = Math.max(1, Math.ceil(Duration.toSeconds(wait)));
+  const response = answer(status, Duration.seconds(seconds));
+  response.headers.set("retry-after", String(seconds));
+  return response;
+};
+
 const DAY = Duration.days(1);
+
+/** Until the current UTC minute ends, when the budgets start again. */
+const untilNextMinute = (now: DateTime.Utc) =>
+  DateTime.distance(
+    now,
+    DateTime.addDuration(DateTime.startOf(now, "minute"), Duration.minutes(1)),
+  );
+
+/**
+ * Whether the origin may be asked now: not while it is down, and only within the owner's and the
+ * host's budget (in that order, so a down host costs nothing). None means fetch it.
+ */
+const admit = Effect.fn("Proxy.admit")(function* (target: ImageProxy.Verified) {
+  const budgets = yield* Budgets;
+  const repo = yield* ProxyRepo.ProxyRepo;
+  const now = yield* DateTime.now;
+  const down = yield* repo.downUntil(target.url.origin, now);
+  if (Option.isSome(down)) {
+    yield* Effect.logInfo("image proxy origin down");
+    return Option.some(later(502, DateTime.distance(now, down.value)));
+  }
+  if (!(yield* repo.reserveOwner(target.userId, now, budgets.perOwnerPerMinute))) {
+    yield* Effect.logInfo("image proxy owner budget used up");
+    return Option.some(later(429, untilNextMinute(now)));
+  }
+  if (!(yield* repo.reserveHost(target.url.hostname, now, budgets.perHostPerMinute))) {
+    yield* Effect.logInfo("image proxy host budget used up");
+    return Option.some(later(429, untilNextMinute(now)));
+  }
+  return Option.none<Response>();
+});
+
+/** Leaves an origin that couldn't be reached alone for `Budgets.downFor`. */
+const markDown = Effect.fn("Proxy.markDown")(function* (origin: string) {
+  const { downFor } = yield* Budgets;
+  const until = DateTime.addDuration(yield* DateTime.now, downFor);
+  yield* (yield* ProxyRepo.ProxyRepo).markDown(origin, until);
+});
 
 /** Serves one request. */
 const respond = Effect.fn("Proxy.respond")(function* (request: Request) {
@@ -109,7 +184,9 @@ const respond = Effect.fn("Proxy.respond")(function* (request: Request) {
   const path = new URL(request.url).pathname;
   const target = yield* ImageProxy.verify(keys, path).pipe(Effect.option);
   if (Option.isNone(target)) return answer(403, DAY);
-  return yield* Egress.fetchImage(target.value, limits).pipe(
+  const refused = yield* admit(target.value);
+  if (Option.isSome(refused)) return refused.value;
+  return yield* Egress.fetchImage(target.value.url, limits).pipe(
     Effect.map((fetched) =>
       Option.match(sniff(fetched.body), {
         onNone: () => answer(415, Duration.hours(1)),
@@ -129,9 +206,11 @@ const respond = Effect.fn("Proxy.respond")(function* (request: Request) {
       EgressRefused: (error) =>
         Effect.as(Effect.logInfo("image proxy refused", error.reason), answer(403, DAY)),
       UpstreamFailed: (error) =>
-        Effect.as(
-          Effect.logInfo("image proxy upstream failed", error.reason),
-          answer(502, Duration.minutes(5)),
+        Effect.logInfo("image proxy upstream failed", error.reason).pipe(
+          Effect.andThen(
+            error.unreachable === undefined ? Effect.void : markDown(error.unreachable),
+          ),
+          Effect.as(answer(502, Duration.minutes(5))),
         ),
     }),
   );
@@ -139,5 +218,14 @@ const respond = Effect.fn("Proxy.respond")(function* (request: Request) {
 
 /** The Lambda's work, on a function URL event parsed with `FunctionUrl.decode`. */
 export const handle = Effect.fn("Proxy.handle")(function* (event: FunctionUrl.FunctionUrlEvent) {
-  return yield* FunctionUrl.fromResponse(yield* respond(yield* FunctionUrl.toRequest(event)));
+  const response = yield* respond(yield* FunctionUrl.toRequest(event)).pipe(
+    // Without the table no budget can be checked: refuse (briefly) rather than fetch unmetered.
+    Effect.catchTag("DatabaseError", (error) =>
+      Effect.as(
+        Effect.logWarning("image proxy budgets unavailable", error.operation),
+        later(503, Duration.seconds(5)),
+      ),
+    ),
+  );
+  return yield* FunctionUrl.fromResponse(response);
 });

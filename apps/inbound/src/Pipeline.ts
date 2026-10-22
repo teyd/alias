@@ -257,7 +257,8 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
           sender: sender.value,
           token: token.value,
           protection,
-          imageProxy,
+          // Proxied images spend the alias owner's fetch budget (PLAN.md §20.29).
+          imageProxy: { ...imageProxy, owner: { aliasId: alias.id, userId: alias.userId } },
           // Signing image URLs needs a working SHA-256; without one nothing can run.
         }).pipe(Effect.catchTag("PlatformError", Effect.die), Effect.flatMap(encrypt)),
       envelope: {

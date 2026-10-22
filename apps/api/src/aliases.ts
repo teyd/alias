@@ -24,6 +24,8 @@ const view = (alias: AliasRepo.Alias): AliasView => ({
   address: `${alias.localPart}@${alias.domain}`,
   mode: alias.mode,
   isActive: alias.isActive,
+  forwardedCount: alias.forwardedCount,
+  blockedCount: alias.blockedCount,
 });
 
 const invalid = (address: string, reason: InvalidAlias["reason"]) =>

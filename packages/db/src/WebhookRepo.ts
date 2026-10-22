@@ -21,16 +21,22 @@ export interface Webhook {
   readonly userId: string;
   readonly url: string;
   readonly eventTypes: ReadonlyArray<string>;
-  /** The `whsec_` signing secret. Stored as is: signing needs it. */
-  readonly secret: string;
-  /** The secret before the last rotation, which still signs until `previousSecretUntil`. */
-  readonly previousSecret: Option.Option<string>;
+  /**
+   * The `whsec_` signing secret, sealed (`@alias/webhooks` `Secrets`, PLAN.md §20.30): signing
+   * needs the secret itself, so it can't be a hash like every other credential in the table.
+   */
+  readonly sealedSecret: Uint8Array;
+  /** The sealed secret before the last rotation, which still signs until `previousSecretUntil`. */
+  readonly previousSealedSecret: Option.Option<Uint8Array>;
   readonly previousSecretUntil: Option.Option<DateTime.Utc>;
   readonly isEnabled: boolean;
   readonly createdAt: DateTime.Utc;
 }
 
-export type NewWebhook = Omit<Webhook, "previousSecret" | "previousSecretUntil" | "isEnabled">;
+export type NewWebhook = Omit<
+  Webhook,
+  "previousSealedSecret" | "previousSecretUntil" | "isEnabled"
+>;
 
 export interface WebhookChanges {
   readonly eventTypes?: ReadonlyArray<string>;
@@ -57,11 +63,11 @@ export class WebhookRepo extends Context.Service<
       webhookId: string,
       changes: WebhookChanges,
     ) => Effect.Effect<Webhook, NoSuchWebhook | DatabaseError>;
-    /** Makes `secret` the signing secret; the old one keeps signing until `previousUntil`. */
+    /** Makes `sealedSecret` the signing secret; the old one keeps signing until `previousUntil`. */
     readonly rotateSecret: (
       userId: string,
       webhookId: string,
-      secret: string,
+      sealedSecret: Uint8Array,
       previousUntil: DateTime.Utc,
     ) => Effect.Effect<Webhook, NoSuchWebhook | DatabaseError>;
     readonly delete: (
@@ -83,8 +89,8 @@ const WebhookItem = Item.codec(
     userId: Attribute.S,
     url: Attribute.S,
     eventTypes: Attribute.StringList,
-    secret: Attribute.S,
-    previousSecret: Schema.OptionFromOptionalKey(Attribute.S),
+    sealedSecret: Attribute.B,
+    previousSealedSecret: Schema.OptionFromOptionalKey(Attribute.B),
     previousSecretUntil: Schema.OptionFromOptionalKey(Attribute.EpochMillis),
     isEnabled: Attribute.BOOL,
     createdAt: Attribute.EpochMillis,
@@ -128,7 +134,7 @@ const make = Effect.fn("WebhookRepo.make")(function* () {
     create: Effect.fn("WebhookRepo.create")(function* (webhook) {
       const attributes = yield* WebhookItem.encode({
         ...webhook,
-        previousSecret: Option.none(),
+        previousSealedSecret: Option.none(),
         previousSecretUntil: Option.none(),
         isEnabled: true,
       });
@@ -192,7 +198,7 @@ const make = Effect.fn("WebhookRepo.make")(function* () {
     },
 
     // Right-hand operands read the item as it was, so the old secret moves over atomically.
-    rotateSecret: (userId, webhookId, secret, previousUntil) =>
+    rotateSecret: (userId, webhookId, sealedSecret, previousUntil) =>
       Effect.flatMap(
         Schema.encodeEffect(Attribute.EpochMillis)(previousUntil).pipe(
           Effect.mapError(databaseError("EncodeWebhook")),
@@ -201,8 +207,8 @@ const make = Effect.fn("WebhookRepo.make")(function* () {
           updateItem(
             userId,
             webhookId,
-            "SET previousSecret = secret, secret = :secret, previousSecretUntil = :until",
-            { ":secret": { S: secret }, ":until": until },
+            "SET previousSealedSecret = sealedSecret, sealedSecret = :secret, previousSecretUntil = :until",
+            { ":secret": { B: sealedSecret }, ":until": until },
           ),
       ),
 

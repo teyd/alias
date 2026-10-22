@@ -5,7 +5,7 @@ import {
   type MessageView,
   RetentionDays,
 } from "@alias/contracts";
-import { type Keyring, Message, Verification } from "@alias/core";
+import { type Keyring, Message, Seal, Verification } from "@alias/core";
 import { type AliasRepo, type Dynamo, MessageRepo } from "@alias/db";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
@@ -145,7 +145,7 @@ const make = Effect.fn("Inbox.make")(function* (bucket: string) {
     const dataKey = yield* Envelope.unwrap(keys, context, stored);
     const bytes = yield* Envelope.openPart(dataKey, context, "summary", stored.summary);
     const summary = yield* Schema.decodeUnknownEffect(SummaryJson)(decoder.decode(bytes)).pipe(
-      Effect.mapError(() => new Envelope.EnvelopeError({ reason: "summary does not decode" })),
+      Effect.mapError(() => new Seal.SealError({ reason: "summary does not decode" })),
     );
     return { dataKey, summary };
   });

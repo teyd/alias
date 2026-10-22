@@ -2,10 +2,16 @@
 import { type LambdaHandler, SqsEvent } from "@alias/aws";
 import { Delivery } from "@alias/webhooks";
 import * as Effect from "effect/Effect";
-import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import { ServicesConfig } from "./services.ts";
 
-const runtime = ManagedRuntime.make(Effect.runSync(ServicesConfig));
+// Build the services, which reads the webhook keys from Parameter Store, during Lambda's init
+// phase and keep them for the container's life. A failure here fails the init, so Lambda starts
+// a fresh environment instead of keeping one whose first build failed for good (PLAN.md §20.14).
+const services = await Effect.runPromise(
+  Layer.buildWithScope(Effect.runSync(ServicesConfig), Scope.makeUnsafe()),
+);
 
 /**
  * @public Alchemy bundles it as the webhook delivery Lambda. The mapping has
@@ -14,6 +20,6 @@ const runtime = ManagedRuntime.make(Effect.runSync(ServicesConfig));
  * messages come back and, if they never parse, end in the dead-letter queue.
  */
 export default ((event) =>
-  runtime.runPromise(
-    SqsEvent.decode(event).pipe(Effect.flatMap(Delivery.handle)),
+  Effect.runPromise(
+    SqsEvent.decode(event).pipe(Effect.flatMap(Delivery.handle), Effect.provide(services)),
   )) satisfies LambdaHandler<unknown, SqsEvent.BatchResponse>;

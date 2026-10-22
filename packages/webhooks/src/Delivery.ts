@@ -13,9 +13,11 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Random from "effect/Random";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { JobJson } from "./Job.ts";
+import * as Secrets from "./Secrets.ts";
 import { UrlPolicy } from "./UrlPolicy.ts";
 
 /**
@@ -94,13 +96,23 @@ const attempt = Effect.fn("Delivery.attempt")(function* (record: SqsEvent.SqsRec
   if (Result.isFailure(url)) return dropped(`url-${url.failure}`);
 
   const now = yield* DateTime.now;
-  const secrets = Arr.getSomes([
-    Webhook.secretKey(endpoint.secret),
+  const owner = { userId: endpoint.userId, webhookId: endpoint.id };
+  const sealed = Arr.getSomes([
+    Option.some(endpoint.sealedSecret),
     Option.flatMap(
       Option.filter(endpoint.previousSecretUntil, (until) => DateTime.isGreaterThan(until, now)),
-      () => Option.flatMap(endpoint.previousSecret, Webhook.secretKey),
+      () => endpoint.previousSealedSecret,
     ),
   ]);
+  // A secret that doesn't open (its key version left the keyring, or the item was tampered
+  // with) is a configuration problem: retried, so the job reaches the dead-letter queue intact.
+  const opened = yield* Effect.result(
+    Effect.forEach(sealed, (secret) => Secrets.open(owner, secret), { concurrency: 1 }),
+  );
+  if (Result.isFailure(opened)) return retry("secret-unreadable");
+  const secrets = Arr.getSomes(
+    Arr.map(opened.success, (secret) => Webhook.secretKey(Redacted.value(secret))),
+  );
   const body = yield* Effect.orDie(encodeEvent(job.value.event));
   const timestamp = Math.floor(DateTime.toEpochMillis(now) / 1000);
   const signature = yield* Effect.orDie(
@@ -187,9 +199,13 @@ export const production = Layer.succeed(DeliverySettings, {
   timeout: Duration.seconds(15),
 });
 
-/** What callers provide: the table, the queue (for backoff), settings and the egress client. */
+/**
+ * What callers provide: the table, the queue (for backoff), settings, the egress client and the
+ * keys that open the endpoints' secrets.
+ */
 export type Services =
   | Dynamo.Database
+  | Secrets.WebhookKeys
   | MessageQueue.MessageQueue
   | DeliverySettings
   | UrlPolicy

@@ -3,7 +3,7 @@ import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { Doh } from "@alias/dns";
 import { Inbox } from "@alias/inbox";
-import { UrlPolicy } from "@alias/webhooks";
+import { Secrets, UrlPolicy } from "@alias/webhooks";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -58,6 +58,7 @@ export const ServicesConfig = Config.all([
   MailConfig,
   MessageQueue.config("ALIAS_WEBHOOK_QUEUE_URL"),
   UrlPolicy.config,
+  Secrets.config,
   Identities.config,
   Doh.config,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));

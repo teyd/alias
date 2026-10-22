@@ -219,7 +219,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       userId,
       url: `https://hooks.${name}.example/`,
       eventTypes: ["mail.forwarded"],
-      secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+      sealedSecret: new TextEncoder().encode("sealed"),
       createdAt: at(1_000),
     }),
   );

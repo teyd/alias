@@ -21,7 +21,7 @@ import { AliasRepo, DomainRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { Doh } from "@alias/dns";
 import { Inbox } from "@alias/inbox";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
-import { UrlPolicy, WebhookQueue } from "@alias/webhooks";
+import { Secrets, UrlPolicy, WebhookQueue } from "@alias/webhooks";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -45,11 +45,13 @@ const mail = Layer.merge(
 ).pipe(Layer.provideMerge(sharedDomains));
 /**
  * The webhook queue, as `apps/webhooks/bin/dev.ts` delivers from it; created here too, so either
- * may start first. Dev receivers may listen on `http://localhost`.
+ * may start first. Dev receivers may listen on `http://localhost`. Secrets are sealed with the
+ * dev webhook keys, which the delivery process reads from the same fakecloud.
  */
-const webhooks = Layer.merge(
+const webhooks = Layer.mergeAll(
   WebhookQueue.dev.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
   UrlPolicy.layer({ isLoopbackAllowed: true }),
+  Secrets.dev(fakecloudUrl),
 );
 const domains = Layer.merge(
   Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),

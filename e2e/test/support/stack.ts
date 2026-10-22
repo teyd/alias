@@ -22,7 +22,7 @@ import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Inbox } from "@alias/inbox";
 import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
-import { Delivery, Egress, UrlPolicy } from "@alias/webhooks";
+import { Delivery, Egress, Secrets, UrlPolicy } from "@alias/webhooks";
 import { TestQueue, freshQueue } from "@alias/webhooks/testing";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -112,6 +112,27 @@ const inboxStore = Layer.unwrap(
     );
   }),
 ).pipe(Layer.provide(aws));
+/**
+ * The webhook keys (PLAN.md §20.30) as production reads them: a SecureString in Parameter Store,
+ * read by the API (sealing endpoint secrets) and the delivery Lambda (opening them).
+ */
+const webhookKeysParameter = "/alias/e2e/webhook-keys";
+const webhookKeys = Layer.unwrap(
+  Effect.gen(function* () {
+    yield* SSM.putParameter({
+      Name: webhookKeysParameter,
+      Type: "SecureString",
+      Value: `1:${Buffer.alloc(32, 21).toString("base64url")}`,
+      Overwrite: true,
+    });
+    const { url } = yield* FakeCloud.FakeCloud;
+    return Layer.effect(
+      Secrets.WebhookKeys,
+      Parameters.keyring(webhookKeysParameter).pipe(Effect.provide(AwsClient.emulator(url))),
+    );
+  }),
+).pipe(Layer.provide(aws));
+
 /** Temporary inboxes live on their own registrable domain. */
 const tempDomains = TempDomains.layer("tmp.test").pipe(Layer.provide(sharedDomains));
 
@@ -140,6 +161,7 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty:
       ),
       Layer.succeedContext(yield* Effect.context<MessageQueue.MessageQueue>()),
       Layer.succeedContext(yield* Effect.context<Inbox.Inbox>()),
+      Layer.succeedContext(yield* Effect.context<Secrets.WebhookKeys>()),
       tempDomains,
       urlPolicy,
       // The contexts above carry the test's clock; the Lambda runs in real time, which its long
@@ -265,6 +287,7 @@ const delivery = Layer.effect(
           Delivery.production,
           NodeCrypto.layer,
           Egress.layer,
+          webhookKeys,
         ).pipe(Layer.provideMerge(urlPolicy)),
       ),
     );
@@ -279,7 +302,7 @@ const delivery = Layer.effect(
 /** Everything, with `api` (a layer that serves `apiHandler`) on the same table, queue and fakecloud. */
 export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
   Layer.mergeAll(
-    api.pipe(Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore))),
+    api.pipe(Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore, webhookKeys))),
     inbound,
     feedback,
     delivery,

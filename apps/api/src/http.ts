@@ -16,7 +16,7 @@ import {
   UserRepo,
   WebhookRepo,
 } from "@alias/db";
-import { Egress, Publisher, type UrlPolicy } from "@alias/webhooks";
+import { Egress, Publisher, type Secrets, type UrlPolicy } from "@alias/webhooks";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
@@ -75,8 +75,8 @@ const Repositories = Layer.mergeAll(
 
 /**
  * What callers provide: the database, the WebAuthn relying party, the shared and temp-mail
- * domains, outgoing mail, the webhook queue and URL policy, SES identities and a DNS resolver
- * (custom domains), and the inbox store.
+ * domains, outgoing mail, the webhook queue, URL policy and secret keys, SES identities and a DNS
+ * resolver (custom domains), and the inbox store.
  */
 export type Services =
   | Dynamo.Database
@@ -88,6 +88,7 @@ export type Services =
   | MailSettings
   | MessageQueue.MessageQueue
   | UrlPolicy.UrlPolicy
+  | Secrets.WebhookKeys
   | Identities.Identities
   | Doh.Resolver;
 

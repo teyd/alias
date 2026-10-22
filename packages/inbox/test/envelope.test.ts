@@ -51,7 +51,7 @@ describe("Envelope", () => {
       const elsewhere = yield* Effect.flip(
         openBoth(keys, sealed, { ...context, messageId: "msg_2" }),
       );
-      expect(elsewhere._tag).toBe("EnvelopeError");
+      expect(elsewhere._tag).toBe("SealError");
       const dataKey = yield* Envelope.unwrap(keys, context, sealed);
       const swapped = yield* Effect.flip(
         Envelope.openPart(dataKey, context, "summary", sealed.body),
@@ -81,5 +81,23 @@ describe("Envelope", () => {
       const only = yield* keyring(`2:${ROTATED}`);
       expect((yield* Effect.flip(openBoth(only, old))).reason).toBe("no inbox key version 1");
     }).pipe(Effect.provide(NodeCrypto.layer)),
+  );
+
+  // Sealed by the code before sealing moved to core's `Seal` (PLAN.md §20.30): stored mail
+  // written before the move still opens.
+  it.effect("opens what the previous implementation sealed", () =>
+    Effect.gen(function* () {
+      const keys = yield* keyring(TEST_INBOX_KEYS);
+      const hex = (value: string) => Uint8Array.from(Buffer.from(value, "hex"));
+      const sealed: Envelope.Sealed = {
+        keyVersion: 1,
+        wrappedKey: hex(
+          "0126372a2705f815df544ebdfd94ce60d005e8f5a880c40f0ee1e4d8c2a02d3c03d0077e2f5192117b9833ce57b8d0cec72fbe32d82386a2e0eec8c626",
+        ),
+        body: hex("01c308784493e08b51fbeaee5448f8648771dc33f3e0f4b67139ec9e439e9916290d828fafd28b"),
+        summary: hex("015d59ed1a725af07d5956e934545de0b6f10b177605f7cb9021f624bfb0a8"),
+      };
+      expect(yield* openBoth(keys, sealed)).toEqual({ body: "Hello body", summary: "{}" });
+    }),
   );
 });

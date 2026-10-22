@@ -296,7 +296,8 @@ describe("inbound pipeline (fakecloud)", () => {
             userId: "usr_1",
             url: "https://hooks.example.com/",
             eventTypes: ["mail.forwarded", "mail.blocked", "alias.created"],
-            secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+            // Producers only enqueue job ids; the sealed secret is never opened here.
+            sealedSecret: new TextEncoder().encode("sealed"),
             createdAt: DateTime.makeUnsafe(0),
           }),
         ).pipe(Effect.provide(WebhookRepo.layer));

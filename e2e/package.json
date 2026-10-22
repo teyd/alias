@@ -4,6 +4,9 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
+  "exports": {
+    "./stack": "./test/support/stack.ts"
+  },
   "scripts": {
     "test": "vp test",
     "test:stack": "vp test"

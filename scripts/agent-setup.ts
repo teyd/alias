@@ -1,7 +1,7 @@
 /**
- * Prepares a worktree for an agent (or a human). It installs dependencies and DynamoDB Local,
- * claims a port block, and writes `.dev/env`. Safe to re-run; T3 Code runs it when it creates a
- * worktree.
+ * Prepares a worktree for an agent (or a human). It installs dependencies, DynamoDB Local and the
+ * browser tests' Chromium, claims a port block, and writes `.dev/env`. Safe to re-run; T3 Code
+ * runs it when it creates a worktree.
  * `pnpm agent:setup` runs it under `mise exec`, so Node, pnpm and Java come from mise.toml.
  */
 import { execFileSync } from "node:child_process";
@@ -17,6 +17,13 @@ if (!process.argv.includes("--skip-install")) {
 
 // Amazon DynamoDB Local, the reference DynamoDB emulator (runs on mise's Java 17).
 execFileSync("node", ["tools/aws-emulators/bin/install-dynamodb-local.ts"], {
+  cwd: root,
+  stdio: "inherit",
+});
+
+// Headless Chromium for the browser tests, the build pinned by the catalog's Playwright version
+// (into Playwright's own cache; a no-op when it is already there).
+execFileSync("pnpm", ["--filter", "@alias/browser", "install-browser"], {
   cwd: root,
   stdio: "inherit",
 });

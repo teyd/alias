@@ -39,6 +39,7 @@ jobs:
           - "@alias/lambda-emulator"
           - "@alias/doh-emulator"
           - "@alias/e2e"
+          - "@alias/browser"
     steps:
       - uses: actions/checkout@v5
       # Installs Node, pnpm, Java, and fakecloud from mise.toml and verifies them against mise.lock.
@@ -49,6 +50,19 @@ jobs:
           key: dynamodb-local-${{ hashFiles('tools/aws-emulators/src/DynamoDbLocal.ts') }}
       - run: pnpm install --frozen-lockfile
       - run: node tools/aws-emulators/bin/install-dynamodb-local.ts
+      # Browser tests: headless Chromium at the build the catalog's Playwright pins, cached by that
+      # version. `--with-deps` adds the system libraries it needs even on a cache hit.
+      - if: matrix.package == '@alias/browser'
+        id: playwright
+        run: |
+          echo "version=$(sed -n 's/^  playwright: //p' pnpm-workspace.yaml)" >> "$GITHUB_OUTPUT"
+      - if: matrix.package == '@alias/browser'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: matrix.package == '@alias/browser'
+        run: pnpm --filter @alias/browser install-browser --with-deps
       - run: pnpm --filter "${{ matrix.package }}" test
 
   build:

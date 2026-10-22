@@ -2,6 +2,7 @@ import type { Recipient } from "@alias/contracts";
 import { type UseQueryResult, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -91,6 +92,7 @@ const RecipientRow = ({ recipient }: { readonly recipient: Recipient }) => {
     : recipient.isVerified
       ? "Confirmed"
       : "Waiting for confirmation";
+  const date = (at: DateTime.Utc) => DateTime.format(at, { dateStyle: "medium" });
 
   return (
     <li className="flex flex-col gap-2 border-b py-3 last:border-b-0">
@@ -98,6 +100,25 @@ const RecipientRow = ({ recipient }: { readonly recipient: Recipient }) => {
         <div className="flex flex-col">
           <span className="font-medium">{recipient.address}</span>
           <span className="text-xs text-muted-foreground">{status}</span>
+          {Option.match(recipient.bouncedAt, {
+            onNone: () => null,
+            onSome: (at) => (
+              <span className="text-xs text-destructive">
+                Bounced on {date(at)}: nothing is forwarded here.{" "}
+                {recipient.isVerified
+                  ? "Remove it and add it again to retry."
+                  : "Resend the link to retry."}
+              </span>
+            ),
+          })}
+          {Option.match(recipient.complainedAt, {
+            onNone: () => null,
+            onSome: (at) => (
+              <span className="text-xs text-muted-foreground">
+                Marked forwarded mail as spam on {date(at)}. Block the sender on its alias instead.
+              </span>
+            ),
+          })}
         </div>
         <div className="flex gap-2">
           {!recipient.isVerified && (

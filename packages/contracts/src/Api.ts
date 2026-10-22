@@ -15,6 +15,10 @@ const AliasView = Schema.Struct({
   address: Schema.String,
   mode: AliasMode,
   isActive: Schema.Boolean,
+  /** Mail passed on to the owner. */
+  forwardedCount: Schema.Number,
+  /** Mail refused: spam, viruses, loops, blocked contacts, caps, a disabled alias. */
+  blockedCount: Schema.Number,
 });
 export type AliasView = typeof AliasView.Type;
 

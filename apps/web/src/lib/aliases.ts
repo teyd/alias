@@ -54,7 +54,7 @@ export const createAlias = (input: { readonly domain: string; readonly local: st
   );
 
 /** Path parameters for an alias address; local parts never contain `@`. */
-const params = (address: string) => {
+export const aliasParams = (address: string) => {
   const at = address.lastIndexOf("@");
   return { local: address.slice(0, at), domain: address.slice(at + 1) };
 };
@@ -62,7 +62,7 @@ const params = (address: string) => {
 export const updateAlias = (
   address: string,
   payload: { readonly mode?: Mode; readonly isActive?: boolean },
-) => explain((api) => api.aliases.update({ params: params(address), payload }));
+) => explain((api) => api.aliases.update({ params: aliasParams(address), payload }));
 
 export const deleteAlias = (address: string) =>
-  explain((api) => api.aliases.remove({ params: params(address) }));
+  explain((api) => api.aliases.remove({ params: aliasParams(address) }));

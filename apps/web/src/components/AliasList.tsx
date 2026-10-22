@@ -1,8 +1,10 @@
 import type { AliasView } from "@alias/contracts";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { ContactList } from "@/components/ContactList";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +17,7 @@ import {
   domainsQuery,
   updateAlias,
 } from "@/lib/aliases";
+import { setOnTheFly, settingsQuery } from "@/lib/settings";
 
 /** Styled like `Input`; there is no shadcn select in the repo yet. */
 const selectClass =
@@ -110,7 +113,13 @@ const CreateAlias = ({
   );
 };
 
-const AliasRow = ({ alias }: { readonly alias: AliasView }) => {
+const AliasRow = ({
+  alias,
+  isShowingContacts,
+}: {
+  readonly alias: AliasView;
+  readonly isShowingContacts: boolean;
+}) => {
   const queryClient = useQueryClient();
   const refresh = () => queryClient.invalidateQueries({ queryKey: aliasesQuery.queryKey });
   const update = useMutation({
@@ -125,11 +134,25 @@ const AliasRow = ({ alias }: { readonly alias: AliasView }) => {
   return (
     <li className="flex flex-col gap-1 py-3">
       <div className="flex items-center gap-2">
-        <span
-          className={`flex-1 font-mono text-sm ${alias.isActive ? "" : "text-muted-foreground line-through"}`}
-        >
-          {alias.address}
-        </span>
+        <div className="flex flex-1 flex-col">
+          <span
+            className={`font-mono text-sm ${alias.isActive ? "" : "text-muted-foreground line-through"}`}
+          >
+            {alias.address}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {alias.forwardedCount} forwarded · {alias.blockedCount} blocked
+          </span>
+        </div>
+        <Button asChild variant="ghost" size="sm">
+          <Link
+            to="/"
+            search={isShowingContacts ? {} : { contacts: alias.address }}
+            aria-expanded={isShowingContacts}
+          >
+            Contacts
+          </Link>
+        </Button>
         <select
           aria-label={`Mode of ${alias.address}`}
           className={selectClass}
@@ -168,12 +191,51 @@ const AliasRow = ({ alias }: { readonly alias: AliasView }) => {
           {error.message}
         </p>
       )}
+      {isShowingContacts && <ContactList aliasAddress={alias.address} />}
     </li>
   );
 };
 
-/** The signed-in user's aliases, with create, enable/disable, mode and delete. */
-export const AliasList = () => {
+/** The opt-in for aliases created by the first mail to a new address on the user's subdomain. */
+const OnTheFlySetting = ({ subdomains }: { readonly subdomains: ReadonlyArray<string> }) => {
+  const queryClient = useQueryClient();
+  const settings = useQuery(settingsQuery);
+  const update = useMutation({
+    mutationFn: setOnTheFly,
+    onSuccess: (stored) => queryClient.setQueryData(settingsQuery.queryKey, stored),
+  });
+  const example = Option.getOrElse(Arr.head(subdomains), () => "you.alias.example");
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border p-3">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input
+          type="checkbox"
+          className="size-4"
+          checked={settings.data?.isOnTheFlyEnabled ?? false}
+          disabled={!settings.isSuccess || update.isPending}
+          onChange={(event) => update.mutate(event.target.checked)}
+        />
+        Create aliases on the fly
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Mail to any new address on {example} creates that alias and is forwarded. Off, it is dropped
+        until you create the alias here.
+      </p>
+      {update.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          Couldn't save the setting. Please try again.
+        </p>
+      )}
+    </div>
+  );
+};
+
+/**
+ * The signed-in user's aliases, with create, enable/disable, mode, delete, their counters, and
+ * the contacts of the one named in the URL (`?contacts=<address>`).
+ */
+export const AliasList = ({ openContacts }: { readonly openContacts: Option.Option<string> }) => {
   const aliases = useQuery(aliasesQuery);
   const domains = useQuery(domainsQuery);
 
@@ -187,7 +249,10 @@ export const AliasList = () => {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {domains.isSuccess && (
-          <CreateAlias shared={domains.data.shared} subdomains={domains.data.subdomains} />
+          <>
+            <CreateAlias shared={domains.data.shared} subdomains={domains.data.subdomains} />
+            <OnTheFlySetting subdomains={domains.data.subdomains} />
+          </>
         )}
         {aliases.isPending ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -198,7 +263,11 @@ export const AliasList = () => {
         ) : Arr.isReadonlyArrayNonEmpty(aliases.data) ? (
           <ul className="divide-y">
             {Arr.map(aliases.data, (alias) => (
-              <AliasRow key={alias.id} alias={alias} />
+              <AliasRow
+                key={alias.id}
+                alias={alias}
+                isShowingContacts={Option.contains(openContacts, alias.address)}
+              />
             ))}
           </ul>
         ) : (

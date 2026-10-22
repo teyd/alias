@@ -30,6 +30,11 @@ const api = Effect.map(TestApi.make, (handler) => ({
       ),
       Effect.provide(handler.context),
     ),
+  countMail: (localPart: string, counter: "forwarded" | "blocked") =>
+    AliasRepo.make().pipe(
+      Effect.flatMap((repo) => repo.increment("alias.test", localPart, counter)),
+      Effect.provide(handler.context),
+    ),
   findAlias: (domain: string, localPart: string) =>
     AliasRepo.make().pipe(
       Effect.flatMap((repo) => repo.findByAddress(domain, localPart)),
@@ -138,19 +143,29 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("looks up the caller's own aliases only", () =>
+  it.effect("looks up the caller's own aliases only, with their counters", () =>
     Effect.gen(function* () {
-      const { browser: open, seedAlias } = yield* api;
+      const { browser: open, seedAlias, countMail } = yield* api;
       const browser = open();
       const registered = yield* signUp(browser, TestAuthenticator.make(Browser.origin), "grace");
       const { userId } = Schema.decodeUnknownSync(Me)(registered.body);
       const alias = { domain: "alias.test", mode: "forward", createdAt: 0 } as const;
       yield* seedAlias({ ...alias, id: "al_mine", userId, localPart: "shop" });
       yield* seedAlias({ ...alias, id: "al_theirs", userId: "usr_other", localPart: "bank" });
+      yield* countMail("shop", "forwarded");
+      yield* countMail("shop", "forwarded");
+      yield* countMail("shop", "blocked");
 
       expect(yield* browser.get("/v1/aliases/alias.test/shop")).toMatchObject({
         status: 200,
-        body: { id: "al_mine", address: "shop@alias.test", mode: "forward", isActive: true },
+        body: {
+          id: "al_mine",
+          address: "shop@alias.test",
+          mode: "forward",
+          isActive: true,
+          forwardedCount: 2,
+          blockedCount: 1,
+        },
       });
       // Someone else's alias looks exactly like a missing one.
       const others = yield* Effect.forEach(

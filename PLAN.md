@@ -1026,6 +1026,17 @@ A new AWS dependency (SES event publishing, SNS → Lambda), so the emulation wa
 
 **Tests.** Contract (fixtures for the SNS Lambda event, the HTTP notification and confirmation, the bounce and complaint records), emulator (`SnsSubscriber` on the fixtures and on fakecloud), aws-emulators (suppress/unsuppress, sending through a configuration set with tags), repository (`markBounced`/`markComplained`, a resend clears the bounce, both engines), feedback handler on fakecloud through the real chain (simulator → SNS → subscriber: fakecloud's events decode and carry the tags; a hard bounce marks and suppresses, twice idempotently; a complaint is recorded but not suppressed; a reply complaint is ignored) and on the documented payloads (untagged bounce suppresses; transient, other and unreadable are ignored), pipeline (`recipient-bounced`), API (re-adding a suppressed address unsuppresses it) and stack (`e2e`: a forwarding address that bounces its confirmation is marked in `GET /v1/recipients`, suppressed, and later mail to the alias is dropped as `recipient-bounced`).
 
+### 20.12 Web UI for phases 3 and 4 (2026-10-22)
+
+The React app now shows what the last steps built, through `@alias/contracts` only:
+
+- **Alias counters.** `AliasView` gained `forwardedCount` and `blockedCount` (API handler test included), shown under each alias.
+- **Contacts.** "Contacts" on an alias opens its list (`?contacts=<address>` in the URL, so the panel survives a reload and can be linked; the Effect lint forbids `useState`). Each contact shows its name and address, when it first wrote and whether it's blocked, with Block/Unblock and Remove (`GET/PATCH/DELETE …/contacts`).
+- **On-the-fly toggle.** A checkbox in the aliases card reads and writes `/v1/settings`, naming the user's subdomain.
+- **Recipient bounce status.** The forwarding page marks a bounced address ("nothing is forwarded here", with how to retry) and a recorded complaint.
+
+Verified by `pnpm check` (lint, types, knip) and `vite build`, and against live data on `pnpm dev` through the API (counters 3/1 after a blocked sender, contacts, `bouncedAt`). Not looked at in a browser: the preview browser can't sign in (no passkey authenticator, and it refuses the `Secure` session cookie over plain http). A Playwright run with a virtual WebAuthn authenticator would close that gap.
+
 ## Sources
 
 - Cloudflare: [Email Routing subdomains](https://developers.cloudflare.com/email-service/configuration/subdomains/) · [Email Service limits](https://developers.cloudflare.com/email-service/platform/limits/) · [Email Service pricing](https://developers.cloudflare.com/email-service/platform/pricing/) · [Local dev: routing](https://developers.cloudflare.com/email-service/local-development/routing/) · [Local dev: sending](https://developers.cloudflare.com/email-service/local-development/sending/) · [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) · [Email for agents (beta)](https://blog.cloudflare.com/email-for-agents/) · [Community: subdomain wildcard](https://community.cloudflare.com/t/email-routing-subdomain-wildcard/705061)

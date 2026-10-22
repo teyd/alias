@@ -33,7 +33,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { aliasesQuery, createAlias, domainsQuery } from "@/lib/aliases";
+import { aliasesQuery, createAlias, type Delivery, domainsQuery } from "@/lib/aliases";
+import { inboxesQuery } from "@/lib/inboxes";
+
+const DELIVERY: ReadonlyArray<{ readonly value: Delivery; readonly label: string }> = [
+  { value: "forward", label: "Forward to my destination" },
+  { value: "inbox", label: "Keep in an inbox" },
+  { value: "both", label: "Forward and keep in an inbox" },
+];
 
 const CreateAliasForm = ({
   shared,
@@ -51,17 +58,27 @@ const CreateAliasForm = ({
   const queryClient = useQueryClient();
   const create = useMutation({
     mutationFn: createAlias,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: aliasesQuery.queryKey }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: aliasesQuery.queryKey }),
+        queryClient.invalidateQueries({ queryKey: inboxesQuery.queryKey }),
+      ]),
   });
+  const mode: Delivery = "forward";
   const defaultValues = {
     domain: Option.getOrElse(Arr.head(Arr.appendAll(shared, subdomains)), () => ""),
     local: "",
+    mode,
   };
   const form = useForm({
     defaultValues,
     onSubmit: async ({ value }) => {
       const isSubdomain = Arr.contains(addressable, value.domain);
-      await create.mutateAsync({ domain: value.domain, local: isSubdomain ? value.local : "" });
+      await create.mutateAsync({
+        domain: value.domain,
+        local: isSubdomain ? value.local : "",
+        mode: value.mode,
+      });
       onCreated();
     },
   });
@@ -161,6 +178,35 @@ const CreateAliasForm = ({
             )}
           </form.Field>
         )}
+        <form.Field name="mode">
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor="alias-mode">Delivery</FieldLabel>
+              <Select
+                value={field.state.value}
+                items={DELIVERY}
+                onValueChange={(value) => field.handleChange(value ?? "forward")}
+              >
+                <SelectTrigger id="alias-mode" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  {Arr.map(DELIVERY, (option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {field.state.value !== "forward" && (
+                <FieldDescription>
+                  Kept encrypted for a week, readable under Inbox. Codes and sign-in links are
+                  picked out for you.
+                </FieldDescription>
+              )}
+            </Field>
+          )}
+        </form.Field>
         {Str.isNonEmpty(preview) && (
           <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted px-3 py-2">
             <div className="flex min-w-0 flex-col gap-0.5">
@@ -201,8 +247,8 @@ export const CreateAliasDialog = ({
         <DialogHeader>
           <DialogTitle>New alias</DialogTitle>
           <DialogDescription>
-            Mail to it is forwarded to your default destination. Replies go out through a reverse
-            alias, so senders never see your mailbox.
+            Mail to it is forwarded to your default destination, or kept in an inbox here. Replies
+            go out through a reverse alias, so senders never see your mailbox.
           </DialogDescription>
         </DialogHeader>
         {domains.isPending ? (

@@ -9,6 +9,7 @@ import {
   InboxIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MailIcon,
   MenuIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -31,10 +32,11 @@ import {
 } from "@/components/ui/sidebar";
 import { aliasesQuery, domainsQuery } from "@/lib/aliases";
 import { callApi } from "@/lib/api";
+import { inboxesQuery } from "@/lib/inboxes";
 import { recipientsQuery } from "@/lib/recipients";
 import { forgetSession, meQuery } from "@/lib/session";
 
-type Destination = "/" | "/aliases" | "/destinations" | "/domains" | "/settings";
+type Destination = "/" | "/aliases" | "/inbox" | "/destinations" | "/domains" | "/settings";
 
 /** How many rows a list holds, once it has loaded. */
 const countOf = <A,>(rows: Option.Option<ReadonlyArray<A>>) => Option.map(rows, Arr.length);
@@ -120,6 +122,7 @@ const Account = () => {
 const NavContent = ({ isClosing }: { readonly isClosing: boolean }) => {
   const aliases = useQuery(aliasesQuery);
   const recipients = useQuery(recipientsQuery);
+  const inboxes = useQuery(inboxesQuery);
   const domains = useQuery(domainsQuery);
   const domainCount = Option.map(Option.fromUndefinedOr(domains.data), (data) =>
     Arr.length(Arr.appendAll(data.shared, data.subdomains)),
@@ -151,6 +154,13 @@ const NavContent = ({ isClosing }: { readonly isClosing: boolean }) => {
                   icon={<AtSignIcon />}
                   label="Aliases"
                   count={countOf(Option.fromUndefinedOr(aliases.data))}
+                  isClosing={isClosing}
+                />
+                <NavItem
+                  to="/inbox"
+                  icon={<MailIcon />}
+                  label="Inbox"
+                  count={countOf(Option.fromUndefinedOr(inboxes.data))}
                   isClosing={isClosing}
                 />
                 <NavItem

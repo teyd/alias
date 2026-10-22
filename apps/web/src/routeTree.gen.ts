@@ -17,6 +17,7 @@ import { Route as AppAliasesRouteImport } from './routes/_app/aliases'
 import { Route as AppDestinationsRouteImport } from './routes/_app/destinations'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as AppDomainsRouteImport } from './routes/_app/domains'
+import { Route as AppInboxRouteImport } from './routes/_app/inbox'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
 import { Route as OutboxDraftIdRouteImport } from './routes/outbox.$draftId'
@@ -60,6 +61,11 @@ const AppDomainsRoute = AppDomainsRouteImport.update({
   path: '/domains',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInboxRoute = AppInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/destinations': typeof AppDestinationsRoute
   '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
+  '/inbox': typeof AppInboxRoute
   '/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/outbox/$draftId': typeof OutboxDraftIdRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/destinations': typeof AppDestinationsRoute
   '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
+  '/inbox': typeof AppInboxRoute
   '/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/outbox/$draftId': typeof OutboxDraftIdRoute
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/_app/destinations': typeof AppDestinationsRoute
   '/_app/device': typeof AppDeviceRoute
   '/_app/domains': typeof AppDomainsRoute
+  '/_app/inbox': typeof AppInboxRoute
   '/_app/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/outbox/$draftId': typeof OutboxDraftIdRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/destinations'
     | '/device'
     | '/domains'
+    | '/inbox'
     | '/settings'
     | '/oauth/authorize'
     | '/outbox/$draftId'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
     | '/destinations'
     | '/device'
     | '/domains'
+    | '/inbox'
     | '/settings'
     | '/oauth/authorize'
     | '/outbox/$draftId'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '/_app/destinations'
     | '/_app/device'
     | '/_app/domains'
+    | '/_app/inbox'
     | '/_app/settings'
     | '/oauth/authorize'
     | '/outbox/$draftId'
@@ -220,6 +232,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDomainsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/inbox': {
+      id: '/_app/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings': {
       id: '/_app/settings'
       path: '/settings'
@@ -249,6 +268,7 @@ interface AppRouteChildren {
   AppDestinationsRoute: typeof AppDestinationsRoute
   AppDeviceRoute: typeof AppDeviceRoute
   AppDomainsRoute: typeof AppDomainsRoute
+  AppInboxRoute: typeof AppInboxRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -258,6 +278,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDestinationsRoute: AppDestinationsRoute,
   AppDeviceRoute: AppDeviceRoute,
   AppDomainsRoute: AppDomainsRoute,
+  AppInboxRoute: AppInboxRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
 }

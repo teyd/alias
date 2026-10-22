@@ -29,6 +29,7 @@ jobs:
           - "@alias/aws"
           - "@alias/db"
           - "@alias/api"
+          - "@alias/inbound"
           - "@alias/ses-emulator"
           - "@alias/aws-emulators"
           - "@alias/lambda-emulator"

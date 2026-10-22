@@ -18,6 +18,7 @@ produce payloads the same schemas accept.
 | `sns-http-subscription-confirmation.json` | https://docs.aws.amazon.com/sns/latest/dg/http-subscription-confirmation-json.html (body)                  |
 | `ses-event-bounce.json`                   | https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-examples.html (Bounce record)    |
 | `ses-event-complaint.json`                | https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-examples.html (Complaint record) |
+| `ssm-get-parameter-response.json`         | https://docs.aws.amazon.com/systems-manager/latest/APIReference/API_GetParameter.html (sample response)    |
 
 `sesv2-raw-message.eml` is the multipart example exactly as printed, without the line numbers, with
 its folded header lines and LF line endings.
@@ -33,5 +34,9 @@ boto3 example on the send-email-raw page, and `Content.Raw.Data` is the base64 o
 The SNS HTTP fixtures are the JSON bodies of the documented POST requests, without the HTTP head.
 `sns-lambda-event.json` keeps the page's `&amp;` inside `UnsubscribeUrl` as printed (the page
 escapes the ampersand twice) and its mixed spelling: `SigningCertURL` but `UnsubscribeUrl`.
+
+`ssm-get-parameter-response.json` is the API reference's sample response as printed. Its request
+has no `WithDecryption`, so `Value` is the ciphertext; a decrypted response differs only there (KMS
+developer guide, "AWS KMS encryption for Parameter Store SecureString parameters").
 
 Payloads recorded from a real AWS account go next to these with a `recorded-` prefix (roadmap phase 2).

@@ -1,0 +1,11 @@
+{
+  "Parameter": {
+    "ARN": "arn:aws:ssm:us-east-2:111122223333:parameter/MyGitHubPassword",
+    "DataType": "text",
+    "LastModifiedDate": 1582657288.8,
+    "Name": "MyGitHubPassword",
+    "Type": "SecureString",
+    "Value": "AYA39c3b3042cd2aEXAMPLE/AKIAIOSFODNN7EXAMPLE/fh983hg9awEXAMPLE==",
+    "Version": 3
+  }
+}

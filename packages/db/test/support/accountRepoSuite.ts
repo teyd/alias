@@ -185,6 +185,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       expiresAt: at(9_000_000_000_000),
     },
     issued(0),
+    { isRegistered: false },
   );
   yield* oauth.rotate(
     { ...issued(0).refresh, usedAt: Option.none() },

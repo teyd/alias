@@ -4,6 +4,7 @@ import { OAuthRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import * as Option from "effect/Option";
@@ -24,6 +25,9 @@ import { Issuer } from "./Issuer.ts";
 export const MAX_REGISTRATIONS_PER_HOUR = 10;
 
 const DEFAULT_CLIENT_NAME = "Unnamed client";
+
+/** How long a registered client lives without a grant (PLAN.md §20.30); its first one keeps it. */
+const UNUSED_CLIENT_LIFETIME = Duration.days(30);
 
 const noStore = { "cache-control": "no-store", pragma: "no-cache" };
 
@@ -114,6 +118,7 @@ const register = Effect.fn("OAuth.register")(function* () {
     redirectUris: body.redirect_uris,
     uri: clientUri,
     createdAt: now,
+    expiresAt: Option.some(DateTime.addDuration(now, UNUSED_CLIENT_LIFETIME)),
   };
   yield* Effect.orDie(repo.registerClient(client));
   // Every client is public: whatever authentication it asked for, it gets none (§3.2.1 lets the

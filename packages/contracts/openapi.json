@@ -726,11 +726,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -857,11 +864,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -918,11 +932,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1111,11 +1132,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1229,11 +1257,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1395,11 +1430,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1522,11 +1564,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1657,11 +1706,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1770,11 +1826,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1887,11 +1950,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2009,11 +2079,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2124,11 +2201,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2244,11 +2328,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2351,11 +2442,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2451,11 +2549,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2624,11 +2729,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2849,11 +2961,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2944,11 +3063,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3091,11 +3217,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3227,11 +3360,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3437,11 +3577,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3531,11 +3678,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3643,11 +3797,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3810,11 +3971,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -3978,11 +4146,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4053,11 +4228,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4224,11 +4406,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4389,11 +4578,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4601,11 +4797,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4775,11 +4978,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -4866,11 +5076,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5052,11 +5269,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5156,11 +5380,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5239,11 +5470,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5376,11 +5614,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5485,11 +5730,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5612,11 +5864,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5718,11 +5977,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5823,11 +6089,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -5981,11 +6254,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6091,11 +6371,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6207,11 +6494,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6578,11 +6872,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6658,11 +6959,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6738,11 +7046,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6905,11 +7220,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7032,11 +7354,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7221,11 +7550,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7281,11 +7617,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7408,11 +7751,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7535,11 +7885,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7682,11 +8039,18 @@
             }
           },
           "403": {
-            "description": "Forbidden",
+            "description": "Forbidden | CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -7736,6 +8100,21 @@
             "type": "string",
             "enum": [
               "TooManyAttempts"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "CrossSiteRequestEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "CrossSiteRequest"
             ]
           }
         },

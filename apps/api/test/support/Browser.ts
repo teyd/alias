@@ -55,6 +55,7 @@ export const make = (handle: Handle, options: Options = {}) => {
     path: string,
     body: Option.Option<Schema.Json>,
     form?: Readonly<Record<string, string>>,
+    raw?: { readonly body: string; readonly headers: Readonly<Record<string, string>> },
   ) {
     const accepts = {
       accept: "application/json",
@@ -62,12 +63,14 @@ export const make = (handle: Handle, options: Options = {}) => {
       origin,
       ...options.headers,
     };
-    const headers = P.isNotUndefined(form)
-      ? { ...accepts, "content-type": "application/x-www-form-urlencoded" }
-      : Option.match(body, {
-          onNone: () => accepts,
-          onSome: () => ({ ...accepts, "content-type": "application/json" }),
-        });
+    const headers = P.isNotUndefined(raw)
+      ? { host: "api.alias.test", ...raw.headers }
+      : P.isNotUndefined(form)
+        ? { ...accepts, "content-type": "application/x-www-form-urlencoded" }
+        : Option.match(body, {
+            onNone: () => accepts,
+            onSome: () => ({ ...accepts, "content-type": "application/json" }),
+          });
     const [rawPath = path, rawQueryString = ""] = path.split("?");
     const event: Types.Mutable<FunctionUrl.FunctionUrlEvent> = {
       version: "2.0",
@@ -86,6 +89,7 @@ export const make = (handle: Handle, options: Options = {}) => {
     if (Arr.isArrayNonEmpty(cookies)) event.cookies = cookies;
     if (Option.isSome(body)) event.body = JSON.stringify(body.value);
     if (P.isNotUndefined(form)) event.body = new URLSearchParams(form).toString();
+    if (P.isNotUndefined(raw)) event.body = raw.body;
 
     const result = yield* FunctionUrl.decode(event).pipe(Effect.flatMap(handle));
     const setCookies = result.cookies ?? [];
@@ -109,6 +113,15 @@ export const make = (handle: Handle, options: Options = {}) => {
     put: (path: string, body: Schema.Json) => request("PUT", path, Option.some(body)),
     patch: (path: string, body: Schema.Json) => request("PATCH", path, Option.some(body)),
     delete: (path: string) => request("DELETE", path, Option.none()),
+    /**
+     * A request with exactly these headers (plus the cookies) and this body text, as another
+     * page's `fetch` or form would send it.
+     */
+    send: (
+      method: "POST" | "PUT" | "PATCH" | "DELETE",
+      path: string,
+      raw: { readonly body: string; readonly headers: Readonly<Record<string, string>> },
+    ) => request(method, path, Option.none(), undefined, raw),
     cookie: (name: string) => HashMap.get(jar, name),
     /** Sets a cookie by hand, e.g. to replay a logged-out session. */
     setCookie: (name: string, value: string) => {

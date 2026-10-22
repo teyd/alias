@@ -67,8 +67,19 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      # `--with-deps` runs apt-get, and archives from azure.archive.ubuntu.com sometimes crawl at
+      # ~60 kB/s for 10-20 minutes (actions/runner-images#14823, open): the apt timeout only covers
+      # stalls, not trickles. So drop that mirror (apt falls back to archive.ubuntu.com), retry
+      # failed fetches, and fail a slow install after two minutes and try once more.
       - if: matrix.group.name == 'browser'
-        run: pnpm --filter @alias/browser install-browser --with-deps
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            [ -s /etc/apt/apt-mirrors.txt ] || echo "http://archive.ubuntu.com/ubuntu/ priority:1" | sudo tee /etc/apt/apt-mirrors.txt
+          fi
+          printf 'Acquire::Retries "2";\nAcquire::http::Timeout "15";\n' | sudo tee /etc/apt/apt.conf.d/99-ci-apt
+          install='pnpm --filter @alias/browser install-browser --with-deps'
+          timeout 120 $install || timeout 120 $install
       - run: pnpm ${{ matrix.group.filters }} test
 
   # Web bundle, SDK bundle and CLI binaries share one runner (one install).

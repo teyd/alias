@@ -19,12 +19,9 @@ const envFile = join(root, "infra/.env");
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const stage = process.env.ALIAS_STAGE?.trim() ?? "";
-const required = [
-  "ALIAS_STAGE",
-  "ALIAS_SHARED_DOMAINS",
-  // The `local` stage has no Cloudflare (`isOnCloudflare` in infra/alchemy.run.ts).
-  ...(stage === "local" ? [] : ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]),
-];
+// Cloudflare's credentials may come from the environment or from Alchemy's profile, which only
+// Alchemy can tell; it stops with its own message when neither has them.
+const required = ["ALIAS_STAGE", "ALIAS_SHARED_DOMAINS"];
 const missing = required.filter((name) => (process.env[name]?.trim() ?? "") === "");
 if (missing.length > 0) {
   console.error(`Missing ${missing.join(", ")}: see infra/.env.example.`);

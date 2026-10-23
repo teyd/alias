@@ -436,7 +436,16 @@ export default Alchemy.Stack(
     state: stage === "local" ? localState() : AWS.state(),
   },
   Effect.gen(function* () {
-    const { accountId, credentials } = yield* AWS.AWSEnvironment.current;
+    const { accountId, credentials, region } = yield* AWS.AWSEnvironment.current;
+    // Every ARN, the MX target and SES receiving below are eu-west-1's. An `aws login` profile's
+    // own region wins over AWS_REGION, so a profile set to another region must stop the deploy.
+    if (region !== AwsClient.region) {
+      return yield* Effect.die(
+        new Error(
+          `Alchemy's AWS region is ${region}, not ${AwsClient.region}: set it on the profile (\`pnpm infra:aws configure set region ${AwsClient.region} --profile <name>\`).`,
+        ),
+      );
+    }
     const { Keyring, OriginSecretHeader, CertificateValidationRecord, CertificateIssued } =
       deployActions(credentials);
     // The keyrings (above). The functions take their names from these Outputs, so none starts

@@ -32,9 +32,10 @@ const destinationAndAlias = Effect.fn("destinationAndAlias")(function* (
   const link = new RegExp(`${origin}/destinations\\?\\S+`).exec(confirmation?.text ?? "");
   yield* ui(async () => {
     await page.goto(link?.[0] ?? "/");
-    const confirm = page.getByRole("button", { name: "Confirm this address" });
-    await confirm.click();
-    await confirm.waitFor({ state: "detached" });
+    await page
+      .getByRole("status", { name: "Confirmation link" })
+      .getByText(`${mailbox} is confirmed`)
+      .waitFor();
     await goTo(page, "Aliases");
     await page.getByRole("button", { name: "New alias" }).first().click();
     await page.getByRole("button", { name: "Create alias" }).click();

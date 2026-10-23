@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as P from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import { InboxIcon, PlusIcon, ShieldCheckIcon } from "lucide-react";
@@ -20,6 +19,8 @@ import { recipientsQuery } from "@/lib/recipients";
 const Search = Schema.Struct({
   confirm: Schema.optionalKey(Schema.String),
   token: Schema.optionalKey(Schema.String),
+  /** The destination the link just confirmed, once its token is spent. */
+  confirmed: Schema.optionalKey(Schema.String),
   dialog: Schema.optionalKey(Schema.Literal("add")),
   /** The destination whose encryption dialog is open. */
   encryption: Schema.optionalKey(Schema.String),
@@ -61,9 +62,13 @@ const Destinations = () => {
         </Button>
       </div>
 
-      {P.isString(search.confirm) && P.isString(search.token) && (
-        <ConfirmFromLink recipientId={search.confirm} token={search.token} />
-      )}
+      <ConfirmFromLink
+        link={Option.all({
+          recipientId: Option.fromUndefinedOr(search.confirm),
+          token: Option.fromUndefinedOr(search.token),
+        })}
+        confirmed={Option.fromUndefinedOr(search.confirmed)}
+      />
 
       {recipients.isError ? (
         <LoadFailed what="your destinations" onRetry={() => void recipients.refetch()} />

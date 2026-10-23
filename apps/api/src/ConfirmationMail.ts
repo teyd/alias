@@ -6,7 +6,7 @@ export interface ConfirmationMail {
   readonly sender: string;
   readonly recipient: string;
   readonly username: string;
-  /** The web app page that posts the token back (signed in). */
+  /** The web app page that posts the token back as soon as it opens with a session. */
   readonly link: string;
   readonly validFor: Duration.Duration;
   readonly date: DateTime.Utc;
@@ -40,11 +40,11 @@ export const render = (mail: ConfirmationMail): Uint8Array => {
     "",
     `The Alias account "${mail.username}" wants to forward mail to ${mail.recipient}.`,
     "",
-    `If that was you, open this link within ${Duration.toHours(mail.validFor)} hours while signed in to Alias:`,
+    `If that was you, open this link within ${Duration.toHours(mail.validFor)} hours. It confirms the address as soon as you are signed in to Alias:`,
     "",
     mail.link,
     "",
-    "If it wasn't you, ignore this message. Nothing is forwarded until the link is opened.",
+    "If it wasn't you, ignore this message. Nothing is forwarded unless the link is opened while signed in to that account.",
     "",
   ];
   return new TextEncoder().encode(Arr.join(lines, "\r\n"));

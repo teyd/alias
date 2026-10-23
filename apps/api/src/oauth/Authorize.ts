@@ -97,8 +97,10 @@ const validate = Effect.fn("Authorize.validate")(function* (request: Authorizati
   }
   const asked = OAuth.scopeTokens(request.scope ?? "");
   if (!Arr.every(asked, isScope)) return yield* refuseHere("invalid-scope");
-  const { resource } = yield* Issuer;
-  if (request.resource !== undefined && request.resource !== resource) {
+  const issuer = yield* Issuer;
+  // No resource named: the MCP server, which is what MCP clients come for.
+  const resource = request.resource ?? issuer.resource;
+  if (resource !== issuer.resource && resource !== issuer.apiResource) {
     return yield* refuseHere("invalid-resource");
   }
   return {
@@ -114,15 +116,41 @@ const validate = Effect.fn("Authorize.validate")(function* (request: Authorizati
 
 const hostOf = (uri: string) => (URL.canParse(uri) ? new URL(uri).host : uri);
 
+/** The host a metadata-document client's document was fetched from. */
+const verifiedHost = (client: Clients.Client) =>
+  client.kind === "metadata-document" && URL.canParse(client.id)
+    ? Option.some(new URL(client.id))
+    : Option.none();
+
+/**
+ * The client's `client_uri` when it is on the verified host or below it, with the same scheme;
+ * otherwise anyone's document could link the consent screen anywhere (SR-15, PLAN.md §20.25).
+ */
+const sameSiteUri = (client: Clients.Client, host: Option.Option<URL>) =>
+  Option.flatMap(host, (verified) =>
+    Option.filter(client.uri, (uri) => {
+      if (!URL.canParse(uri)) return false;
+      const url = new URL(uri);
+      return (
+        url.protocol === verified.protocol &&
+        url.username === "" &&
+        url.password === "" &&
+        (url.hostname === verified.hostname || url.hostname.endsWith(`.${verified.hostname}`))
+      );
+    }),
+  );
+
 /** What the consent screen shows for `request`. */
 export const inspect = Effect.fn("Authorize.inspect")(function* (request: AuthorizationRequest) {
   const valid = yield* validate(request);
+  const host = verifiedHost(valid.client);
   return {
     client: {
       id: valid.client.id,
       name: valid.client.name,
       kind: valid.client.kind,
-      uri: valid.client.uri,
+      host: Option.map(host, (url) => url.host),
+      uri: sameSiteUri(valid.client, host),
       redirectHost: hostOf(valid.redirectUri),
       isLocalRedirect: OAuth.isLocalRedirectUri(valid.redirectUri),
     },

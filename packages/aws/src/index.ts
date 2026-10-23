@@ -1,4 +1,5 @@
 export * as AwsClient from "./Client.ts";
+export * as CloudFront from "./CloudFront.ts";
 export * as FunctionUrl from "./FunctionUrl.ts";
 export type { LambdaContext, LambdaHandler } from "./Handler.ts";
 export * as Identities from "./Identities.ts";
@@ -6,6 +7,7 @@ export * as Inbound from "./Inbound.ts";
 export * as Objects from "./Objects.ts";
 export * as Parameters from "./Parameters.ts";
 export * as MessageQueue from "./MessageQueue.ts";
+export * as ReverseKeys from "./ReverseKeys.ts";
 export * as SendingEvent from "./SendingEvent.ts";
 export * as SesEvent from "./SesEvent.ts";
 export * as SnsEvent from "./SnsEvent.ts";

@@ -43,6 +43,12 @@ export interface UserSettings {
   readonly imageProtection: ImageProtection;
   /** Forwarding strips click-tracking parameters from links. Off by default: it may break some. */
   readonly isLinkCleaningEnabled: boolean;
+  /**
+   * A message that can't be forwarded for good is kept, sealed, for a week next to its failed
+   * delivery's metadata, so the user can download it or send it again (PLAN.md §20.33). Opt-in:
+   * by default only the metadata is recorded.
+   */
+  readonly isFailedMailKept: boolean;
 }
 
 const ImageProtection = Schema.Literals(["off", "block-trackers", "proxy-images"]);
@@ -52,6 +58,7 @@ const defaultSettings: UserSettings = {
   isOnTheFlyEnabled: false,
   imageProtection: "block-trackers",
   isLinkCleaningEnabled: false,
+  isFailedMailKept: false,
 };
 
 /** The username, or a lookalike of it (same `Username.skeleton`), already belongs to someone. */
@@ -83,13 +90,6 @@ export class UserRepo extends Context.Service<
     readonly isUsernameTaken: (
       username: Username.Username,
     ) => Effect.Effect<boolean, DatabaseError>;
-    /**
-     * The user with exactly this username (lowercase, as subdomains carry it). A lookalike that
-     * merely shares its skeleton finds none, and neither does an erased username.
-     */
-    readonly findByUsername: (
-      username: string,
-    ) => Effect.Effect<Option.Option<User>, DatabaseError>;
     readonly settings: (userId: string) => Effect.Effect<UserSettings, DatabaseError>;
     /** Applies the given changes and returns the settings as stored afterwards. */
     readonly updateSettings: (
@@ -115,6 +115,7 @@ const SettingsItem = Item.codec(
     isOnTheFlyEnabled: Schema.optionalKey(Attribute.BOOL),
     imageProtection: Schema.optionalKey(Attribute.S.pipe(Schema.decodeTo(ImageProtection))),
     isLinkCleaningEnabled: Schema.optionalKey(Attribute.BOOL),
+    isFailedMailKept: Schema.optionalKey(Attribute.BOOL),
   }),
   "UserSettings",
 );
@@ -124,6 +125,7 @@ const withDefaults = (stored: Partial<UserSettings>): UserSettings => ({
   isOnTheFlyEnabled: stored.isOnTheFlyEnabled ?? defaultSettings.isOnTheFlyEnabled,
   imageProtection: stored.imageProtection ?? defaultSettings.imageProtection,
   isLinkCleaningEnabled: stored.isLinkCleaningEnabled ?? defaultSettings.isLinkCleaningEnabled,
+  isFailedMailKept: stored.isFailedMailKept ?? defaultSettings.isFailedMailKept,
 });
 
 const UserItem = Item.codec(
@@ -135,9 +137,6 @@ const UsernameItem = Item.codec(
   Schema.Struct({ userId: Attribute.S, username: Attribute.S }),
   "Username",
 );
-
-/** An erased account's username keeps its claim as a tombstone: `deletedAt`, no owner. */
-const isClaimed = (item: DynamoDB.AttributeMap) => P.hasProperty(item, "userId");
 
 const mustNotExist = "attribute_not_exists(pk)";
 
@@ -217,22 +216,6 @@ const make = Effect.fn("UserRepo.make")(function* () {
         Effect.provide(client),
       ),
 
-    findByUsername: Effect.fn("UserRepo.findByUsername")(function* (username) {
-      const claim = yield* DynamoDB.getItem({
-        TableName: table.name,
-        Key: usernameKey(username),
-        ConsistentRead: true,
-      }).pipe(
-        Effect.mapError(databaseError("GetItem")),
-        Effect.flatMap((result) =>
-          UsernameItem.decodeOption(Option.filter(Option.fromUndefinedOr(result.Item), isClaimed)),
-        ),
-        Effect.provide(client),
-      );
-      const owner = Option.filter(claim, (found) => found.username === username);
-      return Option.isNone(owner) ? Option.none() : yield* findById(owner.value.userId);
-    }),
-
     settings,
 
     updateSettings: Effect.fn("UserRepo.updateSettings")(function* (userId, changes) {
@@ -247,6 +230,12 @@ const make = Effect.fn("UserRepo.make")(function* () {
         isLinkCleaningEnabled: Option.map(
           Option.fromUndefinedOr(changes.isLinkCleaningEnabled),
           (isEnabled) => ({ BOOL: isEnabled }),
+        ),
+        isFailedMailKept: Option.map(
+          Option.fromUndefinedOr(changes.isFailedMailKept),
+          (isKept) => ({
+            BOOL: isKept,
+          }),
         ),
       });
       const names = R.keys(values);

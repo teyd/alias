@@ -1,9 +1,20 @@
-import { sentTo, smtp } from "@alias/e2e/stack";
+import { bounceBack, sentTo, smtp } from "@alias/e2e/stack";
 import { Pipeline } from "@alias/inbound";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { WebApp, api, goTo, layer, openPage, signUp, ui } from "./support/browser.ts";
+import {
+  WebApp,
+  api,
+  confirmDestination,
+  goTo,
+  layer,
+  openPage,
+  signUp,
+  ui,
+} from "./support/browser.ts";
 
 const Recipients = Schema.Array(
   Schema.Struct({
@@ -93,7 +104,7 @@ describe("destinations and contacts in the web app", () => {
               .getByRole("row", { name: address })
               .getByRole("button", { name: "Contacts" })
               .click();
-            await contact.getByRole("button", { name: "Block" }).click();
+            await contact.getByRole("button", { name: "Block", exact: true }).click();
             await contact.getByRole("button", { name: "Unblock" }).waitFor();
           });
           expect(yield* api(page, contactsPath, Contacts)).toEqual([
@@ -105,7 +116,7 @@ describe("destinations and contacts in the web app", () => {
           yield* ui(async () => {
             await page.reload();
             await contact.getByRole("button", { name: "Unblock" }).click();
-            await contact.getByRole("button", { name: "Block" }).waitFor();
+            await contact.getByRole("button", { name: "Block", exact: true }).waitFor();
           });
           expect(yield* api(page, contactsPath, Contacts)).toEqual([
             { address: "orders@store.example", isBlocked: false },
@@ -114,6 +125,59 @@ describe("destinations and contacts in the web app", () => {
           // The confirmation mail and the two forwards; the blocked one never left.
           expect(yield* sentTo(mailbox)).toHaveLength(3);
         }),
+    );
+
+    it.effect("says why forwarding to a destination is paused, and offers to resume it", () =>
+      Effect.gen(function* () {
+        const { page } = yield* openPage();
+        const mailbox = "erin@mailbox.example";
+        yield* signUp(page, "erin");
+        const { userId } = yield* api(page, "/v1/me", Schema.Struct({ userId: Schema.String }));
+        yield* confirmDestination(page, mailbox);
+
+        // A forward bounces: the mailbox is gone (what SES publishes, through SNS).
+        yield* ui(async () => {
+          await goTo(page, "Aliases");
+          await page.getByRole("button", { name: "New alias" }).first().click();
+          await page.getByRole("button", { name: "Create alias" }).click();
+          await page.getByRole("dialog", { name: "New alias" }).waitFor({ state: "detached" });
+        });
+        const [alias] = yield* api(page, "/v1/aliases", Aliases);
+        const forwarded = yield* smtp({
+          from: "orders@store.example",
+          to: alias?.address ?? "",
+          subject: "Order confirmed",
+          text: "Thanks for your order!",
+        }).pipe(Effect.flatMap(Pipeline.handle));
+        expect(forwarded).toEqual([{ _tag: "Forwarded" }]);
+        const sent = Arr.last(yield* sentTo(mailbox));
+        expect(
+          yield* bounceBack({
+            messageId: Option.getOrElse(
+              Option.map(sent, (email) => email.messageId),
+              () => "",
+            ),
+            userId,
+            kind: "forward",
+            address: mailbox,
+            bounceSubType: "General",
+            status: "5.1.1",
+            diagnosticCode: "smtp; 550 5.1.1 user unknown",
+          }),
+        ).toEqual([{ _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 }]);
+
+        yield* ui(async () => {
+          await goTo(page, "Overview");
+          await page.getByText(`Forwarding to ${mailbox} is paused`).waitFor();
+          await goTo(page, "Destinations");
+          const row = page.getByRole("table", { name: "Destinations" }).getByRole("row", {
+            name: mailbox,
+          });
+          await row.getByText("Paused", { exact: true }).waitFor();
+          await row.getByText("its mail server says the mailbox doesn't exist").waitFor();
+          await row.getByRole("button", { name: "Resume" }).waitFor();
+        });
+      }),
     );
   });
 });

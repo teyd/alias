@@ -1,7 +1,7 @@
 import event from "@alias/aws/fixtures/ses-lambda-event.json" with { type: "json" };
 import { SesEvent } from "@alias/aws";
 import type { Mail } from "@alias/core";
-import type { AliasRepo, RecipientRepo } from "@alias/db";
+import { type AliasRepo, Forwarding, type RecipientRepo } from "@alias/db";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
@@ -44,6 +44,9 @@ const alias: AliasRepo.Alias = {
   blockedCount: 0,
   inboxExpiresAt: Option.none(),
   retentionDays: Option.none(),
+  description: Option.none(),
+  labels: [],
+  recipientIds: [],
 };
 
 const recipient = (
@@ -58,6 +61,7 @@ const recipient = (
   lastSentAt: DateTime.makeUnsafe(0),
   isDefault: fields.isDefault ?? false,
   bouncedAt: Option.none(),
+  bounceReason: Option.none(),
   complainedAt: Option.none(),
   encryption: Option.none(),
 });
@@ -161,19 +165,80 @@ describe("Policy.screen", () => {
   );
 });
 
-describe("Policy.forwardTarget", () => {
-  it("picks the default recipient", () => {
+describe("Forwarding.forwardTargets", () => {
+  it("picks the default recipient when the alias names none", () => {
     const target = recipient("b@mail.example", { isDefault: true });
-    expect(Policy.forwardTarget([recipient("a@mail.example"), target])).toEqual(
-      Option.some(target),
-    );
+    expect(
+      Forwarding.forwardTargets(alias, [recipient("a@mail.example"), target], Option.none()),
+    ).toEqual(Option.some([target]));
   });
 
   it("finds none without a verified default", () => {
-    expect(Policy.forwardTarget([])).toEqual(Option.none());
+    expect(Forwarding.forwardTargets(alias, [], Option.none())).toEqual(Option.none());
     expect(
-      Policy.forwardTarget([recipient("a@mail.example", { isVerified: false, isDefault: true })]),
+      Forwarding.forwardTargets(
+        alias,
+        [recipient("a@mail.example", { isVerified: false, isDefault: true })],
+        Option.none(),
+      ),
     ).toEqual(Option.none());
+  });
+
+  it("prefers the username's own default recipient while it is verified", () => {
+    const fallback = recipient("b@mail.example", { isDefault: true });
+    const work = recipient("work@mail.example");
+    const pending = recipient("new@mail.example", { isVerified: false });
+    expect(Forwarding.forwardTargets(alias, [fallback, work], Option.some(work.id))).toEqual(
+      Option.some([work]),
+    );
+    // Unverified or removed since: the account's default again.
+    expect(Forwarding.forwardTargets(alias, [fallback, pending], Option.some(pending.id))).toEqual(
+      Option.some([fallback]),
+    );
+    expect(Forwarding.forwardTargets(alias, [fallback], Option.some("rcp_gone"))).toEqual(
+      Option.some([fallback]),
+    );
+  });
+
+  it("picks the alias's own recipients in its order, skipping gone and pending ones", () => {
+    const a = recipient("a@mail.example", { isDefault: true });
+    const b = recipient("b@mail.example");
+    const work = recipient("work@mail.example");
+    const pending = recipient("p@mail.example", { isVerified: false });
+    const chosen = { ...alias, recipientIds: [b.id, "rcp_gone", pending.id, a.id] };
+    // The alias's own choice overrides the username's default (PLAN.md §20.31, §20.34).
+    expect(Forwarding.forwardTargets(chosen, [a, b, pending, work], Option.some(work.id))).toEqual(
+      Option.some([b, a]),
+    );
+  });
+
+  it("falls back to the username's default, then the account's, when none of the alias's can take mail", () => {
+    const a = recipient("a@mail.example", { isDefault: true });
+    const work = recipient("work@mail.example");
+    const pending = recipient("p@mail.example", { isVerified: false });
+    const chosen = { ...alias, recipientIds: ["rcp_gone", pending.id] };
+    expect(Forwarding.forwardTargets(chosen, [a, pending, work], Option.some(work.id))).toEqual(
+      Option.some([work]),
+    );
+    expect(Forwarding.forwardTargets(chosen, [a, pending], Option.none())).toEqual(
+      Option.some([a]),
+    );
+  });
+
+  it("lets a rule's destination replace the alias's while it is verified and not bouncing", () => {
+    const work = recipient("work@mail.example");
+    const pending = recipient("pending@mail.example", { isVerified: false });
+    const bounced = {
+      ...recipient("gone@mail.example"),
+      bouncedAt: Option.some(DateTime.makeUnsafe(2)),
+    };
+    const all = [recipient("a@mail.example", { isDefault: true }), work, pending, bounced];
+    const pick = (recipientId: string) => Policy.ruleTarget(all, Option.some(recipientId));
+    expect(pick(work.id)).toEqual(Option.some(work));
+    expect(pick(pending.id)).toEqual(Option.none());
+    expect(pick(bounced.id)).toEqual(Option.none());
+    expect(pick("rcp_unknown")).toEqual(Option.none());
+    expect(Policy.ruleTarget(all, Option.none())).toEqual(Option.none());
   });
 });
 

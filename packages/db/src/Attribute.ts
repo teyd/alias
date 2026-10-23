@@ -66,6 +66,18 @@ export const StringList = Schema.Struct({ L: Schema.mutable(Schema.Array(S)) }).
 );
 export type StringList = typeof StringList.Type;
 
+/** A string set (`SS`). DynamoDB never stores an empty set: no attribute means none. */
+export const StringSet = Schema.Struct({ SS: Schema.mutable(Schema.Array(Schema.String)) }).pipe(
+  Schema.decodeTo(
+    Schema.Array(Schema.String),
+    SchemaTransformation.transform({
+      decode: (attribute): ReadonlyArray<string> => attribute.SS,
+      encode: (values: ReadonlyArray<string>) => ({ SS: [...values] }),
+    }),
+  ),
+);
+export type StringSet = typeof StringSet.Type;
+
 /** An `N` holding epoch milliseconds, as a `DateTime.Utc`. */
 export const EpochMillis = N.pipe(
   Schema.decodeTo(

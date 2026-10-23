@@ -8,25 +8,32 @@
  * The demo alias belongs to a demo user with one verified forwarding address, so mail sent to it
  * over SMTP comes out forwarded in fakecloud's sent mail.
  *
- * Dev-only hook: when someone signs up, their subdomain of each shared domain is verified as its
- * own SES identity on fakecloud (see `verifySubdomains`).
+ * Dev-only hook: when someone signs up or adds a username, its subdomain of each shared domain is
+ * verified as its own SES identity on fakecloud (see `verifySubdomains`).
+ *
+ * Sign-up's Turnstile check goes to the Turnstile emulator (`tools/turnstile-emulator/bin/serve.ts`,
+ * on `ALIAS_TURNSTILE_PORT`) with the always-passing test keys, so the web app's widget passes
+ * by itself.
  *
  * Custom domains: SES identities live on the same fakecloud, DNS checks go to the DoH emulator
  * (`tools/doh-emulator/bin/serve.ts`, on `ALIAS_DOH_PORT`), and the verification cron runs here
  * every minute instead of on EventBridge Scheduler.
  */
-import { AwsClient, type FunctionUrl, Identities, Transport } from "@alias/aws";
+import { AwsClient, type FunctionUrl, Identities, ReverseKeys, Transport } from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { AliasRepo, DomainRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { Doh } from "@alias/dns";
 import { Inbox } from "@alias/inbox";
+import { Turnstile } from "@alias/turnstile";
+import { TestKeys } from "@alias/turnstile-emulator";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
-import { UrlPolicy, WebhookQueue } from "@alias/webhooks";
+import { Secrets, UrlPolicy, WebhookQueue } from "@alias/webhooks";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as DomainVerification from "../src/DomainVerification.ts";
@@ -45,11 +52,13 @@ const mail = Layer.merge(
 ).pipe(Layer.provideMerge(sharedDomains));
 /**
  * The webhook queue, as `apps/webhooks/bin/dev.ts` delivers from it; created here too, so either
- * may start first. Dev receivers may listen on `http://localhost`.
+ * may start first. Dev receivers may listen on `http://localhost`. Secrets are sealed with the
+ * dev webhook keys, which the delivery process reads from the same fakecloud.
  */
-const webhooks = Layer.merge(
+const webhooks = Layer.mergeAll(
   WebhookQueue.dev.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
   UrlPolicy.layer({ isLoopbackAllowed: true }),
+  Secrets.dev(fakecloudUrl),
 );
 const domains = Layer.merge(
   Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloudUrl))),
@@ -64,6 +73,11 @@ const relyingParty = RelyingParty.layer({
   id: "localhost",
   origin: `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`,
 });
+const turnstile = Turnstile.layer({
+  url: `http://localhost:${process.env.ALIAS_TURNSTILE_PORT ?? 8054}`,
+  siteKey: TestKeys.siteKeys.passes,
+  secret: Redacted.make(TestKeys.secrets.passes),
+}).pipe(Layer.provide(NodeCrypto.layer));
 /** Where the demo alias forwards to. Read it in fakecloud's sent mail; nothing leaves the machine. */
 const demoRecipient = process.env.ALIAS_DEV_RECIPIENT ?? "demo@mailbox.test";
 
@@ -73,14 +87,20 @@ const Registered = Schema.fromJsonString(Schema.Struct({ username: Schema.String
  * fakecloud doesn't let a verified domain cover its subdomains, while AWS does (PLAN.md §20.5).
  * Without this, mail to aliases on a new user's subdomain (`shop@ada.alias.test`) would be
  * forwarded by the pipeline and then refused by fakecloud's SES as an unverified sender. So,
- * in dev only, a successful sign-up verifies `<username>.<shared domain>` for every shared
- * domain. Production needs nothing of the kind: the shared domain's identity covers them all.
+ * in dev only, a successful sign-up or added username (PLAN.md §20.34) verifies
+ * `<username>.<shared domain>` for every shared domain. Production needs nothing of the kind:
+ * the shared domain's identity covers them all.
  */
 const verifySubdomains = Effect.fn("api.dev.verifySubdomains")(function* (
   event: FunctionUrl.FunctionUrlEvent,
   result: FunctionUrl.FunctionUrlResult,
 ) {
-  if (event.rawPath !== "/v1/auth/register" || result.statusCode !== 200) return;
+  const isSignup = event.rawPath === "/v1/auth/register" && result.statusCode === 200;
+  const isUsername =
+    event.rawPath === "/v1/usernames" &&
+    event.requestContext.http.method === "POST" &&
+    result.statusCode === 201;
+  if (!isSignup && !isUsername) return;
   const { username } = yield* Schema.decodeUnknownEffect(Registered)(result.body ?? "");
   const domains = yield* SharedDomains.SharedDomains;
   yield* Effect.forEach(domains, (domain) => Transport.ensureIdentity(`${username}.${domain}`), {
@@ -125,6 +145,7 @@ const seed = Effect.fn("api.dev.seed")(function* () {
         lastSentAt: now,
         isDefault: false,
         bouncedAt: Option.none(),
+        bounceReason: Option.none(),
         complainedAt: Option.none(),
         encryption: Option.none(),
       },
@@ -140,7 +161,18 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
   const { handle } = makeFunctionUrlHandler(
-    Layer.mergeAll(database, relyingParty, mail, webhooks, domains, inbox, tempDomains),
+    Layer.mergeAll(
+      database,
+      relyingParty,
+      mail,
+      webhooks,
+      domains,
+      inbox,
+      tempDomains,
+      turnstile,
+      // The keys `apps/inbound/bin/dev.ts` verifies replies with.
+      ReverseKeys.dev(fakecloudUrl),
+    ),
   );
   // The verification cron, as EventBridge Scheduler would run it (every ten minutes in infra).
   yield* DomainVerification.runDue().pipe(

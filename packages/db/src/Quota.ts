@@ -8,20 +8,28 @@ import * as Attribute from "./Attribute.ts";
 import { databaseError } from "./DatabaseError.ts";
 import type { DynamoTable } from "./Dynamo.ts";
 
-/** A fixed UTC window a quota counts in: the hour or the day `now` falls in. */
+/** A fixed UTC window a quota counts in: the minute, hour or day `now` falls in. */
 export interface Window {
-  /** Part of the counter's sort key: `2026-10-22T09` for an hour, `2026-10-22` for a day. */
+  /**
+   * Part of the counter's sort key: `2026-10-22T09:41` for a minute, `2026-10-22T09` for an hour,
+   * `2026-10-22` for a day.
+   */
   readonly label: string;
   readonly end: DateTime.Utc;
   readonly length: Duration.Duration;
 }
 
-export const window = (now: DateTime.Utc, unit: "hour" | "day"): Window => {
+const UNITS = {
+  minute: { length: Duration.minutes(1), label: 16 },
+  hour: { length: Duration.hours(1), label: 13 },
+  day: { length: Duration.days(1), label: 10 },
+} as const;
+
+export const window = (now: DateTime.Utc, unit: keyof typeof UNITS): Window => {
   const start = DateTime.startOf(now, unit);
-  const length = unit === "hour" ? Duration.hours(1) : Duration.days(1);
-  const iso = DateTime.formatIso(start);
+  const { length, label } = UNITS[unit];
   return {
-    label: unit === "hour" ? iso.slice(0, 13) : iso.slice(0, 10),
+    label: DateTime.formatIso(start).slice(0, label),
     end: DateTime.addDuration(start, length),
     length,
   };

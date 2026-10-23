@@ -3,9 +3,11 @@
  * emulator on `ALIAS_IMAGE_PROXY_PORT`, with production's egress policy, so it fetches real
  * images from the internet and refuses private addresses. Its keys come from fakecloud's SSM
  * parameter `/alias/dev/image-proxy-keys`, which `apps/inbound/bin/dev.ts` puts with a fixed dev
- * key; it waits until that exists.
+ * key; it waits until that exists. Its fetch budgets live in the dev table on fakecloud, which
+ * `apps/inbound/bin/dev.ts` creates.
  */
 import { AwsClient, FunctionUrl, Parameters } from "@alias/aws";
+import { Dynamo, ProxyRepo } from "@alias/db";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { NodeCrypto, NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
@@ -24,6 +26,8 @@ const serve = Effect.fn("imageProxy.dev")(function* () {
   );
   const services = Layer.mergeAll(
     Layer.succeed(Proxy.ProxyKeys, keys),
+    ProxyRepo.layer.pipe(Layer.provide(Dynamo.emulator(fakecloudUrl, "alias"))),
+    Proxy.defaultBudgets,
     Egress.publicInternet,
     NodeCrypto.layer,
   );

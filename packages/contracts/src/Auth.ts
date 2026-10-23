@@ -23,12 +23,26 @@ export class Unauthenticated extends Schema.TaggedError<Unauthenticated>()(
 ) {}
 
 /**
+ * A change authenticated by the session cookie that didn't come from the web app itself: its
+ * `Sec-Fetch-Site` isn't `same-origin`, its `Origin` isn't the app's (or it names neither), or it
+ * has a body that isn't `application/json` (PLAN.md §20.30). Bearer-token requests never get it.
+ */
+export class CrossSiteRequest extends Schema.TaggedError<CrossSiteRequest>()(
+  "CrossSiteRequest",
+  {},
+  { httpApiStatus: 403 },
+) {}
+
+/**
  * The session cookie. `__Host-` makes browsers insist on `Secure`, `Path=/` and no `Domain`, so
  * no subdomain (every username is one) can set or read it.
  */
 export const sessionCookie = HttpApiSecurity.apiKey({ key: "__Host-alias_session", in: "cookie" });
 
-/** A personal API token (`alias_pat_…`) in `Authorization: Bearer`. */
+/**
+ * A personal API token (`alias_pat_…`), or an OAuth access token issued for the API
+ * (`alias_oat_…`, PLAN.md §20.35), in `Authorization: Bearer`.
+ */
 const bearerToken = HttpApiSecurity.bearer;
 
 /**
@@ -37,14 +51,15 @@ const bearerToken = HttpApiSecurity.bearer;
  * first. A token passes only on endpoints annotated with a scope it holds (`requires` in
  * `Scopes.ts`), so endpoints without one stay session-only. Failures, before the handler runs:
  * {@link Unauthenticated} (401) without a live credential, {@link Forbidden} (403) for a token
- * the endpoint doesn't accept, {@link TooManyAttempts} (429) after too many bad tokens.
+ * the endpoint doesn't accept, {@link CrossSiteRequest} (403) for a cookie-authenticated change
+ * from elsewhere, {@link TooManyAttempts} (429) after too many bad tokens.
  */
 export class Authentication extends HttpApiMiddleware.Service<
   Authentication,
   { provides: CurrentUser }
 >()("@alias/contracts/Authentication", {
   security: { session: sessionCookie, token: bearerToken },
-  error: [Unauthenticated, Forbidden, TooManyAttempts],
+  error: [Unauthenticated, Forbidden, CrossSiteRequest, TooManyAttempts],
 }) {}
 
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
@@ -80,6 +95,35 @@ export class PasskeyRejected extends Schema.TaggedError<PasskeyRejected>()(
   { httpApiStatus: 400 },
 ) {}
 
+/**
+ * The Turnstile token was missing, malformed, expired (tokens live 300 seconds) or redeemed
+ * before. Solve the widget again and retry (PLAN.md §20.27).
+ */
+export class HumanCheckFailed extends Schema.TaggedError<HumanCheckFailed>()(
+  "HumanCheckFailed",
+  {},
+  { httpApiStatus: 400 },
+) {}
+
+/**
+ * Nobody can sign up right now: too many accounts were created in the last hour (`paused`, a
+ * circuit breaker), or Turnstile can't be asked (`human-check-unavailable`). Try again later.
+ */
+export class SignupUnavailable extends Schema.TaggedError<SignupUnavailable>()(
+  "SignupUnavailable",
+  { reason: Schema.Literals(["paused", "human-check-unavailable"]) },
+  { httpApiStatus: 503 },
+) {}
+
+/** What the sign-up form needs before it asks for a challenge: the Turnstile widget to render. */
+const SignupConfig = Schema.Struct({
+  turnstile: Schema.Struct({
+    siteKey: Schema.String,
+    /** Load it as a `<script>`, then call `turnstile.render` (explicit rendering). */
+    scriptUrl: Schema.String,
+  }),
+});
+
 /** A challenge to answer with `navigator.credentials.create()`; send it back with its ID. */
 const RegistrationChallenge = Schema.Struct({
   challengeId: Schema.String,
@@ -95,14 +139,27 @@ const AuthenticationChallenge = Schema.Struct({
 /**
  * Passkey sign-up and login. Each ceremony is two calls: `*Options` issues a single-use challenge
  * (valid for 5 minutes), and the second call verifies the authenticator's answer and sets the
- * session cookie.
+ * session cookie. Sign-up first needs a solved Turnstile widget (`signup` names it): its token goes
+ * with `registerOptions`. Limits (PLAN.md §20.27): challenges per client address and hour, accounts
+ * per client address and day, accounts per hour for everyone, and failed logins per account and
+ * hour; past one, {@link TooManyAttempts} (429) or {@link SignupUnavailable} (503). Like
+ * cookie-authenticated changes, these calls must come from the web app's own origin with a JSON
+ * body, or get {@link CrossSiteRequest} (403).
  */
 export const AuthGroup = HttpApiGroup.make("auth")
+  .add(HttpApiEndpoint.get("signup", "/signup", { success: SignupConfig }))
   .add(
     HttpApiEndpoint.post("registerOptions", "/register/options", {
-      payload: Schema.Struct({ username: Schema.String }),
+      payload: Schema.Struct({ username: Schema.String, turnstileToken: Schema.String }),
       success: RegistrationChallenge,
-      error: [InvalidUsername, UsernameTaken],
+      error: [
+        InvalidUsername,
+        UsernameTaken,
+        HumanCheckFailed,
+        TooManyAttempts,
+        SignupUnavailable,
+        CrossSiteRequest,
+      ],
     }),
   )
   .add(
@@ -112,12 +169,13 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.RegistrationCredential,
       }),
       success: Me,
-      error: [PasskeyRejected, UsernameTaken],
+      error: [PasskeyRejected, UsernameTaken, TooManyAttempts, SignupUnavailable, CrossSiteRequest],
     }),
   )
   .add(
     HttpApiEndpoint.post("loginOptions", "/login/options", {
       success: AuthenticationChallenge,
+      error: [TooManyAttempts, CrossSiteRequest],
     }),
   )
   .add(
@@ -127,7 +185,7 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.AuthenticationCredential,
       }),
       success: Me,
-      error: PasskeyRejected,
+      error: [PasskeyRejected, TooManyAttempts, CrossSiteRequest],
     }),
   )
   .add(

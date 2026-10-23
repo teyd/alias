@@ -14,10 +14,13 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAliasesRouteImport } from './routes/_app/aliases'
+import { Route as AppBlocklistRouteImport } from './routes/_app/blocklist'
 import { Route as AppDestinationsRouteImport } from './routes/_app/destinations'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as AppDomainsRouteImport } from './routes/_app/domains'
+import { Route as AppFailedRouteImport } from './routes/_app/failed'
 import { Route as AppInboxRouteImport } from './routes/_app/inbox'
+import { Route as AppRulesRouteImport } from './routes/_app/rules'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
 import { Route as OutboxDraftIdRouteImport } from './routes/outbox.$draftId'
@@ -46,6 +49,11 @@ const AppAliasesRoute = AppAliasesRouteImport.update({
   path: '/aliases',
   getParentRoute: () => AppRoute,
 } as any)
+const AppBlocklistRoute = AppBlocklistRouteImport.update({
+  id: '/blocklist',
+  path: '/blocklist',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDestinationsRoute = AppDestinationsRouteImport.update({
   id: '/destinations',
   path: '/destinations',
@@ -61,9 +69,19 @@ const AppDomainsRoute = AppDomainsRouteImport.update({
   path: '/domains',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFailedRoute = AppFailedRouteImport.update({
+  id: '/failed',
+  path: '/failed',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppInboxRoute = AppInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRulesRoute = AppRulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -87,10 +105,13 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/aliases': typeof AppAliasesRoute
+  '/blocklist': typeof AppBlocklistRoute
   '/destinations': typeof AppDestinationsRoute
   '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
+  '/failed': typeof AppFailedRoute
   '/inbox': typeof AppInboxRoute
+  '/rules': typeof AppRulesRoute
   '/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/outbox/$draftId': typeof OutboxDraftIdRoute
@@ -99,10 +120,13 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/aliases': typeof AppAliasesRoute
+  '/blocklist': typeof AppBlocklistRoute
   '/destinations': typeof AppDestinationsRoute
   '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
+  '/failed': typeof AppFailedRoute
   '/inbox': typeof AppInboxRoute
+  '/rules': typeof AppRulesRoute
   '/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/outbox/$draftId': typeof OutboxDraftIdRoute
@@ -114,10 +138,13 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_app/aliases': typeof AppAliasesRoute
+  '/_app/blocklist': typeof AppBlocklistRoute
   '/_app/destinations': typeof AppDestinationsRoute
   '/_app/device': typeof AppDeviceRoute
   '/_app/domains': typeof AppDomainsRoute
+  '/_app/failed': typeof AppFailedRoute
   '/_app/inbox': typeof AppInboxRoute
+  '/_app/rules': typeof AppRulesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/outbox/$draftId': typeof OutboxDraftIdRoute
@@ -130,10 +157,13 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/aliases'
+    | '/blocklist'
     | '/destinations'
     | '/device'
     | '/domains'
+    | '/failed'
     | '/inbox'
+    | '/rules'
     | '/settings'
     | '/oauth/authorize'
     | '/outbox/$draftId'
@@ -142,10 +172,13 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/aliases'
+    | '/blocklist'
     | '/destinations'
     | '/device'
     | '/domains'
+    | '/failed'
     | '/inbox'
+    | '/rules'
     | '/settings'
     | '/oauth/authorize'
     | '/outbox/$draftId'
@@ -156,10 +189,13 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_app/aliases'
+    | '/_app/blocklist'
     | '/_app/destinations'
     | '/_app/device'
     | '/_app/domains'
+    | '/_app/failed'
     | '/_app/inbox'
+    | '/_app/rules'
     | '/_app/settings'
     | '/oauth/authorize'
     | '/outbox/$draftId'
@@ -211,6 +247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAliasesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/blocklist': {
+      id: '/_app/blocklist'
+      path: '/blocklist'
+      fullPath: '/blocklist'
+      preLoaderRoute: typeof AppBlocklistRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/destinations': {
       id: '/_app/destinations'
       path: '/destinations'
@@ -232,11 +275,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDomainsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/failed': {
+      id: '/_app/failed'
+      path: '/failed'
+      fullPath: '/failed'
+      preLoaderRoute: typeof AppFailedRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/inbox': {
       id: '/_app/inbox'
       path: '/inbox'
       fullPath: '/inbox'
       preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/rules': {
+      id: '/_app/rules'
+      path: '/rules'
+      fullPath: '/rules'
+      preLoaderRoute: typeof AppRulesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -265,20 +322,26 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAliasesRoute: typeof AppAliasesRoute
+  AppBlocklistRoute: typeof AppBlocklistRoute
   AppDestinationsRoute: typeof AppDestinationsRoute
   AppDeviceRoute: typeof AppDeviceRoute
   AppDomainsRoute: typeof AppDomainsRoute
+  AppFailedRoute: typeof AppFailedRoute
   AppInboxRoute: typeof AppInboxRoute
+  AppRulesRoute: typeof AppRulesRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAliasesRoute: AppAliasesRoute,
+  AppBlocklistRoute: AppBlocklistRoute,
   AppDestinationsRoute: AppDestinationsRoute,
   AppDeviceRoute: AppDeviceRoute,
   AppDomainsRoute: AppDomainsRoute,
+  AppFailedRoute: AppFailedRoute,
   AppInboxRoute: AppInboxRoute,
+  AppRulesRoute: AppRulesRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppIndexRoute: AppIndexRoute,
 }

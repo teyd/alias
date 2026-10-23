@@ -1,6 +1,7 @@
 import { SendingEvent, Transport } from "@alias/aws";
 import {
   Api,
+  ComposeRefused,
   ContactNotFound,
   CurrentUser,
   type Draft,
@@ -9,7 +10,7 @@ import {
   SendFailed,
 } from "@alias/contracts";
 import { Mail } from "@alias/core";
-import { type AliasRepo, ContactRepo, OutboxRepo } from "@alias/db";
+import { type AliasRepo, ContactRepo, type FilterRepo, OutboxRepo, SentRepo } from "@alias/db";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -18,6 +19,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { ownedAlias } from "./aliases.ts";
+import * as Contacts from "./contacts.ts";
 
 /**
  * Confirm-gated sending (PLAN.md §20.24). An MCP client with `mail:send` can only draft: mail
@@ -25,14 +27,16 @@ import { ownedAlias } from "./aliases.ts";
  * already reply to. The draft goes out when the signed-in user sends it from the web app, which
  * no token can do, so a prompt-injected assistant can at most leave a draft for the user to
  * read and discard.
+ *
+ * The signed-in owner also composes new mail in the web app (PLAN.md §20.33): to any address,
+ * which becomes a contact of the alias, then drafted and sent at once through the same `send`.
+ * Every send counts against the owner's daily allowance, shared with replies.
  */
 
 /** How long a draft waits for its user. */
 const PENDING_FOR = Duration.hours(1);
 /** How long a decided draft stays readable (its status, for the client that drafted it). */
 const KEPT_FOR = Duration.days(1);
-/** Drafts a user may send a day: far above a person's use, far below a spammer's. */
-export const MAX_SENDS_PER_DAY = 50;
 
 /** Why a draft can't be made. */
 class DraftRefused extends Schema.TaggedError<DraftRefused>()("DraftRefused", {
@@ -141,7 +145,21 @@ const send = Effect.fn("outbox.send")(function* (draftId: string) {
     }),
   );
   if (alias.id !== found.aliasId) return yield* refused(draftId, "inactive-alias");
-  if (!(yield* Effect.orDie(repo.reserveSend(user.userId, now, MAX_SENDS_PER_DAY)))) {
+  // Blocked since it was drafted (PLAN.md §20.32): the owner wants nothing to do with it.
+  if (yield* Contacts.isBlocklisted(user.userId, contact.address)) {
+    return yield* refused(draftId, "blocked-address");
+  }
+  // SES would take mail to a suppressed address and drop it; say so instead (PLAN.md §20.33).
+  // Unknown is not a reason to refuse: SES still drops what it must.
+  const isSuppressed = yield* transport
+    .isSuppressed(contact.address)
+    .pipe(
+      Effect.catchTag("SuppressionError", (error) =>
+        Effect.as(Effect.logWarning("outbox suppression check failed", error.reason), false),
+      ),
+    );
+  if (isSuppressed) return yield* refused(draftId, "suppressed");
+  if (!(yield* Effect.orDie(repo.reserveSend(user.userId, now, OutboxRepo.SENDS_PER_DAY)))) {
     return yield* refused(draftId, "limit-reached");
   }
   const sent = yield* repo.close(user.userId, draftId, "sent", now).pipe(
@@ -166,8 +184,8 @@ const send = Effect.fn("outbox.send")(function* (draftId: string) {
     messageId: (yield* Effect.orDie(crypto.randomULID)).toLowerCase(),
     date: now,
   });
-  // Tagged like a reply: a message to a contact, so its bounces suppress but mark nothing.
-  yield* transport
+  // Tagged like a reply: a message to a contact, so only a gone mailbox's bounce suppresses it.
+  const messageId = yield* transport
     .send(raw, {
       from: `${alias.localPart}@${alias.domain}`,
       to: [contact.address],
@@ -180,8 +198,66 @@ const send = Effect.fn("outbox.send")(function* (draftId: string) {
         TransportRetryable: () => Effect.fail(refused(draftId, "unavailable", true)),
       }),
     );
+  yield* SentRepo.remember({
+    messageId,
+    userId: user.userId,
+    kind: "reply",
+    recipientId: Option.none(),
+  });
   yield* Effect.logInfo("outbox sent", draftId);
   return view(sent, now);
+});
+
+/** Shown as who drafted mail the owner composed themselves. */
+const COMPOSED_BY = "you, in Alias";
+
+/**
+ * New mail the owner writes from one of their aliases (PLAN.md §20.33). The recipient becomes a
+ * contact of the alias (a new one spends one of the day's new recipients), so it can answer
+ * through its reverse alias and the owner can block it; then the mail is drafted and sent like
+ * any draft. A send that fails leaves the draft pending, to try again from its page.
+ */
+const compose = Effect.fn("outbox.compose")(function* (request: {
+  readonly from: string;
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+}) {
+  const at = request.from.lastIndexOf("@");
+  const alias = yield* ownedAlias({
+    local: request.from.slice(0, at),
+    domain: request.from.slice(at + 1),
+  }).pipe(
+    Effect.catchTag("AliasNotFound", () =>
+      Effect.fail(new ComposeRefused({ reason: "unknown-alias" })),
+    ),
+  );
+  if (!alias.isActive) return yield* new ComposeRefused({ reason: "inactive-alias" });
+  const contact = yield* Contacts.ensure(alias, request.to).pipe(
+    Effect.catchTags({
+      InvalidContact: (error) => Effect.fail(new ComposeRefused({ reason: error.reason })),
+      AliasNotFound: () => Effect.fail(new ComposeRefused({ reason: "unknown-alias" })),
+    }),
+  );
+  if (contact.isBlocked) return yield* new ComposeRefused({ reason: "blocked-contact" });
+  const drafted = yield* draft({
+    from: `${alias.localPart}@${alias.domain}`,
+    contactId: contact.id,
+    subject: request.subject,
+    text: request.text,
+    clientName: COMPOSED_BY,
+  }).pipe(
+    Effect.catchTags({
+      AliasNotFound: () => Effect.fail(new ComposeRefused({ reason: "unknown-alias" })),
+      // Only if the contact was deleted in the instant since it was found.
+      ContactNotFound: Effect.die,
+      DraftRefused: (error) => Effect.fail(new ComposeRefused({ reason: error.reason })),
+    }),
+  );
+  // The draft was made a moment ago: it is there and pending.
+  return yield* send(drafted.id).pipe(
+    Effect.catchTags({ DraftNotFound: Effect.die, DraftClosed: Effect.die }),
+  );
 });
 
 const discard = Effect.fn("outbox.discard")(function* (draftId: string) {
@@ -204,12 +280,15 @@ type OutboxServices =
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
   | OutboxRepo.OutboxRepo
+  | FilterRepo.FilterRepo
+  | SentRepo.SentRepo
   | Transport.Transport;
 
 export const OutboxLive = HttpApiBuilder.group(Api, "outbox", (handlers) =>
   Effect.gen(function* () {
     const services = yield* Effect.context<OutboxServices>();
     return handlers
+      .handle("compose", ({ payload }) => Effect.provide(compose(payload), services))
       .handle("get", ({ params }) =>
         Effect.provide(
           Effect.flatMap(find(params.draftId), (found) =>

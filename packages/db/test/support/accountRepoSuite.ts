@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as R from "effect/Record";
+import * as Result from "effect/Result";
 import * as Str from "effect/String";
 import {
   AccountRepo,
@@ -20,6 +21,8 @@ import {
   ContactRepo,
   DomainRepo,
   Dynamo,
+  FailureRepo,
+  FilterRepo,
   OAuthRepo,
   OutboxRepo,
   MessageRepo,
@@ -27,6 +30,7 @@ import {
   SessionRepo,
   TokenRepo,
   UserRepo,
+  UsernameRepo,
   WebhookRepo,
 } from "../../src/index.ts";
 import { freshTable } from "./database.ts";
@@ -38,13 +42,16 @@ const repos = Layer.mergeAll(
   AliasRepo.layer,
   ContactRepo.layer,
   DomainRepo.layer,
+  FilterRepo.layer,
   OAuthRepo.layer,
   OutboxRepo.layer,
+  FailureRepo.layer,
   MessageRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
   TokenRepo.layer,
   UserRepo.layer,
+  UsernameRepo.layer,
   WebhookRepo.layer,
 );
 
@@ -53,13 +60,16 @@ type Repos =
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
   | DomainRepo.DomainRepo
+  | FilterRepo.FilterRepo
   | OAuthRepo.OAuthRepo
   | OutboxRepo.OutboxRepo
   | MessageRepo.MessageRepo
+  | FailureRepo.FailureRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
   | UserRepo.UserRepo
+  | UsernameRepo.UsernameRepo
   | WebhookRepo.WebhookRepo
   | Dynamo.Database;
 
@@ -84,9 +94,11 @@ const scan = Effect.fn("scan")(function* () {
 /**
  * One user with one of everything the service stores about a user: sessions, tokens, a connected
  * app (its grant, a used and a current refresh token, two access tokens, the redeemed code and
- * one waiting), a drafted email and a day's send count, settings, a recipient, a creation quota, a custom domain, live and deleted aliases
- * on a shared domain, on their subdomain and on their custom domain, contacts, counters, a
- * deletion that stopped halfway, and a temporary inbox with a stored message and its quotas.
+ * one waiting), a drafted email and a day's send count, settings, a blocklist and rules, a recipient, a creation quota, a custom domain, an
+ * additional username with its settings, live and deleted aliases on a shared domain, on their
+ * subdomains and on their custom domain (with descriptions, labels and chosen recipients), a
+ * label colour, contacts, counters, a deletion that stopped halfway, and
+ * a temporary inbox with a stored message and its quotas.
  */
 const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) {
   const users = yield* UserRepo.UserRepo;
@@ -105,6 +117,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       counter: 0,
       transports: ["internal"],
       createdAt: at(1_000),
+      lastUsedAt: Option.none(),
     },
   );
   yield* Effect.forEach(
@@ -185,6 +198,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       expiresAt: at(9_000_000_000_000),
     },
     issued(0),
+    { isRegistered: false },
   );
   yield* oauth.rotate(
     { ...issued(0).refresh, usedAt: Option.none() },
@@ -209,7 +223,10 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
         pendingUntil: at(9_000_000_000_000),
         expiresAt: at(9_000_000_000_000),
       }),
-      outbox.reserveSend(userId, at(1_000), 50),
+      Effect.andThen(
+        outbox.reserveSend(userId, at(1_000), 50),
+        outbox.reserveRecipient(userId, at(1_000), 20),
+      ),
     ),
   );
   yield* WebhookRepo.WebhookRepo.use((webhooks) =>
@@ -218,14 +235,34 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       userId,
       url: `https://hooks.${name}.example/`,
       eventTypes: ["mail.forwarded"],
-      secret: "whsec_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0",
+      sealedSecret: new TextEncoder().encode("sealed"),
       createdAt: at(1_000),
     }),
+  );
+  // Their blocklist and rules (PLAN.md §20.32): one item, naming a third party.
+  yield* FilterRepo.FilterRepo.use((filters) =>
+    Effect.andThen(filters.block(userId, `spam@${name}-sender.example`, 10), () =>
+      filters.updateRules(userId, () =>
+        Result.succeed([
+          {
+            id: `rl_${name}`,
+            name: "Shop",
+            isEnabled: true,
+            match: "all",
+            conditions: [
+              { field: "sender", match: "equals", value: "x@shop.example", isNegated: false },
+            ],
+            actions: [{ type: "block" }],
+          },
+        ]),
+      ),
+    ),
   );
   yield* users.updateSettings(userId, {
     isOnTheFlyEnabled: true,
     imageProtection: "off",
     isLinkCleaningEnabled: true,
+    isFailedMailKept: true,
   });
   yield* recipients.add(
     { id: `rcp_${name}`, userId, address: `${name}@mailbox.example`, createdAt: at(1_000) },
@@ -243,8 +280,19 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     }),
   );
   yield* aliases.reserveCreation(userId, at(1_000), 20);
+  yield* aliases.setLabelColor(userId, name, Option.some("blue"));
+
+  // An additional username (PLAN.md §20.34), with its own settings.
+  const work = `${name}-work`;
+  const usernames = yield* UsernameRepo.UsernameRepo;
+  yield* usernames.add({ userId, username: yield* Username.parse(work), createdAt: at(1_000) }, 3);
+  yield* usernames.update(userId, work, {
+    isOnTheFlyEnabled: Option.some(true),
+    defaultRecipientId: Option.some(Option.some(`rcp_${name}`)),
+  });
 
   const subdomain = `${name}.alias.test`;
+  const workSubdomain = `${work}.alias.test`;
   const custom = `${name}.example`;
   yield* (yield* DomainRepo.DomainRepo).claim(
     { domain: custom, userId, verificationToken: "tok", createdAt: at(1_000) },
@@ -257,6 +305,8 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     sub: { domain: subdomain, localPart: "shop" },
     oldShared: { domain: "alias.test", localPart: `${name}-old` },
     oldSub: { domain: subdomain, localPart: "old" },
+    work: { domain: workSubdomain, localPart: "shop" },
+    oldWork: { domain: workSubdomain, localPart: "old" },
     halfway: { domain: "alias.test", localPart: `${name}-halfway` },
   };
   yield* Effect.forEach(
@@ -264,7 +314,17 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     ([key, address]) =>
       Effect.gen(function* () {
         const aliasId = `al_${name}_${key}`;
-        yield* aliases.insert({ id: aliasId, userId, mode: "forward", createdAt: 1, ...address });
+        // With the owner's details (PLAN.md §20.31), which name their recipient.
+        yield* aliases.insert({
+          id: aliasId,
+          userId,
+          mode: "forward",
+          createdAt: 1,
+          description: `${name}'s ${key}`,
+          labels: [name],
+          recipientIds: [`rcp_${name}`],
+          ...address,
+        });
         yield* contacts.create(
           {
             id: `c_${name}_${key}`.padEnd(16, "x"),
@@ -282,6 +342,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
   yield* aliases.delete({ userId, ...addresses.oldShared });
   yield* aliases.delete({ userId, ...addresses.oldSub });
   yield* aliases.delete({ userId, ...addresses.oldCustom });
+  yield* aliases.delete({ userId, ...addresses.oldWork });
   yield* AliasRepo.retire(table, { userId, ...addresses.halfway });
 
   const temporary = { domain: "tmp.test", localPart: `${name}-temp` };
@@ -312,11 +373,35 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     },
     temporary,
   );
+  // A failed delivery with its kept copy (PLAN.md §20.33), and the day's count of them.
+  const failures = yield* FailureRepo.FailureRepo;
+  yield* failures.reserve(userId, at(1_000), 100);
+  yield* failures.insert(
+    {
+      id: `fail_${name}`,
+      aliasId: `al_${name}_shared`,
+      userId,
+      alias: `${name}-shared@alias.test`,
+      sender: Option.some("someone@shared.example"),
+      reason: "recipient-bounced",
+      receivedAt: at(1_000),
+      expiresAt: at(9_000_000_000_000),
+      size: 10,
+      kept: Option.some({
+        objectKey: `inbox/7d/al_${name}_shared/fail_${name}`,
+        keyVersion: 1,
+        wrappedKey: new Uint8Array([1]),
+        envelopeFrom: `${name}-shared+r.token@alias.test`,
+      }),
+    },
+    addresses.shared,
+  );
 
   return {
     userId,
     username: name,
-    subdomains: [subdomain, `${name}.alias2.test`],
+    additionalUsernames: [work],
+    subdomains: [subdomain, `${name}.alias2.test`, workSubdomain, `${work}.alias2.test`],
     customDomains: [custom],
     sessionId: `${name}_now`,
   };
@@ -362,6 +447,11 @@ export const accountRepoSuite = (
               { pk: "ALIAS#alias.test#ada-shared", sk: "ALIAS", attributes: tombstone },
               { pk: "ALIAS#tmp.test#ada-temp", sk: "ALIAS", attributes: tombstone },
               { pk: `USERNAME#${Username.skeleton("ada")}`, sk: "USERNAME", attributes: tombstone },
+              {
+                pk: `USERNAME#${Username.skeleton("ada-work")}`,
+                sk: "USERNAME",
+                attributes: tombstone,
+              },
             ]);
             const notAdas = (item: { readonly pk: string }) =>
               !Str.includes("ada")(JSON.stringify(item)) && !item.pk.startsWith("ERASURE#");
@@ -372,7 +462,7 @@ export const accountRepoSuite = (
             expect(Arr.filter(after, (item) => item.pk.startsWith("ERASURE#"))).toEqual([
               { pk: journal, sk: "ERASURE", attributes: ["expiresAt", "pk", "sk"] },
             ]);
-            expect(after).toHaveLength(graces.length + 6);
+            expect(after).toHaveLength(graces.length + 7);
             // Her OpenPGP key went with her recipient item; Grace's is still there.
             const keys = Arr.filter(before, (item) => item.attributes.includes("encryption"));
             expect(Arr.map(keys, (item) => item.sk)).toEqual([
@@ -388,13 +478,24 @@ export const accountRepoSuite = (
             // The username is never given out again, and nobody owns it.
             const username = yield* Username.parse("ada");
             expect(yield* users.isUsernameTaken(username)).toBe(true);
-            expect(yield* users.findByUsername("ada")).toEqual(Option.none());
+            const usernames = yield* UsernameRepo.UsernameRepo;
+            expect(yield* usernames.findOwner("ada")).toEqual(Option.none());
+            // Her additional username too, and nothing of its settings is left.
+            expect(yield* users.isUsernameTaken(yield* Username.parse("ada-work"))).toBe(true);
+            expect(yield* usernames.findOwner("ada-work")).toEqual(Option.none());
+            expect(yield* usernames.listByUser("usr_ada")).toEqual([]);
             expect(yield* users.findById("usr_ada")).toEqual(Option.none());
+            // So are her blocklist and rules.
+            expect(yield* (yield* FilterRepo.FilterRepo).find("usr_ada")).toEqual({
+              blocklist: [],
+              rules: [],
+            });
             // Settings (on the fly, tracker protection) are gone too: only defaults are left.
             expect(yield* users.settings("usr_ada")).toEqual({
               isOnTheFlyEnabled: false,
               imageProtection: "block-trackers",
               isLinkCleaningEnabled: false,
+              isFailedMailKept: false,
             });
           }),
         ),

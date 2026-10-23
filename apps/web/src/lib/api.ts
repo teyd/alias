@@ -10,3 +10,7 @@ export type Client = Effect.Success<typeof client>;
 /** Runs one typed API call; TanStack Query owns caching, retries and loading state. */
 export const callApi = <A, E>(call: (api: Client) => Effect.Effect<A, E>): Promise<A> =>
   Effect.runPromise(client.pipe(Effect.flatMap(call), Effect.provide(FetchHttpClient.layer)));
+
+/** Runs browser-side work that needs no API, like loading a third-party script. */
+export const runInBrowser = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  Effect.runPromise(effect);

@@ -1,28 +1,41 @@
-import { MailSettings, RelyingParty, makeFunctionUrlHandler } from "@alias/api";
+import {
+  FrontConfig,
+  MailSettings,
+  RelyingParty,
+  SignupLimits,
+  makeFunctionUrlHandler,
+} from "@alias/api";
 import {
   AwsClient,
+  CloudFront,
   FunctionUrl,
   Identities,
   Inbound,
   type MessageQueue,
   Objects,
   Parameters,
+  ReverseKeys,
+  SendingEvent,
   SesEvent,
+  SnsEvent,
   SqsEvent,
   Transport,
 } from "@alias/aws";
+import bounceRecord from "@alias/aws/fixtures/ses-event-bounce.json" with { type: "json" };
 import { FakeCloud } from "@alias/aws-emulators";
-import { SharedDomains, TempDomains } from "@alias/core";
-import { Dynamo } from "@alias/db";
+import { OriginSecret, SharedDomains, TempDomains } from "@alias/core";
+import { Dynamo, ProxyRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
 import { Proxy } from "@alias/image-proxy";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Inbox } from "@alias/inbox";
-import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
+import { Feedback, ImageProxySigner, Pipeline, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
-import { Delivery, Egress, UrlPolicy } from "@alias/webhooks";
+import { Turnstile } from "@alias/turnstile";
+import { TestKeys, TurnstileServer } from "@alias/turnstile-emulator";
+import { Delivery, Egress, Secrets, UrlPolicy } from "@alias/webhooks";
 import { TestQueue, freshQueue } from "@alias/webhooks/testing";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -31,10 +44,14 @@ import { SesEmulator } from "@alias/ses-emulator";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as R from "effect/Record";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 import { createTransport } from "nodemailer";
 
@@ -43,7 +60,8 @@ import { createTransport } from "nodemailer";
  * - SMTP → SES emulator (receipt rules, verdicts) → S3 spool on fakecloud → SES Lambda event →
  *   the real inbound pipeline → SES sending on fakecloud;
  * - HTTP → function URL emulator → the real API Lambda handler → DynamoDB on fakecloud, SES
- *   identities on fakecloud, DNS checks through the DoH emulator;
+ *   identities on fakecloud, DNS checks through the DoH emulator, sign-up's human check through
+ *   the Turnstile emulator (secret from SSM, as in production);
  * - a proxied image in forwarded mail → function URL emulator → the image proxy Lambda → the
  *   sender's image host.
  * One fakecloud process serves S3, DynamoDB, SES, SNS and SSM, as one AWS account would, and every
@@ -112,26 +130,70 @@ const inboxStore = Layer.unwrap(
     );
   }),
 ).pipe(Layer.provide(aws));
+/**
+ * The webhook keys (PLAN.md §20.30) as production reads them: a SecureString in Parameter Store,
+ * read by the API (sealing endpoint secrets) and the delivery Lambda (opening them).
+ */
+const webhookKeysParameter = "/alias/e2e/webhook-keys";
+const webhookKeys = Layer.unwrap(
+  Effect.gen(function* () {
+    yield* SSM.putParameter({
+      Name: webhookKeysParameter,
+      Type: "SecureString",
+      Value: `1:${Buffer.alloc(32, 21).toString("base64url")}`,
+      Overwrite: true,
+    });
+    const { url } = yield* FakeCloud.FakeCloud;
+    return Layer.effect(
+      Secrets.WebhookKeys,
+      Parameters.keyring(webhookKeysParameter).pipe(Effect.provide(AwsClient.emulator(url))),
+    );
+  }),
+).pipe(Layer.provide(aws));
+
 /** Temporary inboxes live on their own registrable domain. */
 const tempDomains = TempDomains.layer("tmp.test").pipe(Layer.provide(sharedDomains));
 
+const turnstileSecretParameter = "/alias/e2e/turnstile-secret";
+
 /**
  * The real API Lambda handler on the stack's table, queue and SES, for passkeys bound to
- * `relyingParty`. Serve it with `FunctionUrlServer`.
+ * `relyingParty`. Serve it with `FunctionUrlServer`; `front` puts CloudFront before it
+ * ({@link behindCloudFront}). Every test in a file signs up from 127.0.0.1 into the one table, so
+ * the sign-up limits are high unless `limits` says otherwise; `apps/api` tests them.
  */
-export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty: {
-  readonly id: string;
-  readonly origin: string;
-}) {
+export const apiHandler = Effect.fn("stack.apiHandler")(function* (
+  relyingParty: { readonly id: string; readonly origin: string },
+  front: FunctionUrl.Front = FunctionUrl.direct,
+  limits: Partial<SignupLimits.Limits> = { challengesPerHour: 1_000, signupsPerDay: 1_000 },
+) {
   const context = yield* Effect.context<Dynamo.Database>();
   const fakecloud = yield* FakeCloud.FakeCloud;
   const dns = yield* DohServer.DohServer;
+  // The Turnstile secret as production stores it: a SecureString in Parameter Store (§20.27).
+  const turnstileServer = yield* TurnstileServer.TurnstileServer;
+  const turnstileSecret = yield* SSM.putParameter({
+    Name: turnstileSecretParameter,
+    Type: "SecureString",
+    Value: TestKeys.secrets.passes,
+    Overwrite: true,
+  }).pipe(
+    Effect.andThen(Parameters.secureString(turnstileSecretParameter)),
+    Effect.provide(AwsClient.emulator(fakecloud.url)),
+    Effect.orDie,
+  );
   const { handle, dispose } = makeFunctionUrlHandler(
     Layer.mergeAll(
       Layer.succeedContext(context),
       Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
       Doh.layer(dns.url),
       RelyingParty.layer(relyingParty),
+      SignupLimits.layer(limits),
+      Turnstile.layer({
+        url: turnstileServer.url,
+        siteKey: TestKeys.siteKeys.passes,
+        secret: turnstileSecret.value,
+      }).pipe(Layer.provide(NodeCrypto.layer)),
       Transport.layer({ configurationSet: Option.some(configurationSet) }).pipe(
         Layer.provide(AwsClient.emulator(fakecloud.url)),
       ),
@@ -140,15 +202,42 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (relyingParty:
       ),
       Layer.succeedContext(yield* Effect.context<MessageQueue.MessageQueue>()),
       Layer.succeedContext(yield* Effect.context<Inbox.Inbox>()),
+      Layer.succeedContext(yield* Effect.context<Secrets.WebhookKeys>()),
+      // The keys the inbound Lambda verifies replies with: one SSM parameter for both.
+      Layer.succeedContext(yield* Effect.context<ReverseKeys.ReverseKeys>()),
       tempDomains,
       urlPolicy,
       // The contexts above carry the test's clock; the Lambda runs in real time, which its long
       // poll (PLAN.md §20.22) sleeps on.
       Layer.succeed(Clock.Clock, yield* TestClock.withLive(Effect.clockWith(Effect.succeed))),
     ),
+    front,
   );
   yield* Effect.addFinalizer(() => Effect.promise(dispose));
   return (event: FunctionUrl.FunctionUrlEvent) => Effect.runPromise(handle(event));
+});
+
+/**
+ * The API as production runs it behind CloudFront (PLAN.md §20.26): the origin secrets are a
+ * keyring in Parameter Store, which the API reads through its own `FrontConfig` and the
+ * distribution's origin custom header carries the current key of (what `infra` deploys). Pass
+ * `front` to {@link apiHandler} and `customHeaders` to `CloudFrontServer`.
+ */
+export const behindCloudFront = Effect.fn("stack.behindCloudFront")(function* () {
+  const { url } = yield* FakeCloud.FakeCloud;
+  const name = "/alias/e2e/origin-secrets";
+  yield* SSM.putParameter({
+    Name: name,
+    Type: "SecureString",
+    Value: `2:${Buffer.alloc(32, 15).toString("base64url")},1:${Buffer.alloc(32, 14).toString("base64url")}`,
+  }).pipe(Effect.provide(AwsClient.emulator(url)));
+  const env = { ALIAS_ORIGIN_SECRETS_PARAMETER: name, AWS_ENDPOINT_URL_SSM: url };
+  const front = yield* Effect.flatten(FrontConfig.parse(ConfigProvider.fromEnv({ env })));
+  const keys = yield* Parameters.keyring(name).pipe(Effect.provide(AwsClient.emulator(url)));
+  const customHeaders = {
+    [CloudFront.ORIGIN_SECRET_HEADER]: Redacted.value(OriginSecret.headerValue(keys)),
+  };
+  return { front, customHeaders };
 });
 
 /** The reverse-token keys as production stores them: a SecureString in Parameter Store. */
@@ -163,8 +252,9 @@ const reverseKeys = Layer.unwrap(
 
 /**
  * The image proxy Lambda behind its own function URL (PLAN.md §20.19), keys from Parameter Store
- * like the inbound Lambda's signer, which points at it. Its egress reaches only 127.0.0.1, where
- * a test runs the sender's image host; production's policy is tested in `apps/image-proxy`.
+ * like the inbound Lambda's signer, which points at it, and its fetch budgets in the shared table
+ * (§20.29). Its egress reaches only 127.0.0.1, where a test runs the sender's image host;
+ * production's policy is tested in `apps/image-proxy`.
  */
 const imageProxyParameter = "/alias/e2e/image-proxy-keys";
 const imageProxy = Layer.unwrap(
@@ -177,6 +267,8 @@ const imageProxy = Layer.unwrap(
     const keys = yield* Parameters.keyring(imageProxyParameter);
     const services = Layer.mergeAll(
       Layer.succeed(Proxy.ProxyKeys, keys),
+      Layer.succeed(ProxyRepo.ProxyRepo, yield* ProxyRepo.ProxyRepo),
+      Proxy.defaultBudgets,
       ImageProxyTesting.onlyLoopback,
       NodeCrypto.layer,
     );
@@ -188,7 +280,7 @@ const imageProxy = Layer.unwrap(
     });
     return Layer.succeed(ImageProxySigner.ImageProxySigner, { base: url, keys });
   }),
-).pipe(Layer.provide(aws));
+).pipe(Layer.provide([aws, ProxyRepo.layer.pipe(Layer.provide(database))]));
 
 /** The real inbound pipeline on the same table, spool, SES and keys. */
 const inbound = Pipeline.layer(
@@ -265,6 +357,7 @@ const delivery = Layer.effect(
           Delivery.production,
           NodeCrypto.layer,
           Egress.layer,
+          webhookKeys,
         ).pipe(Layer.provideMerge(urlPolicy)),
       ),
     );
@@ -279,7 +372,9 @@ const delivery = Layer.effect(
 /** Everything, with `api` (a layer that serves `apiHandler`) on the same table, queue and fakecloud. */
 export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
   Layer.mergeAll(
-    api.pipe(Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore))),
+    api.pipe(
+      Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore, webhookKeys, reverseKeys)),
+    ),
     inbound,
     feedback,
     delivery,
@@ -288,10 +383,73 @@ export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
     aws,
   ).pipe(
     Layer.provide(NodeCrypto.layer),
-    Layer.provideMerge(Layer.merge(FakeCloud.layer(), DohServer.layer())),
+    Layer.provideMerge(
+      Layer.mergeAll(FakeCloud.layer(), DohServer.layer(), TurnstileServer.layer()),
+    ),
   );
 
 const decoder = new TextDecoder();
+
+/**
+ * Publishes to the SES event topic what SES would for a bounce of `messageId` (a message we sent
+ * to `address` for `userId`): AWS's documented bounce record with these fields, for the bounces
+ * fakecloud's mailbox simulator can't produce (it has `bounce@` → 5.1.1 only). SNS (fakecloud)
+ * delivers it to the subscriber; returns what the feedback Lambda made of it.
+ */
+export const bounceBack = Effect.fn("stack.bounceBack")(function* (bounce: {
+  readonly messageId: string;
+  readonly userId: string;
+  readonly kind: SendingEvent.Kind;
+  readonly address: string;
+  readonly bounceSubType: string;
+  readonly status: string;
+  readonly diagnosticCode: string;
+}) {
+  const [documented] = bounceRecord.bounce.bouncedRecipients;
+  // The Lambdas run in real time; so does SES.
+  const now = DateTime.formatIso(yield* TestClock.withLive(DateTime.now));
+  const { TopicArn = "" } = yield* SNS.createTopic({ Name: "ses-events" });
+  yield* SNS.publish({
+    TopicArn,
+    Message: JSON.stringify({
+      ...bounceRecord,
+      mail: {
+        ...bounceRecord.mail,
+        messageId: bounce.messageId,
+        timestamp: now,
+        destination: [bounce.address],
+        tags: {
+          ...bounceRecord.mail.tags,
+          ...R.fromEntries(
+            Arr.map(
+              SendingEvent.tags(bounce.userId, bounce.kind),
+              (tag) => [tag.name, [tag.value]] as const,
+            ),
+          ),
+        },
+      },
+      bounce: {
+        ...bounceRecord.bounce,
+        bounceType: "Permanent",
+        bounceSubType: bounce.bounceSubType,
+        timestamp: now,
+        bouncedRecipients: [
+          {
+            ...documented,
+            emailAddress: bounce.address,
+            status: bounce.status,
+            diagnosticCode: bounce.diagnosticCode,
+          },
+        ],
+      },
+    }),
+  }).pipe(Effect.provide(aws));
+  const subscriber = yield* SnsSubscriber.SnsSubscriber;
+  const event = yield* SnsEvent.decode(
+    JSON.parse(JSON.stringify(yield* Queue.take(subscriber.events))),
+  );
+  return yield* Feedback.handle(event);
+});
 
 /** Mail SES sent to `address`, oldest first, as raw text. */
 export const sentTo = (address: string) =>

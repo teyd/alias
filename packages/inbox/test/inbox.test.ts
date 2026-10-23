@@ -144,6 +144,38 @@ describe("Inbox on fakecloud", () => {
       }).pipe(Effect.provide(world())),
     );
 
+    // A failed delivery's copy (PLAN.md §20.33): sealed in the 7-day class, bound to its id.
+    it.effect("keeps a failed delivery sealed for a week, opens it only as itself", () =>
+      Effect.gen(function* () {
+        const inbox = yield* Inbox.Inbox;
+        const owner = yield* createAlias();
+        const kept = yield* inbox.keep(owner, "fail_01a", otpMail);
+        expect(kept.objectKey).toBe("inbox/7d/al_temp/fail_01a");
+        expect(yield* listObjects()).toEqual(["inbox/7d/al_temp/fail_01a"]);
+        const { bucket } = yield* TestInbox;
+        const { url } = yield* FakeCloud.FakeCloud;
+        const object = yield* Objects.get(bucket, kept.objectKey).pipe(
+          Effect.provide(AwsClient.emulator(url)),
+        );
+        expect(new TextDecoder("latin1").decode(object)).not.toContain("482913");
+        expect(yield* inbox.retrieve("al_temp", "fail_01a", kept)).toEqual(otpMail);
+        // Under another failure's or alias's name, the copy doesn't open.
+        expect((yield* Effect.flip(inbox.retrieve("al_temp", "fail_01b", kept)))._tag).toBe(
+          "InboxUnavailable",
+        );
+        expect((yield* Effect.flip(inbox.retrieve("al_other", "fail_01a", kept)))._tag).toBe(
+          "InboxUnavailable",
+        );
+        yield* inbox.discard(kept.objectKey);
+        yield* inbox.discard(kept.objectKey);
+        expect(yield* listObjects()).toEqual([]);
+        // The alias's purge takes kept copies too.
+        yield* inbox.keep(owner, "fail_01c", otpMail);
+        yield* inbox.purge("al_temp");
+        expect(yield* listObjects()).toEqual([]);
+      }).pipe(Effect.provide(world())),
+    );
+
     it.effect("refuses bytes that are no message", () =>
       Effect.gen(function* () {
         const inbox = yield* Inbox.Inbox;

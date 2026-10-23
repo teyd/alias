@@ -13,6 +13,7 @@
     "test:unit": "vp test"
   },
   "dependencies": {
+    "@alias/core": "workspace:*",
     "@alias/sdk": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:"

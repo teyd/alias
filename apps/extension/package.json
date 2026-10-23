@@ -1,0 +1,36 @@
+{
+  "name": "@alias/extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser extension for Chromium and Firefox: create an alias right in a sign-up form",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    "./build": "./build.ts"
+  },
+  "scripts": {
+    "build": "node build.ts",
+    "test": "vp test",
+    "test:unit": "vp test"
+  },
+  "dependencies": {
+    "@alias/sdk": "workspace:*",
+    "@effect/platform-browser": "catalog:",
+    "@tanstack/react-form": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "effect": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tldts": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/chrome": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}

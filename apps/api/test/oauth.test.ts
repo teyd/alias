@@ -17,6 +17,7 @@ const pkce = {
 };
 const issuer = Browser.origin;
 const resource = `${issuer}/mcp`;
+const apiResource = `${issuer}/v1`;
 const redirectUri = "http://127.0.0.1:5555/callback";
 
 const Registered = Schema.Struct({ client_id: Schema.String });
@@ -41,6 +42,10 @@ const field = (name: string) => (body: Schema.Json) =>
 const errorOf = field("error");
 const reasonOf = field("reason");
 const Scopes = Schema.Struct({ scopes: Schema.Array(Schema.String) });
+const clientOf = (body: Schema.Json) =>
+  Schema.decodeUnknownSync(Schema.Struct({ client: Schema.Record(Schema.String, Schema.Unknown) }))(
+    body,
+  ).client;
 const Grants = Schema.Array(Schema.Struct({ id: Schema.String }));
 
 const register = Effect.fn("register")(function* (
@@ -74,12 +79,15 @@ const request = (clientId: string, overrides: Record<string, string> = {}) => ({
 const query = (url: string) => R.fromEntries(Array.from(new URL(url).searchParams));
 
 /** Ada signed in, a registered client, and the code she approved for `scopes`. */
-const approved = Effect.fn("approved")(function* (scopes = ["aliases:read"]) {
+const approved = Effect.fn("approved")(function* (
+  scopes = ["aliases:read"],
+  overrides: Record<string, string> = {},
+) {
   const api = yield* TestApi.make;
   const ada = yield* TestApi.signedIn(api.browser, "ada");
   const clientId = yield* register(api);
   const decided = yield* ada.browser.post("/v1/oauth/authorization/decision", {
-    request: request(clientId),
+    request: request(clientId, overrides),
     isApproved: true,
     scopes,
   });
@@ -236,6 +244,75 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
     }),
   );
 
+  // The browser extension's tokens (PLAN.md §20.35): the same flow, bound to the HTTP API.
+  it.effect("issues tokens for the HTTP API that the API takes and the MCP endpoint refuses", () =>
+    Effect.gen(function* () {
+      const asked = { scope: "aliases:read aliases:write", resource: apiResource };
+      const { api, ada, clientId, code } = yield* approved(
+        ["aliases:read", "aliases:write"],
+        asked,
+      );
+      const consent = yield* ada.browser.post("/v1/oauth/authorization", request(clientId, asked));
+      expect(consent.body).toMatchObject({ resource: apiResource });
+      expect(errorOf((yield* redeem(api, clientId, code, { resource })).body)).toBe(
+        "invalid_target",
+      );
+      const tokens = Schema.decodeUnknownSync(Tokens)(
+        (yield* redeem(api, clientId, code, { resource: apiResource })).body,
+      );
+      const extension = api.withToken(tokens.access_token);
+      expect((yield* extension.get("/v1/aliases")).status).toBe(200);
+      expect(
+        (yield* extension.post("/v1/aliases", {
+          _tag: "Random",
+          domain: "alias.test",
+          mode: "forward",
+        })).status,
+      ).toBe(201);
+      // Only what was granted, and never what only a session may do.
+      expect(yield* extension.get("/v1/recipients")).toMatchObject({
+        status: 403,
+        body: { _tag: "Forbidden", scope: "recipients:read" },
+      });
+      expect(yield* extension.get("/v1/tokens")).toMatchObject({
+        status: 403,
+        body: { _tag: "Forbidden" },
+      });
+      expect((yield* extension.post("/mcp", {})).status).toBe(401);
+
+      // A refreshed token is for the same resource.
+      const next = Schema.decodeUnknownSync(Tokens)(
+        (yield* refresh(api, clientId, tokens.refresh_token)).body,
+      );
+      expect((yield* api.withToken(next.access_token).get("/v1/aliases")).status).toBe(200);
+      expect(
+        errorOf(
+          (yield* exchange(api, {
+            grant_type: "refresh_token",
+            refresh_token: next.refresh_token,
+            client_id: clientId,
+            resource,
+          })).body,
+        ),
+      ).toBe("invalid_target");
+
+      // Disconnecting the app ends its access at once.
+      const [grant] = Schema.decodeUnknownSync(Grants)(
+        (yield* ada.browser.get("/v1/oauth/grants")).body,
+      );
+      expect((yield* ada.browser.delete(`/v1/oauth/grants/${grant?.id}`)).status).toBe(204);
+      expect((yield* api.withToken(next.access_token).get("/v1/aliases")).status).toBe(401);
+    }),
+  );
+
+  it.effect("keeps the API closed to tokens issued for the MCP server", () =>
+    Effect.gen(function* () {
+      const { api, clientId, code } = yield* approved(["aliases:read"], { resource });
+      const tokens = Schema.decodeUnknownSync(Tokens)((yield* redeem(api, clientId, code)).body);
+      expect((yield* api.withToken(tokens.access_token).get("/v1/aliases")).status).toBe(401);
+    }),
+  );
+
   it.effect("lets a code lapse after five minutes", () =>
     Effect.gen(function* () {
       const { api, clientId, code } = yield* approved();
@@ -304,7 +381,6 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
             id: clientId,
             name: "Claude Code",
             kind: "registered",
-            uri: "https://claude.ai",
             redirectHost: "127.0.0.1:5555",
             isLocalRedirect: true,
           },
@@ -312,6 +388,9 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
           resource,
         },
       });
+      // A registered client has no verified host, so its client_uri is never shown (SR-15).
+      expect(R.keys(clientOf(inspected.body))).not.toContain("uri");
+      expect(R.keys(clientOf(inspected.body))).not.toContain("host");
       // No scope asked for: every scope is offered.
       const all = yield* ada.browser.post(
         "/v1/oauth/authorization",
@@ -551,8 +630,17 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
       const inspected = yield* ada.browser.post("/v1/oauth/authorization", request(host.url));
       expect(inspected).toMatchObject({
         status: 200,
-        body: { client: { id: host.url, name: "Doc Client", kind: "metadata-document" } },
+        body: {
+          client: {
+            id: host.url,
+            name: "Doc Client",
+            kind: "metadata-document",
+            host: new URL(host.url).host,
+          },
+        },
       });
+      // client_uri on another host than the document's is dropped (SR-15).
+      expect(R.keys(clientOf(inspected.body))).not.toContain("uri");
       const decided = Schema.decodeUnknownSync(Redirect)(
         (yield* ada.browser.post("/v1/oauth/authorization/decision", {
           request: request(host.url),
@@ -567,6 +655,77 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
       expect((yield* ada.browser.get("/v1/oauth/grants")).body).toMatchObject([
         { clientId: host.url, clientName: "Doc Client" },
       ]);
+    }),
+  );
+
+  // SR-15 (PLAN.md §20.25): a document can call itself anything and link anywhere.
+  it.effect("shows a metadata document's client_uri only on the document's own host", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.make;
+      const ada = yield* TestApi.signedIn(api.browser, "ada");
+      const shown = (clientUri: (url: string) => string) =>
+        Effect.gen(function* () {
+          const host = yield* DocumentHost.make((url) => ({
+            client_id: url,
+            client_name: "Claude",
+            client_uri: clientUri(url),
+            redirect_uris: [redirectUri],
+          }));
+          const inspected = yield* ada.browser.post("/v1/oauth/authorization", request(host.url));
+          expect(inspected.status).toBe(200);
+          return clientOf(inspected.body)["uri"];
+        });
+      const origin = (url: string) => new URL(url).origin;
+      expect(yield* shown((url) => `${origin(url)}/about`)).toMatch(
+        /^http:\/\/127\.0\.0\.1:\d+\/about$/,
+      );
+      expect(yield* shown(() => "https://claude.ai")).toBeUndefined();
+      expect(yield* shown(() => "https://127.0.0.1.evil.example/")).toBeUndefined();
+      expect(yield* shown((url) => `https://evil.example/${new URL(url).host}`)).toBeUndefined();
+      expect(yield* shown((url) => `${origin(url).replace("http:", "ftp:")}/`)).toBeUndefined();
+      expect(yield* shown((url) => `http://user@${new URL(url).host}/`)).toBeUndefined();
+      expect(yield* shown(() => "not a url")).toBeUndefined();
+    }),
+  );
+
+  // SR-17 (PLAN.md §20.25): registration needs no account, so unused clients must not pile up.
+  it.effect("forgets a registered client after 30 days unless a grant used it", () =>
+    Effect.gen(function* () {
+      const { api, clientId, code } = yield* approved();
+      expect((yield* redeem(api, clientId, code)).status).toBe(200);
+      const unused = yield* register(api);
+      // Sessions last 30 days too, so each check signs in afresh.
+      const inspect = Effect.fn("inspect")(function* (id: string, username: string) {
+        const user = yield* TestApi.signedIn(api.browser, username);
+        const response = yield* user.browser.post("/v1/oauth/authorization", request(id));
+        return response.status === 200 ? "known" : reasonOf(response.body);
+      });
+      yield* TestClock.adjust("29 days");
+      expect(yield* inspect(unused, "bob")).toBe("known");
+      yield* TestClock.adjust("1 day");
+      expect(yield* inspect(unused, "eve")).toBe("unknown-client");
+      expect(yield* inspect(clientId, "eve2")).toBe("known");
+    }),
+  );
+
+  it.effect("counts registrations from one IPv6 /64 together", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.make;
+      const from = (sourceIp: string) =>
+        Effect.map(
+          Browser.make(api.handle, { sourceIp }).post("/v1/oauth/register", {
+            redirect_uris: [redirectUri],
+          }),
+          (response) => response.status,
+        );
+      const statuses = yield* Effect.forEach(
+        Arr.range(1, MAX_REGISTRATIONS_PER_HOUR),
+        (n) => from(`2001:db8:1:2::${n.toString(16)}`),
+        { concurrency: 1 },
+      );
+      expect(Arr.dedupe(statuses)).toEqual([201]);
+      expect(yield* from("2001:db8:1:2:ffff:ffff:ffff:ffff")).toBe(429);
+      expect(yield* from("2001:db8:1:3::1")).toBe(201);
     }),
   );
 

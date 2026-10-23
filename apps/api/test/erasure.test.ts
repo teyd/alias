@@ -177,7 +177,9 @@ describe("data lifecycle over the API (fakecloud)", () => {
         body: { _tag: "PasskeyRejected", reason: "unknown-credential" },
       });
       // The username is never given out again.
-      expect(yield* open().post("/v1/auth/register/options", { username: "ada" })).toMatchObject({
+      expect(
+        yield* open().post("/v1/auth/register/options", { ...TestApi.human, username: "ada" }),
+      ).toMatchObject({
         status: 409,
         body: { _tag: "UsernameTaken" },
       });

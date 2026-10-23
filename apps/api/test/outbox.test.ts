@@ -8,7 +8,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import { MAX_SENDS_PER_DAY } from "../src/outbox.ts";
 import * as Browser from "./support/Browser.ts";
 import * as Mcp from "./support/Mcp.ts";
 import * as TestApi from "./support/TestApi.ts";
@@ -315,10 +314,10 @@ describe("confirm-gated send (API handler on fakecloud)", () => {
         Layer.build,
         Effect.flatMap((context) =>
           Effect.forEach(
-            Arr.range(1, MAX_SENDS_PER_DAY),
+            Arr.range(1, OutboxRepo.SENDS_PER_DAY),
             () =>
               OutboxRepo.OutboxRepo.use((repo) =>
-                repo.reserveSend(setup.ada.userId, now, MAX_SENDS_PER_DAY),
+                repo.reserveSend(setup.ada.userId, now, OutboxRepo.SENDS_PER_DAY),
               ),
             { concurrency: 10 },
           ).pipe(Effect.provide(context)),

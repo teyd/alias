@@ -9,9 +9,12 @@
     "deploy": "alchemy deploy"
   },
   "dependencies": {
+    "@alias/aws": "workspace:*",
     "@alias/contracts": "workspace:*",
+    "@alias/core": "workspace:*",
     "@alias/db": "workspace:*",
     "@alias/inbox": "workspace:*",
+    "@alias/web": "workspace:*",
     "@alias/webhooks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "alchemy": "catalog:",

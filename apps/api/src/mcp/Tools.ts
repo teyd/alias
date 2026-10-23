@@ -1,6 +1,24 @@
-import { CurrentUser, type NewAlias, type Scope } from "@alias/contracts";
-import type { SharedDomains, TempDomains } from "@alias/core";
-import { type AliasRepo, type ContactRepo, type DomainRepo, OutboxRepo } from "@alias/db";
+import {
+  AliasDescription,
+  AliasLabels,
+  type AliasView,
+  CurrentUser,
+  InvalidBlocklistEntry,
+  MailSubject,
+  MailText,
+  type NewAlias,
+  type Scope,
+} from "@alias/contracts";
+import { Blocklist, type SharedDomains, type TempDomains } from "@alias/core";
+import {
+  type AliasRepo,
+  type ContactRepo,
+  type DomainRepo,
+  OutboxRepo,
+  type RecipientRepo,
+  type UsernameRepo,
+  type FilterRepo,
+} from "@alias/db";
 import type { Inbox } from "@alias/inbox";
 import type { Publisher } from "@alias/webhooks";
 import * as Arr from "effect/Array";
@@ -11,11 +29,13 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aliases from "../aliases.ts";
 import * as Contacts from "../contacts.ts";
 import * as Inboxes from "../inboxes.ts";
 import * as Outbox from "../outbox.ts";
+import * as Filters from "../rules.ts";
 
 /**
  * The MCP tools (PLAN.md §20.24). Each names the one scope it needs, and describes its arguments
@@ -34,7 +54,10 @@ export type ToolServices =
   | Crypto.Crypto
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
+  | RecipientRepo.RecipientRepo
   | DomainRepo.DomainRepo
+  | UsernameRepo.UsernameRepo
+  | FilterRepo.FilterRepo
   | SharedDomains.SharedDomains
   | Publisher.Publisher
   | OutboxRepo.OutboxRepo
@@ -173,7 +196,7 @@ const define = <A, I, O, OI>(spec: {
 };
 
 /** The fields API errors carry that help the model correct its call. */
-const ERROR_FIELDS = ["address", "reason", "contactId", "messageId"] as const;
+const ERROR_FIELDS = ["address", "reason", "contactId", "messageId", "entryId"] as const;
 
 /** An API error, worded for the model: its tag and the fields above. */
 const explain = (error: { readonly _tag: string }) =>
@@ -214,6 +237,9 @@ const AliasOutput = Schema.Struct({
   isActive: Schema.Boolean,
   forwardedCount: Schema.Int,
   blockedCount: Schema.Int,
+  /** The user's note on what the alias is for. */
+  description: Schema.optionalKey(Schema.String),
+  labels: Schema.Array(Schema.String),
 });
 type AliasOutput = typeof AliasOutput.Type;
 
@@ -235,13 +261,20 @@ const contactOutput = (contact: {
   return Option.match(contact.name, { onNone: () => base, onSome: (name) => ({ ...base, name }) });
 };
 
-const aliasOutput = (alias: AliasOutput): AliasOutput => ({
-  id: alias.id,
-  address: alias.address,
-  isActive: alias.isActive,
-  forwardedCount: alias.forwardedCount,
-  blockedCount: alias.blockedCount,
-});
+const aliasOutput = (alias: AliasView): AliasOutput => {
+  const base = {
+    id: alias.id,
+    address: alias.address,
+    isActive: alias.isActive,
+    forwardedCount: alias.forwardedCount,
+    blockedCount: alias.blockedCount,
+    labels: alias.labels,
+  };
+  return Option.match(alias.description, {
+    onNone: () => base,
+    onSome: (description) => ({ ...base, description }),
+  });
+};
 
 const writes = (isDestructive: boolean, isIdempotent: boolean): Annotations => ({
   readOnlyHint: false,
@@ -255,10 +288,8 @@ const SendInput = Schema.Struct({
   contactId: Schema.String.annotate({
     description: "The recipient: a contact of that alias, by id from list_contacts",
   }),
-  subject: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
-  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)).annotate({
-    description: "Plain-text body",
-  }),
+  subject: MailSubject,
+  text: MailText.annotate({ description: "Plain-text body" }),
 });
 
 const DraftOutput = Schema.Struct({
@@ -337,7 +368,7 @@ export const tools: ReadonlyArray<Tool> = [
     name: "list_aliases",
     title: "List aliases",
     description:
-      "Lists the user's email aliases with whether each is active and how much mail it forwarded or blocked, plus the domains new aliases can be created on.",
+      "Lists the user's email aliases with whether each is active, how much mail it forwarded or blocked, and the description and labels the user gave it, plus the domains new aliases can be created on.",
     scope: "aliases:read",
     input: Schema.Struct({}),
     output: Schema.Struct({
@@ -359,7 +390,7 @@ export const tools: ReadonlyArray<Tool> = [
     name: "create_alias",
     title: "Create an alias",
     description:
-      "Creates an email alias that forwards to the user's mailbox. Give `domain` (one of the shared domains from list_aliases) for a random address, or `address` for a chosen one on the user's own subdomain or a verified custom domain.",
+      "Creates an email alias that forwards to the user's mailbox. Give `domain` (one of the shared domains from list_aliases) for a random address, or `address` for a chosen one on one of the user's own subdomains or a verified custom domain.",
     scope: "aliases:write",
     input: Schema.Struct({
       domain: Schema.optionalKey(
@@ -367,7 +398,7 @@ export const tools: ReadonlyArray<Tool> = [
       ),
       address: Schema.optionalKey(
         Schema.String.annotate({
-          description: "A full address on the user's subdomain or custom domain",
+          description: "A full address on one of the user's subdomains or custom domain",
         }),
       ),
     }),
@@ -417,6 +448,33 @@ export const tools: ReadonlyArray<Tool> = [
       ),
   }),
   define({
+    name: "set_alias_details",
+    title: "Describe or label an alias",
+    description:
+      "Sets an alias's description (what it is for; an empty string removes it) and/or its labels (replacing all of them; an empty list removes them). Only what is given changes.",
+    scope: "aliases:write",
+    input: Schema.Struct({
+      address: Address,
+      description: Schema.optionalKey(
+        AliasDescription.annotate({ description: "Up to 200 characters; empty removes it" }),
+      ),
+      labels: Schema.optionalKey(
+        AliasLabels.annotate({
+          description:
+            "Up to 10 distinct labels of 1–32 letters, digits, spaces, '.', '_' or '-'; replaces the alias's labels",
+        }),
+      ),
+    }),
+    output: AliasOutput,
+    annotations: writes(false, true),
+    summary: () => "Updated the alias; its details are in the data.",
+    run: ({ address, ...details }) =>
+      Aliases.update(split(address), details).pipe(
+        Effect.map(aliasOutput),
+        Effect.mapError(explain),
+      ),
+  }),
+  define({
     name: "list_contacts",
     title: "List an alias's contacts",
     description:
@@ -454,6 +512,60 @@ export const tools: ReadonlyArray<Tool> = [
         Effect.map(contactOutput),
         Effect.mapError(explain),
       ),
+  }),
+  define({
+    name: "list_blocklist",
+    title: "List blocked senders",
+    description:
+      "Lists the senders blocked on every alias of the user: addresses, domains, and domains with their subdomains (written *.domain). Their mail is dropped and counted as blocked.",
+    scope: "rules:read",
+    input: Schema.Struct({}),
+    output: Schema.Struct({ entries: Schema.Array(Schema.String) }),
+    annotations: readOnly,
+    summary: (output) => `${output.entries.length} blocked senders.`,
+    run: () =>
+      Effect.map(Filters.listBlocked(), (entries) => ({
+        entries: Arr.map(entries, (entry) => entry.id),
+      })),
+  }),
+  define({
+    name: "block_sender",
+    title: "Block or unblock a sender everywhere",
+    description:
+      "Blocks a sender address or a whole sender domain on every alias of the user, or unblocks it. Use a contact's address from list_contacts to block someone everywhere.",
+    scope: "rules:write",
+    input: Schema.Struct({
+      sender: Schema.String.annotate({
+        description: "An address (news@shop.example) or a domain (shop.example)",
+      }),
+      isSubdomainIncluded: Schema.optionalKey(
+        Schema.Boolean.annotate({ description: "For a domain: block its subdomains too" }),
+      ),
+      isBlocked: Schema.optionalKey(
+        Schema.Boolean.annotate({ description: "false unblocks; default true" }),
+      ),
+    }),
+    output: Schema.Struct({ entry: Schema.String, isBlocked: Schema.Boolean }),
+    annotations: writes(false, true),
+    summary: (output) =>
+      `${output.entry} is ${output.isBlocked ? "blocked on every alias" : "no longer blocked"}.`,
+    run: (input) =>
+      Effect.gen(function* () {
+        const wanted: Blocklist.NewEntry = {
+          kind: input.sender.includes("@") ? "address" : "domain",
+          value: input.sender,
+          isSubdomainIncluded: input.isSubdomainIncluded ?? false,
+        };
+        if (input.isBlocked !== false) {
+          return { entry: (yield* Filters.block(wanted)).id, isBlocked: true };
+        }
+        const entryId = Blocklist.normalize(wanted);
+        if (Result.isFailure(entryId)) {
+          return yield* new InvalidBlocklistEntry({ reason: entryId.failure });
+        }
+        yield* Filters.unblock(entryId.success);
+        return { entry: entryId.success, isBlocked: false };
+      }).pipe(Effect.mapError(explain)),
   }),
   define({
     name: "send_mail",

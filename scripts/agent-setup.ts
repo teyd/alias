@@ -21,8 +21,9 @@ execFileSync("node", ["tools/aws-emulators/bin/install-dynamodb-local.ts"], {
   stdio: "inherit",
 });
 
-// Headless Chromium for the browser tests, the build pinned by the catalog's Playwright version
-// (into Playwright's own cache; a no-op when it is already there).
+// Chromium for the browser tests, the build pinned by the catalog's Playwright version: the full
+// browser (the extension test needs its new headless mode) and the headless shell, into
+// Playwright's own cache; a no-op when they are already there.
 execFileSync("pnpm", ["--filter", "@alias/browser", "install-browser"], {
   cwd: root,
   stdio: "inherit",
@@ -48,5 +49,6 @@ console.log(
 console.log(
   `  images  http://localhost:${block.imageProxy}  (image proxy behind the function URL emulator)`,
   `  dns     http://localhost:${block.doh}/dns-query  (DoH emulator, custom-domain checks)`,
+  `  human   http://localhost:${block.turnstile}  (Turnstile emulator, sign-up; test keys only)`,
 );
 console.log(`\nnext: pnpm dev   |   pnpm test   |   pnpm test:affected`);

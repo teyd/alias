@@ -5,7 +5,7 @@ import {
   type MessageView,
   RetentionDays,
 } from "@alias/contracts";
-import { type Keyring, Message, Verification } from "@alias/core";
+import { type Keyring, Message, Seal, Verification } from "@alias/core";
 import { type AliasRepo, type Dynamo, MessageRepo } from "@alias/db";
 import { NodeCrypto } from "@effect/platform-node";
 import * as Arr from "effect/Array";
@@ -92,6 +92,16 @@ export interface Stored {
   readonly found: Verification.Found;
 }
 
+/** A failed delivery's sealed copy, as `FailureRepo` stores it (PLAN.md §20.33). */
+export interface KeptBody {
+  readonly objectKey: string;
+  readonly keyVersion: number;
+  readonly wrappedKey: Uint8Array;
+}
+
+/** Failed deliveries are kept a week: the 7-day class, whose lifecycle rule removes them. */
+const KEPT_DAYS = 7;
+
 export class Inbox extends Context.Service<
   Inbox,
   {
@@ -124,6 +134,24 @@ export class Inbox extends Context.Service<
      * erased accounts, after their metadata is gone (`AliasRepo.delete` purges it).
      */
     readonly purge: (aliasId: string) => Effect.Effect<void, InboxUnavailable>;
+    /**
+     * Seals and stores the copy of a message that couldn't be forwarded (PLAN.md §20.33), under
+     * the alias's 7-day class, so `purge` takes it with the alias. Its metadata, with the wrapped
+     * key, is the caller's to record.
+     */
+    readonly keep: (
+      alias: AliasRepo.Alias,
+      failureId: string,
+      raw: Uint8Array,
+    ) => Effect.Effect<KeptBody, InboxUnavailable>;
+    /** The kept copy, opened. */
+    readonly retrieve: (
+      aliasId: string,
+      failureId: string,
+      kept: KeptBody,
+    ) => Effect.Effect<Uint8Array, InboxUnavailable>;
+    /** Deletes a kept copy's object; deleting one that is gone succeeds. */
+    readonly discard: (objectKey: string) => Effect.Effect<void, InboxUnavailable>;
   }
 >()("@alias/inbox/Inbox") {}
 
@@ -145,7 +173,7 @@ const make = Effect.fn("Inbox.make")(function* (bucket: string) {
     const dataKey = yield* Envelope.unwrap(keys, context, stored);
     const bytes = yield* Envelope.openPart(dataKey, context, "summary", stored.summary);
     const summary = yield* Schema.decodeUnknownEffect(SummaryJson)(decoder.decode(bytes)).pipe(
-      Effect.mapError(() => new Envelope.EnvelopeError({ reason: "summary does not decode" })),
+      Effect.mapError(() => new Seal.SealError({ reason: "summary does not decode" })),
     );
     return { dataKey, summary };
   });
@@ -255,7 +283,47 @@ const make = Effect.fn("Inbox.make")(function* (bucket: string) {
     }).pipe(Effect.mapError(unavailable));
   });
 
+  const keep = Effect.fn("Inbox.keep")(function* (
+    alias: AliasRepo.Alias,
+    failureId: string,
+    raw: Uint8Array,
+  ) {
+    const key = objectKey(KEPT_DAYS, alias.id, failureId);
+    const sealed = yield* Envelope.sealBody(
+      keys,
+      { aliasId: alias.id, messageId: failureId },
+      raw,
+    ).pipe(Effect.mapError(unavailable));
+    yield* Objects.put(bucket, key, sealed.body).pipe(Effect.mapError(unavailable));
+    const kept: KeptBody = {
+      objectKey: key,
+      keyVersion: sealed.keyVersion,
+      wrappedKey: sealed.wrappedKey,
+    };
+    return kept;
+  });
+
+  const retrieve = Effect.fn("Inbox.retrieve")(function* (
+    aliasId: string,
+    failureId: string,
+    kept: KeptBody,
+  ) {
+    const context = { aliasId, messageId: failureId };
+    const dataKey = yield* Envelope.unwrap(keys, context, kept).pipe(Effect.mapError(unavailable));
+    const sealedBody = yield* Objects.get(bucket, kept.objectKey).pipe(
+      Effect.mapError(unavailable),
+    );
+    return yield* Envelope.openPart(dataKey, context, "body", sealedBody).pipe(
+      Effect.mapError(unavailable),
+    );
+  });
+
   return Inbox.of({
+    keep: (alias, failureId, raw) => Effect.provide(keep(alias, failureId, raw), services),
+    retrieve: (aliasId, failureId, kept) =>
+      Effect.provide(retrieve(aliasId, failureId, kept), services),
+    discard: (key) =>
+      Effect.provide(Objects.remove(bucket, key).pipe(Effect.mapError(unavailable)), services),
     store: (alias, raw) => Effect.provide(store(alias, raw), services),
     list: (aliasId, page) => Effect.provide(list(aliasId, page), services),
     read: (aliasId, messageId) => Effect.provide(read(aliasId, messageId), services),

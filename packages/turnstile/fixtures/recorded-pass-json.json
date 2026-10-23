@@ -1,0 +1,19 @@
+{
+  "request": {
+    "json": {
+      "secret": "1x0000000000000000000000000000000AA",
+      "response": "XXXX.DUMMY.TOKEN.XXXX",
+      "remoteip": "203.0.113.9"
+    }
+  },
+  "status": 200,
+  "body": {
+    "challenge_ts": "2026-10-22T23:06:42.181Z",
+    "error-codes": [],
+    "hostname": "example.com",
+    "metadata": {
+      "result_with_testing_key": true
+    },
+    "success": true
+  }
+}

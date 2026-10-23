@@ -18,12 +18,15 @@ const MAX_NAME_CODE_POINTS = 128;
  */
 const UNSAFE = /[\p{Cc}\p{Bidi_Control}]/gu;
 
-/** Makes untrusted text safe to show as a display name: one line, no reordering, bounded. */
-export const sanitize = (text: string): string => {
+/**
+ * Makes untrusted text safe to show as a display name: one line, no reordering, bounded to
+ * `maxCodePoints`.
+ */
+export const sanitize = (text: string, maxCodePoints = MAX_NAME_CODE_POINTS): string => {
   const cleaned = text.replace(UNSAFE, " ").replace(/\s+/gu, " ").trim();
   const codePoints = Array.from(cleaned);
-  return codePoints.length > MAX_NAME_CODE_POINTS
-    ? `${codePoints.slice(0, MAX_NAME_CODE_POINTS - 1).join("")}…`
+  return codePoints.length > maxCodePoints
+    ? `${codePoints.slice(0, maxCodePoints - 1).join("")}…`
     : cleaned;
 };
 
@@ -71,8 +74,13 @@ const fold = (name: string, tokens: ReadonlyArray<string>, lineEnding: LineEndin
  * A complete unstructured field (`Subject`) holding untrusted `text`: made one safe line
  * ({@link sanitize}), then printable ASCII as words, anything else as encoded-words, folded.
  */
-export const textField = (name: string, text: string, lineEnding: LineEnding): string => {
-  const safe = sanitize(text);
+export const textField = (
+  name: string,
+  text: string,
+  lineEnding: LineEnding,
+  maxCodePoints = MAX_NAME_CODE_POINTS,
+): string => {
+  const safe = sanitize(text, maxCodePoints);
   return fold(name, isPlainAscii(safe) ? safe.split(" ") : encodedWords(safe), lineEnding);
 };
 

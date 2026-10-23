@@ -20,13 +20,18 @@ import * as Transaction from "./Transaction.ts";
  * tokens are stored only as the SHA-256 of their secret, like personal API tokens.
  */
 
-/** A client registered through RFC 7591. Clients known by a metadata document aren't stored. */
+/**
+ * A client registered through RFC 7591. Clients known by a metadata document aren't stored.
+ * Registration needs no account, so a client expires unless it is used: TTL removes it at
+ * `expiresAt`, and its first grant clears `expiresAt` for good (PLAN.md §20.30).
+ */
 export interface Client {
   readonly id: string;
   readonly name: string;
   readonly redirectUris: ReadonlyArray<string>;
   readonly uri: Option.Option<string>;
   readonly createdAt: DateTime.Utc;
+  readonly expiresAt: Option.Option<DateTime.Utc>;
 }
 
 /** What a signed-in user approved, waiting for its client to redeem it once. */
@@ -122,12 +127,15 @@ export class OAuthRepo extends Context.Service<
     readonly findCode: (hash: string) => Effect.Effect<Option.Option<Code>, DatabaseError>;
     /**
      * Redeems `code` for a new grant and its first tokens, all or nothing. A code redeemed before
-     * fails with `CodeUnusable` and revokes the grant it issued.
+     * fails with `CodeUnusable` and revokes the grant it issued. For a registered client, the
+     * same transaction keeps the client for good; one that expired meanwhile fails it, also
+     * with `CodeUnusable`.
      */
     readonly redeemCode: (
       code: Code,
       grant: Grant,
       issued: Issued,
+      client: { readonly isRegistered: boolean },
     ) => Effect.Effect<void, CodeUnusable | DatabaseError>;
     /** The refresh token with this hash, used or not; None for unknown and expired ones. */
     readonly findRefresh: (hash: string) => Effect.Effect<Option.Option<Refresh>, DatabaseError>;
@@ -182,6 +190,7 @@ const ClientItem = Item.codec(
     redirectUris: Attribute.StringList,
     uri: Schema.OptionFromOptionalKey(Attribute.S),
     createdAt: Attribute.EpochMillis,
+    expiresAt: Schema.OptionFromOptionalKey(Attribute.EpochSeconds),
   }),
   "OAuthClient",
 );
@@ -351,8 +360,16 @@ const make = Effect.fn("OAuthRepo.make")(function* () {
       }).pipe(Effect.mapError(databaseError("PutItem")));
     }, Effect.provide(client)),
 
+    // TTL deletes late, so an expired client is gone already for readers.
     findClient: Effect.fn("OAuthRepo.findClient")(function* (id) {
-      return yield* ClientItem.decodeOption(yield* get(clientKey(id)));
+      const found = yield* ClientItem.decodeOption(yield* get(clientKey(id)));
+      const now = yield* DateTime.now;
+      return Option.filter(found, (registered) =>
+        Option.match(registered.expiresAt, {
+          onNone: () => true,
+          onSome: (expiresAt) => DateTime.isGreaterThan(expiresAt, now),
+        }),
+      );
     }, Effect.provide(client)),
 
     reserveRegistration: (source, now, max) => {
@@ -381,9 +398,28 @@ const make = Effect.fn("OAuthRepo.make")(function* () {
       return Option.filter(code, isLive(yield* DateTime.now));
     }, Effect.provide(client)),
 
-    redeemCode: Effect.fn("OAuthRepo.redeemCode")(function* (code, grant, issued) {
+    redeemCode: Effect.fn("OAuthRepo.redeemCode")(function* (code, grant, issued, redeemer) {
       const grantAttributes = yield* GrantItem.encode(grant);
       const tokens = yield* tokenItems(issued);
+      const now = yield* Schema.encodeEffect(Attribute.EpochSeconds)(yield* DateTime.now).pipe(
+        Effect.mapError(databaseError("EncodeOAuthClient")),
+      );
+      // A used client stays: its TTL goes. One that expired (TTL may not have deleted it yet)
+      // fails the condition, like a code redeemed before.
+      const keepClient = redeemer.isRegistered
+        ? [
+            {
+              Update: {
+                TableName,
+                Key: clientKey(code.clientId),
+                UpdateExpression: "REMOVE expiresAt",
+                ConditionExpression:
+                  "attribute_exists(pk) AND (attribute_not_exists(expiresAt) OR expiresAt > :now)",
+                ExpressionAttributeValues: { ":now": now },
+              },
+            },
+          ]
+        : [];
       const isRedeemed = yield* DynamoDB.transactWriteItems({
         TransactItems: [
           {
@@ -408,11 +444,14 @@ const make = Effect.fn("OAuthRepo.make")(function* () {
             },
           },
           ...tokens,
+          ...keepClient,
         ],
       }).pipe(
         Effect.as(true),
         Effect.catchIf(
-          (error) => Transaction.conditionFailedAt(error, 0),
+          (error) =>
+            Transaction.conditionFailedAt(error, 0) ||
+            (redeemer.isRegistered && Transaction.conditionFailedAt(error, 2 + tokens.length)),
           () => Effect.succeed(false),
         ),
         Effect.mapError(databaseError("TransactWriteItems")),

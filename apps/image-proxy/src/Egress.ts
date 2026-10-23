@@ -9,7 +9,8 @@
  *   Node never looks up, are checked before connecting;
  * - redirects are followed by hand, at most three, each hop checked again;
  * - no cookies, no `Referer`, nothing from the reader's request; a fixed `User-Agent`;
- * - at most `maxBytes`, whatever `Content-Length` says, and a deadline for the whole fetch.
+ * - at most `maxBytes`, whatever `Content-Length` says; a short deadline for connecting, for the
+ *   first byte and for any pause after it, and a deadline for the whole fetch.
  *
  * It uses `node:http` directly (the one module of the app allowed to, see `vite.config.ts`):
  * Effect's HTTP client has no hook into the socket's DNS lookup.
@@ -23,6 +24,7 @@ import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HashSet from "effect/HashSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -60,6 +62,13 @@ export class UpstreamFailed extends Schema.TaggedError<UpstreamFailed>()("Upstre
   reason: Schema.String,
   /** The origin's status, when it answered. */
   status: Schema.optionalKey(Schema.Number),
+  /**
+   * The origin (`URL.origin`) that couldn't be reached at all: no address, refused, no TLS, or no
+   * connection within the deadline. Whatever path was asked for, that origin is down, so the
+   * proxy leaves it alone for a while. A slow answer is not this: it can depend on the path,
+   * which the requester picks.
+   */
+  unreachable: Schema.optionalKey(Schema.String),
 }) {}
 
 export interface Fetched {
@@ -70,6 +79,9 @@ export interface Fetched {
 export interface Limits {
   readonly maxBytes: number;
   readonly maxRedirects: number;
+  /** Connecting (DNS, TCP), then waiting for the first byte, then any pause in the body. */
+  readonly idleTimeout: Duration.Duration;
+  /** The whole fetch, redirects included. */
   readonly timeout: Duration.Duration;
 }
 
@@ -77,6 +89,22 @@ const USER_AGENT = "AliasImageProxy/1.0 (+https://github.com/teyd/alias)";
 
 /** Marks the lookup failure that is our refusal, not a DNS error. */
 const BLOCKED = "EALIAS_BLOCKED";
+
+/** The socket's own errors that say the origin can't be reached, whatever the path. */
+const UNREACHABLE = HashSet.make(
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPROTO",
+  "ERR_SSL_WRONG_VERSION_NUMBER",
+  "CERT_HAS_EXPIRED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+);
 
 /**
  * The socket's DNS lookup: resolves every address and refuses all of them if any one is not
@@ -119,15 +147,36 @@ const requestOnce = (url: URL, policy: EgressPolicy["Service"], limits: Limits) 
       signal,
       lookup: guardedLookup(policy.isAllowedAddress),
       headers: { "user-agent": USER_AGENT, accept: "image/avif,image/webp,image/*;q=0.8" },
+      // Set before the socket connects, then kept as its idle timeout (`node:http` docs).
+      timeout: Duration.toMillis(limits.idleTimeout),
     });
-    request.on("error", (error: NodeJS.ErrnoException) =>
+    let isAnswered = false;
+    request.on("timeout", () => {
+      const isConnecting = request.socket?.connecting ?? true;
+      request.destroy();
       resume(
-        error.code === BLOCKED
-          ? Effect.fail(new EgressRefused({ reason: error.message }))
-          : Effect.fail(new UpstreamFailed({ reason: error.code ?? "connection failed" })),
-      ),
-    );
+        Effect.fail(
+          isConnecting
+            ? new UpstreamFailed({ reason: "connect timed out", unreachable: url.origin })
+            : new UpstreamFailed({ reason: isAnswered ? "stalled" : "no first byte" }),
+        ),
+      );
+    });
+    request.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === BLOCKED) {
+        return resume(Effect.fail(new EgressRefused({ reason: error.message })));
+      }
+      const code = error.code ?? "connection failed";
+      return resume(
+        Effect.fail(
+          !isAnswered && HashSet.has(UNREACHABLE, code)
+            ? new UpstreamFailed({ reason: code, unreachable: url.origin })
+            : new UpstreamFailed({ reason: code }),
+        ),
+      );
+    });
     request.on("response", (response) => {
+      isAnswered = true;
       const status = response.statusCode ?? 0;
       const location = response.headers.location;
       if (status >= 300 && status < 400 && location !== undefined) {

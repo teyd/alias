@@ -26,8 +26,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Recipient         | `USER#<userId>`              | `RECIPIENT#<address>`  |                            |                           |             |
  * | RecipientSettings | `USER#<userId>`              | `RECIPIENTS`           |                            |                           |             |
  * | MailQuota         | `USER#<userId>`              | `CONFIRMATIONS#<date>` |                            |                           | `expiresAt` |
+ * | HardBounce        | `USER#<userId>`              | `BOUNCE#<recipientId>#<sesMessageId>` |             |                           | `expiresAt` |
+ * | Sent              | `USER#<userId>`              | `SENT#<sesMessageId>`  |                            |                           | `expiresAt` |
  * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
+ * | LabelColor        | `USER#<userId>`              | `LABEL#<label>`        |                            |                           |             |
+ * | Filters           | `USER#<userId>`              | `FILTERS`              |                            |                           |             |
 
+ * | UsernameEntry     | `USER#<userId>`              | `USERNAME#<username>`  |                            |                           |             |
+ * | UsernameCount     | `USER#<userId>`              | `USERNAMES`            |                            |                           |             |
  * | DomainPointer     | `USER#<userId>`              | `DOMAIN#<domain>`      |                            |                           |             |
  * | DomainCount       | `USER#<userId>`              | `DOMAINS`              |                            |                           |             |
  * | Domain            | `DOMAIN#<domain>`            | `DOMAIN`               | `DOMAIN-CHECKS`            | `<nextCheckAt>#<domain>`  |             |
@@ -36,27 +42,36 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              | `SESSIONS#<userId>`        | `SESSION#<sha256(token)>` | `expiresAt` |
  * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                            |                           | `expiresAt` |
  * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                            |                           | `expiresAt` |
+ * | TargetDelivery    | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>#TO#<recipientId>` |            |                           | `expiresAt` |
  * | Token             | `TOKEN#<sha256(secret)>`     | `TOKEN`                | `TOKENS#<userId>`          | `TOKEN#<id>`              | `expiresAt` |
  * | AuthFailures      | `AUTHFAIL#<sha256(ip)>`      | `FAILURES#<hour>`      |                            |                           | `expiresAt` |
  * | DeviceGrant       | `DEVICE#<sha256(deviceCode)>` | `DEVICE`              |                            |                           | `expiresAt` |
  * | UserCode          | `USERCODE#<userCode>`        | `USERCODE`             |                            |                           | `expiresAt` |
  * | DeviceRequests    | `DEVICEAUTH#<sha256(ip)>`    | `REQUESTS#<hour>`      |                            |                           | `expiresAt` |
  * | DeviceMisses      | `USER#<userId>`              | `DEVICE-MISSES#<hour>` |                            |                           | `expiresAt` |
+ * | Challenges        | `AUTHLIMIT#<sha256(ip)>`     | `CHALLENGES#<hour>`    |                            |                           | `expiresAt` |
+ * | Signups           | `AUTHLIMIT#<sha256(ip)>`     | `SIGNUPS#<date>`       |                            |                           | `expiresAt` |
+ * | AllSignups        | `SIGNUPS`                    | `HOUR#<hour>`          |                            |                           | `expiresAt` |
+ * | LoginFailures     | `USER#<userId>`              | `LOGIN-FAILURES#<hour>` |                           |                           | `expiresAt` |
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
  * | Draft             | `USER#<userId>`              | `DRAFT#<id>`           |                            |                           | `expiresAt` |
  * | SendQuota         | `USER#<userId>`              | `SENDS#<date>`         |                            |                           | `expiresAt` |
- * | OAuthClient       | `OAUTH-CLIENT#<clientId>`    | `CLIENT`               |                            |                           |             |
+ * | OAuthClient       | `OAUTH-CLIENT#<clientId>`    | `CLIENT`               |                            |                           | `expiresAt` |
  * | Registrations     | `OAUTHREG#<sha256(ip)>`      | `REGISTRATIONS#<hour>` |                            |                           | `expiresAt` |
  * | OAuthCode         | `OAUTH-CODE#<sha256(code)>`  | `CODE`                 | `OAUTH#<userId>`           | `CODE#<sha256(code)>`     | `expiresAt` |
  * | OAuthGrant        | `OAUTH-GRANT#<grantId>`      | `GRANT`                | `OAUTH#<userId>`           | `GRANT#<grantId>`         | `expiresAt` |
  * | OAuthAccess       | `OAUTH-ACCESS#<sha256>`      | `ACCESS`               | `OAUTH#<userId>`           | `ACCESS#<sha256>`         | `expiresAt` |
  * | OAuthRefresh      | `OAUTH-REFRESH#<sha256>`     | `REFRESH`              | `OAUTH#<userId>`           | `REFRESH#<sha256>`        | `expiresAt` |
+ * | ProxyOwnerQuota   | `PROXY#USER#<userId>`        | `FETCHES#<minute>`     |                            |                           | `expiresAt` |
+ * | ProxyHostQuota    | `PROXY#HOST#<host>`          | `FETCHES#<minute>`     |                            |                           | `expiresAt` |
+ * | ProxyHostDown     | `PROXY#HOST#<host>`          | `DOWN`                 |                            |                           | `expiresAt` |
  *
  * Access patterns: look up an alias by address (GetItem, strongly consistent) and list a user's
  * aliases (gsi1 Query on the whole `USER#<userId>` partition, so nothing else may use that gsi1pk).
  * A username is unique by its confusable skeleton (`Username.skeleton` in `@alias/core`): the
  * Username item is the claim, written in the same transaction as the User and their first Passkey.
- * Logins look a passkey up by credential ID and a session by the hash of its cookie token.
+ * Logins look a passkey up by credential ID and a session by the hash of its cookie token;
+ * Settings lists a user's passkeys and sessions on their gsi1 partitions.
  * Challenges are deleted when answered (single use).
  *
  * Recipients (forwarding addresses) live in their user's partition: listing them is one strongly
@@ -67,10 +82,21 @@ import { DynamoTable } from "./Dynamo.ts";
  * so the cap is atomic) and names the default recipient. MailQuota counts confirmation mails per
  * user and UTC day.
  *
+ * A HardBounce is one of our messages to a recipient that bounced for good without saying the
+ * mailbox is gone (PLAN.md §20.28), keyed by the recipient's id (a re-added address starts
+ * afresh) and the SES message id (a redelivered bounce counts once). The feedback Lambda writes
+ * one, then counts the recipient's recent ones with one Query on `begins_with(sk,
+ * "BOUNCE#<recipientId>#")`; they expire after the counting window.
+ *
  * A ForwardQuota counts the mail the inbound Lambda forwarded for an alias in one UTC hour
  * (`2026-10-22T09`), next to the alias in its partition; the hourly cap is one conditional
  * UpdateItem on it. It outlives its hour by an hour and is never read after. MailQuota and
  * AliasQuota (aliases created on the fly per user and UTC day) work the same way (`Quota.ts`).
+ *
+ * The image proxy (PLAN.md §20.29) counts its origin fetches per alias owner and per origin host
+ * in one UTC minute (`2026-10-22T09:41`) the same way, and a ProxyHostDown item (`until`, epoch
+ * millis) keeps it from asking a host that just timed out or refused to connect. All three live
+ * under `PROXY#` partition keys, the only ones the proxy's role may touch.
  *
  * Deleting an alias (PLAN.md §20.15) replaces its item with an AliasTombstone holding only
  * `deletedAt` and the deleting user's `userId`, listed on gsi1 under `DELETED-ALIASES#<userId>`,
@@ -96,6 +122,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * Lambda finds a subdomain's owner through the Username item (exact username, not just the same
  * skeleton) and reads their settings with a second GetItem.
  *
+ * Additional usernames (PLAN.md §20.34) claim their skeleton with a Username item like the
+ * sign-up's, marked `isAdditional`, written in one transaction with the user's UsernameEntry
+ * (the username's own settings: on the fly, default recipient; listing them is one strongly
+ * consistent Query on `begins_with(sk, "USERNAME#")`) and UsernameCount (the per-user cap, atomic).
+ * For an additional username, the inbound Lambda's second GetItem reads its UsernameEntry instead
+ * of the user's settings. Deleting one turns its Username item into a tombstone first, like
+ * erasure does, and removes the entry last, so a deletion that failed halfway is retried from it.
+ *
  * A Domain is a custom domain (PLAN.md §20.18), keyed by its lowercased name, so one claim exists
  * per domain across all users and the inbound Lambda resolves it with one GetItem. It is written
  * in one transaction with the owner's DomainPointer (listing a user's domains is one Query plus a
@@ -116,6 +150,20 @@ import { DynamoTable } from "./Dynamo.ts";
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing
  * again. It carries no content and expires after a week, well past Lambda's 6-hour retry window.
+ * An alias that forwards to several of its owner's recipients (PLAN.md §20.31) also claims each
+ * copy as a TargetDelivery before sending it, so a retry after one copy failed for now sends only
+ * the copies still missing.
+ *
+ * An alias item may carry the owner's `description`, `labels` and `recipientIds` (lists, left out
+ * when empty). The forward path reads the user's recipients with one Query anyway, so choosing
+ * recipients per alias costs no read. A LabelColor is a colour the user gave one of their labels;
+ * listing them is one Query on `begins_with(sk, "LABEL#")`, and a label without one has no item.
+ *
+ * A Sent item traces a bounce to the message it is about (PLAN.md §20.28): one PutItem after
+ * each SES send, in the sender's partition under the ID SES returned, naming the kind of mail and
+ * the recipient it went to (by id, never the address). The feedback Lambda reads it with one
+ * GetItem, keyed by the event's `alias-user` tag and `mail.messageId`. No content; it expires
+ * after a week, and erasing the account removes it with the partition.
  *
  * A Token is a personal API token (PLAN.md §20.20), stored under the SHA-256 of its secret, so a
  * bearer request costs one strongly consistent GetItem and a table dump yields no usable token.
@@ -145,6 +193,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * lists the user's webhooks with one strongly consistent Query (`begins_with(sk, "WEBHOOK#")`),
  * and a delivery reads its endpoint (URL, secrets) with one GetItem.
  *
+ * Filters holds the user's blocklist (a string set `blocked` of sender addresses, domains and
+ * `*.domain` entries) and their rules (`rules`, JSON, with `rulesVersion` for optimistic
+ * concurrency), PLAN.md §20.32. The inbound Lambda reads it with one strongly consistent GetItem
+ * per message; adding or removing an entry is one `ADD`/`DELETE` UpdateItem, so no entry is lost
+ * to a concurrent change, and both lists are bounded so the item stays small.
+ *
  * A DeviceGrant is a device login in progress (OAuth 2.0 device authorization grant, PLAN.md
  * §20.23), stored under the SHA-256 of its device code, so each poll costs one strongly
  * consistent GetItem. The UserCode item points from the code a person types to it; both are
@@ -152,6 +206,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * redeemed, in the same transaction that creates the token. DeviceRequests counts device
  * authorization requests per hashed client address and hour; DeviceMisses counts unknown user
  * codes a signed-in user tried, in their partition so erasing the account removes it.
+ *
+ * Sign-up and login limits (PLAN.md §20.27) are `Quota` counters too: Challenges (WebAuthn
+ * challenges per hashed client address and hour), Signups (accounts per address and day),
+ * AllSignups (accounts per hour for everyone, the circuit breaker; one hot item, written once per
+ * sign-up) and LoginFailures (failed passkey assertions per account and hour, in the user's
+ * partition like DeviceMisses).
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

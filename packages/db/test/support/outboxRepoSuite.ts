@@ -158,5 +158,25 @@ export const outboxRepoSuite = (
           }),
         ),
       );
+
+      it.effect("counts new recipients apart from sends, per user and day", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* OutboxRepo.OutboxRepo;
+            const now = DateTime.makeUnsafe("2026-10-22T09:00:00Z");
+            const results = yield* Effect.all(
+              Arr.makeBy(3, () => repo.reserveRecipient("usr_1", now, 2)),
+              { concurrency: "unbounded" },
+            );
+            expect(Arr.filter(results, (ok) => ok)).toHaveLength(2);
+            // Sends have their own allowance, and so does every other user and day.
+            expect(yield* repo.reserveSend("usr_1", now, 1)).toBe(true);
+            expect(yield* repo.reserveRecipient("usr_2", now, 2)).toBe(true);
+            expect(
+              yield* repo.reserveRecipient("usr_1", DateTime.makeUnsafe("2026-10-23T00:00:00Z"), 2),
+            ).toBe(true);
+          }),
+        ),
+      );
     });
   });

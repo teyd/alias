@@ -46,13 +46,16 @@ const toRequest = (search: Search): AuthorizationRequest => ({
 /** Leaves for the client's redirect URI, with a code or an error. */
 const leave = (redirectTo: string) => window.location.assign(redirectTo);
 
+/** Where a redirect goes, named on the button that follows it (the client chose it). */
+const hostOf = (url: string) => (URL.canParse(url) ? new URL(url).host : url);
+
 const Refused = ({ error }: { readonly error: Error }) => (
   <AuthFrame title="Can't connect this app" description={error.message}>
     {Option.match(redirectOf(error), {
       onNone: () => null,
       onSome: (redirectTo) => (
         <Button variant="outline" onClick={() => leave(redirectTo)}>
-          Return to the app
+          Return to <span className="data">{hostOf(redirectTo)}</span>
         </Button>
       ),
     })}
@@ -70,18 +73,30 @@ const ConsentForm = ({ request }: { readonly request: AuthorizationRequest }) =>
   });
   if (consent.isPending) return null;
   if (consent.isError) return <Refused error={consent.error} />;
-  const { client, scopes } = consent.data;
+  const { client, scopes, resource } = consent.data;
+  // The token is for the MCP server or for the HTTP API (the browser extension, PLAN.md §20.35).
+  const through = resource === `${window.location.origin}/v1` ? "the Alias API" : "MCP";
+  // Only the document's host and the redirect are verified; the name is the client's own claim,
+  // whatever its kind (PLAN.md §20.30).
   return (
     <AuthFrame
-      title={`Connect ${client.name}?`}
+      title={Option.match(client.host, {
+        onNone: () => "Connect this app?",
+        onSome: (host) => `Connect ${host}?`,
+      })}
       description={
         <>
-          It wants to use your Alias account through MCP. Afterwards it is sent to{" "}
+          It wants to use your Alias account through {through}. Afterwards it is sent to{" "}
           <span className="data text-foreground">{client.redirectHost}</span>.
         </>
       }
     >
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-xs">
+        <dt className="text-muted-foreground">Calls itself</dt>
+        <dd className="flex min-w-0 items-center gap-2">
+          <span className="truncate">“{client.name}”</span>
+          <Badge variant="warning">Not verified</Badge>
+        </dd>
         <dt className="text-muted-foreground">App ID</dt>
         <dd className="data truncate">{client.id}</dd>
         {Option.match(client.uri, {
@@ -89,16 +104,20 @@ const ConsentForm = ({ request }: { readonly request: AuthorizationRequest }) =>
           onSome: (uri) => (
             <>
               <dt className="text-muted-foreground">Website</dt>
-              <dd className="data truncate">{uri}</dd>
+              <dd className="data truncate">
+                <a
+                  href={uri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  {uri}
+                </a>
+              </dd>
             </>
           ),
         })}
       </dl>
-      {client.kind === "registered" && (
-        <Badge variant="warning" className="self-start">
-          Name not verified
-        </Badge>
-      )}
       {client.isLocalRedirect && (
         <Alert>
           <ShieldAlertIcon />

@@ -5,9 +5,12 @@
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
  */
+import { AwsClient, CloudFront, Parameters } from "@alias/aws";
 import { RetentionDays } from "@alias/contracts";
+import { OriginSecret } from "@alias/core";
 import { Table } from "@alias/db";
 import { Inbox } from "@alias/inbox";
+import { securityHeaders } from "@alias/web/security-headers";
 import { WebhookQueue } from "@alias/webhooks";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
@@ -15,6 +18,8 @@ import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 
 const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
@@ -37,7 +42,37 @@ const receiptRuleName = "all-verified";
 const webhookQueueName = `alias-webhooks-${stage}`;
 /** Fixed names, so the alarms and the topic policy can name each other as plain strings. */
 const alertTopicName = `alias-alerts-${stage}`;
-const alarmPrefix = `alias-${stage}-ses-`;
+const alarmPrefix = `alias-${stage}-`;
+/**
+ * Async invocations (SES → inbound, SNS → feedback) that Lambda gave up on, after their retries
+ * or after `maximumEventAge` of throttling (PLAN.md §20.29). Kept 14 days for a redrive.
+ */
+const asyncFailuresQueueName = `alias-async-failures-${stage}`;
+
+/**
+ * Reserved concurrency per function (PLAN.md §20.29). Each number both guarantees the function
+ * that many concurrent executions and caps it there, so a flood on a public URL (the API, the
+ * image proxy) can't take the executions SES-invoked mail processing needs, and SES's events are
+ * never throttled by someone else's traffic. Reserving costs nothing; only use is billed.
+ *
+ * Together 352. Lambda keeps at least 100 unreserved, so the account's concurrency quota must be
+ * at least 452: ask for 1,000 (Service Quotas, Lambda "Concurrent executions", L-B99A9384) before
+ * the first deploy, since new accounts may start with as few as 10.
+ */
+const reservedConcurrency = {
+  /** SES mail: ~1 s each, so 100 handle bursts of ~100 messages a second. */
+  inbound: 100,
+  /** One SNS notification per bounce or complaint. */
+  feedback: 10,
+  /** Webhook deliveries; the event source mapping scales up to this. */
+  webhookDelivery: 20,
+  /** Uncached image fetches; budgets per owner and host share them (`Proxy.Budgets`). */
+  imageProxy: 20,
+  /** Every request of the web app, CLI, SDK and MCP clients; a cap more than a reservation. */
+  api: 200,
+  /** One run every ten minutes. */
+  verifyDomains: 2,
+} as const;
 /**
  * Who gets the SES reputation alarms (PLAN.md §20.13). Optional: without it the topic and alarms
  * still exist (alarm state and history show in CloudWatch), but nobody is mailed. SNS sends a
@@ -101,6 +136,175 @@ const inboxBucketName = `alias-inbox-${stage}`;
  */
 const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 
+/**
+ * The webhook keys (PLAN.md §20.30): they seal the webhook signing secrets at rest. Same format
+ * and storage as the other keyrings; the API (seals on create and rotate) and the delivery Lambda
+ * (opens) read it. Put it once before the first deploy:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/webhook-keys \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * Rotation is the usual two puts (add the new key after the current one, then move it first). A
+ * retired key opens every secret sealed with it until each webhook's secret is rotated or the
+ * webhook deleted, so keep it until then; removing it earlier stops those webhooks' deliveries
+ * (they retry into the dead-letter queue).
+ */
+const webhookKeysParameter = `/alias/${stage}/webhook-keys`;
+
+/**
+ * Cloudflare Turnstile at sign-up (PLAN.md §20.27). The site key is public (the web app renders
+ * the widget with it); the secret key is a `SecureString` the API reads at cold start. Create the
+ * widget in the Cloudflare dashboard (Turnstile → Add widget, hostname = the app domain, mode
+ * "Managed"), set `ALIAS_TURNSTILE_SITE_KEY` for the deploy, and put the secret once:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/turnstile-secret --value '<secret key>'
+ *
+ * Rotating it in the dashboard keeps the old secret valid for a grace period; overwrite the
+ * parameter and update the function configuration (new containers read it) within that period.
+ */
+const turnstileSecretParameter = `/alias/${stage}/turnstile-secret`;
+// The local stage may use Turnstile's always-passing test key; a deployed one needs its own.
+const turnstileSiteKey =
+  process.env.ALIAS_TURNSTILE_SITE_KEY ?? (stage === "local" ? "1x00000000000000000000AA" : "");
+if (turnstileSiteKey === "") {
+  throw new Error("ALIAS_TURNSTILE_SITE_KEY is required to deploy a stage (PLAN.md §20.27)");
+}
+/** Sign-ups everyone together may make in an hour before sign-up pauses (the circuit breaker). */
+const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
+
+/**
+ * The secret CloudFront adds to every request it forwards to the API (PLAN.md §20.26), so the API
+ * knows a request came through the distribution (and its WAF) and may trust
+ * `CloudFront-Viewer-Address`. A keyring like the others, read by the API at cold start; unlike
+ * them, this stack reads it too, at deploy time, because the distribution's origin custom header
+ * must carry the current key: the value ends up in the distribution config and the Alchemy state.
+ * Put it once before the first deploy:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/origin-secrets \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * Rotate in three steps: append the new key (`1:<old>,2:<new>`) and update the API function (any
+ * configuration change starts fresh containers that accept both); put it first (`2:<new>,1:<old>`)
+ * and deploy, which sends the new key once the distribution has deployed everywhere; then drop the
+ * old key and update the API function again.
+ */
+const originSecretsParameter = `/alias/${stage}/origin-secrets`;
+
+/** The web app's production build (`pnpm --filter @alias/web build`), uploaded on deploy. */
+const webBucketName = `alias-web-${stage}`;
+const webBuild = new URL("../apps/web/dist", import.meta.url).pathname;
+
+/**
+ * The app domain's certificate (ACM, us-east-1, DNS-validated). DNS stays on Cloudflare, so the
+ * first deploy requests it and outputs the validation CNAME (`certificateValidation`), which goes
+ * into Cloudflare DNS (DNS only, not proxied) and stays there for renewals. Once ACM says
+ * `ISSUED`, deploy again with `ALIAS_APP_CERTIFICATE_ISSUED=true`: CloudFront refuses a pending
+ * certificate, so until then the distribution answers on its `*.cloudfront.net` name only.
+ */
+const isCertificateIssued = process.env.ALIAS_APP_CERTIFICATE_ISSUED === "true";
+
+/**
+ * The CloudFront Function on the app's viewer requests: paths without a file extension are the
+ * SPA's client-side routes (`/aliases`, `/oauth/authorize`, `/device`) and get `index.html`; the
+ * API's paths have their own behaviors and never reach it. A custom error response can't do
+ * this: it would also replace the API's own 403 and 404 answers.
+ */
+const spaRoutesCode = `function handler(event) {
+  var request = event.request;
+  var last = request.uri.substring(request.uri.lastIndexOf("/") + 1);
+  if (last.indexOf(".") === -1) request.uri = "/index.html";
+  return request;
+}`;
+
+/**
+ * The CloudFront Function on viewer responses of the app and the API: the security headers
+ * (`@alias/web/security-headers`, the ones the browser tests run under). A function, not a
+ * response headers policy: the flat-rate Free and Pro plans allow only managed policies, and the
+ * managed SecurityHeadersPolicy has no CSP. The image proxy sets its own (sandbox CSP, `nosniff`).
+ */
+const securityHeadersCode = `var HEADERS = ${JSON.stringify(securityHeaders())};
+function handler(event) {
+  var headers = event.response.headers;
+  Object.keys(HEADERS).forEach(function (name) {
+    headers[name] = { value: HEADERS[name] };
+  });
+  return event.response;
+}`;
+
+/** Paths whose requests WAF counts separately: sign-up, login, OAuth and device login. */
+const authPaths = ["/v1/auth/", "/v1/oauth/", "/v1/device/"];
+
+/** A WAF statement matching request paths that start with `prefix`. */
+const pathStartsWith = (prefix: string) => ({
+  ByteMatchStatement: {
+    SearchString: new TextEncoder().encode(prefix),
+    FieldToMatch: { UriPath: {} },
+    PositionalConstraint: "STARTS_WITH" as const,
+    TextTransformations: [{ Priority: 0, Type: "NONE" as const }],
+  },
+});
+
+const visibility = (name: string) => ({
+  SampledRequestsEnabled: true,
+  CloudWatchMetricsEnabled: true,
+  MetricName: `alias-${stage}-${name}`,
+});
+
+/** An AWS managed rule group, its own actions (block) unchanged. */
+const managedRules = (name: string, priority: number) => ({
+  Name: name,
+  Priority: priority,
+  Statement: { ManagedRuleGroupStatement: { VendorName: "AWS", Name: name } },
+  OverrideAction: { None: {} },
+  VisibilityConfig: visibility(name),
+});
+
+/**
+ * The web ACL's rules (PLAN.md §20.26), five at most so the flat-rate Free plan fits: AWS's IP
+ * reputation and known-bad-inputs groups, and two rate rules per viewer IP over 5 minutes as a
+ * second layer to the app's own limits. Left out on purpose: the core rule set (it blocks bodies
+ * over 8 KB, HTML and URLs in bodies, and long URI paths, so drafts, OpenPGP keys and image proxy
+ * URLs would trip it; the API decodes every payload with a schema and renders no HTML), the
+ * anonymous IP list (it blocks VPNs and Tor, which privacy users rely on), and a rate rule on
+ * `/img/*` (Gmail and Apple Mail fetch images for all their users from a few addresses).
+ */
+const wafRules = [
+  managedRules("AWSManagedRulesAmazonIpReputationList", 0),
+  managedRules("AWSManagedRulesKnownBadInputsRuleSet", 1),
+  {
+    Name: "auth-rate",
+    Priority: 2,
+    // Logins take two requests; `alias login` polls the token endpoint every 5 s (60 in 5 min).
+    Statement: {
+      RateBasedStatement: {
+        Limit: 300,
+        EvaluationWindowSec: 300,
+        AggregateKeyType: "IP" as const,
+        ScopeDownStatement: { OrStatement: { Statements: authPaths.map(pathStartsWith) } },
+      },
+    },
+    Action: { Block: {} },
+    VisibilityConfig: visibility("auth-rate"),
+  },
+  {
+    Name: "flood-rate",
+    Priority: 3,
+    Statement: {
+      RateBasedStatement: {
+        Limit: 3000,
+        EvaluationWindowSec: 300,
+        AggregateKeyType: "IP" as const,
+        ScopeDownStatement: { NotStatement: { Statement: pathStartsWith("/img/") } },
+      },
+    },
+    Action: { Block: {} },
+    VisibilityConfig: visibility("flood-rate"),
+  },
+];
+
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
   "alias",
@@ -118,6 +322,9 @@ export default Alchemy.Stack(
     const reverseTokenKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${reverseTokenKeysParameter}`;
     const imageProxyKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${imageProxyKeysParameter}`;
     const inboxKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${inboxKeysParameter}`;
+    const webhookKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${webhookKeysParameter}`;
+    const turnstileSecretParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${turnstileSecretParameter}`;
+    const originSecretsParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${originSecretsParameter}`;
     const inboxObjects = `arn:aws:s3:::${inboxBucketName}/*`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
@@ -187,7 +394,9 @@ export default Alchemy.Stack(
           ID: "expire-inbound",
           Status: "Enabled",
           Filter: { Prefix: spoolPrefix },
-          Expiration: { Days: 1 },
+          // Lambda may retry an event for 6 hours, and one it gave up on waits in the async
+          // failures queue for a redrive (PLAN.md §20.29), which needs the message still here.
+          Expiration: { Days: 3 },
         },
       ],
       policy: [
@@ -241,6 +450,11 @@ export default Alchemy.Stack(
       Action: ["ssm:GetParameter"],
       Resource: inboxKeysParameterArn,
     };
+    const webhookKeys = {
+      Effect: "Allow" as const,
+      Action: ["ssm:GetParameter"],
+      Resource: webhookKeysParameterArn,
+    };
 
     // Logs carry no addresses or content, but still expire (PLAN.md §20.15): without a retention
     // Lambda's log groups never do.
@@ -276,6 +490,29 @@ export default Alchemy.Stack(
       Resource: webhookQueueArn,
     };
 
+    // Where Lambda puts async events (SES mail, SNS feedback) it gave up on, so they aren't lost
+    // silently (PLAN.md §20.29). An alarm fires on the first one.
+    const asyncFailures = yield* AWS.SQS.Queue("AsyncFailures", {
+      queueName: asyncFailuresQueueName,
+      messageRetentionPeriod: Duration.days(14),
+      sqsManagedSseEnabled: true,
+    });
+    /** Lambda sends an on-failure record with the function's own role. */
+    const sendAsyncFailures = {
+      Effect: "Allow" as const,
+      Action: ["sqs:SendMessage"],
+      Resource: `arn:aws:sqs:eu-west-1:${accountId}:${asyncFailuresQueueName}`,
+    };
+    /**
+     * Lambda's async retries: two after a function error, and throttled events kept for the
+     * longest age it allows (6 hours), then recorded in the async failures queue.
+     */
+    const asyncInvokes = {
+      maximumRetryAttempts: 2,
+      maximumEventAge: "6 hours",
+      destinationConfig: { OnFailure: { Destination: asyncFailures.queueArn } },
+    } as const;
+
     const api = yield* AWS.Lambda.Function("Api", {
       main: new URL("../apps/api/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -285,6 +522,7 @@ export default Alchemy.Stack(
       // is resumable, but each retry costs the user a passkey prompt.
       timeout: Duration.seconds(30),
       logging,
+      reservedConcurrentExecutions: reservedConcurrency.api,
       functionUrl: true,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
@@ -299,7 +537,32 @@ export default Alchemy.Stack(
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
         ALIAS_INBOX_BUCKET: inboxBucketName,
         ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        // Mints the reverse alias of a contact the owner adds (PLAN.md §20.33).
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
+        ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
+        ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
+        // Only requests through the distribution are served (PLAN.md §20.26).
+        ALIAS_ORIGIN_SECRETS_PARAMETER: originSecretsParameter,
       },
+    });
+    // Sign-up's Turnstile secret, read at cold start.
+    yield* api.bind("TurnstileSecret", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: turnstileSecretParameterArn },
+      ],
+    });
+    // The reverse-token keys, to mint a contact's reverse alias (same `aws/ssm` key, no KMS grant).
+    yield* api.bind("ReverseTokenKeys", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: reverseTokenKeysParameterArn },
+      ],
+    });
+    yield* api.bind("OriginSecrets", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: originSecretsParameterArn },
+      ],
     });
     // Stored mail: read, delete one, and list an alias's objects to purge them with the alias or
     // the account (ListBucket also makes a missing key a 404, not a 403). The inbox keys unwrap.
@@ -310,7 +573,8 @@ export default Alchemy.Stack(
         inboxKeys,
       ],
     });
-    yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
+    // Publishing events, and sealing endpoint secrets with the webhook keys.
+    yield* api.bind("PublishWebhooks", { policyStatements: [publishWebhooks, webhookKeys] });
     yield* api.bind("DataAccess", {
       policyStatements: [
         {
@@ -337,9 +601,11 @@ export default Alchemy.Stack(
           Resource: [identityArn(appDomain), configurationSetArn],
         },
         {
-          // Re-adding a bounced address takes it off the suppression list once (§20.11).
+          // Re-adding a bounced address takes it off the suppression list once (§20.11); mail the
+          // owner writes is refused for an address on it (§20.33). Neither action takes a
+          // resource-level permission.
           Effect: "Allow",
-          Action: ["ses:DeleteSuppressedDestination"],
+          Action: ["ses:DeleteSuppressedDestination", "ses:GetSuppressedDestination"],
           Resource: "*",
         },
       ],
@@ -388,10 +654,10 @@ export default Alchemy.Stack(
     });
 
     // The image proxy (`apps/image-proxy`, PLAN.md §20.19): its own function and role, because it
-    // fetches URLs that come from mail. The role can read its keys and nothing else: no table, no
-    // spool, no SES. Reserved concurrency caps what a flood of uncached proxy URLs can cost.
-    // The function URL takes only CloudFront's signed requests (OAC with `AWS_IAM`), so every
-    // request goes through the cache.
+    // fetches URLs that come from mail. The role can read its keys and its own fetch budgets
+    // (§20.29) and nothing else: no other item of the table, no spool, no SES. Reserved
+    // concurrency caps what a flood of uncached proxy URLs can cost. The function URL takes only
+    // CloudFront's signed requests (OAC with `AWS_IAM`), so every request goes through the cache.
     const imageProxy = yield* AWS.Lambda.Function("ImageProxy", {
       main: new URL("../apps/image-proxy/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -400,13 +666,28 @@ export default Alchemy.Stack(
       logging,
       // The fetch has a 5 s deadline (`Proxy.limits`).
       timeout: Duration.seconds(10),
-      reservedConcurrentExecutions: 10,
+      reservedConcurrentExecutions: reservedConcurrency.imageProxy,
       functionUrl: { authType: "AWS_IAM" },
-      env: { ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter },
+      env: {
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
+        ALIAS_TABLE_NAME: table.tableName,
+      },
     });
     yield* imageProxy.bind("ImageProxyKeys", {
       policyStatements: [
         { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: imageProxyKeysParameterArn },
+      ],
+    });
+    // Budgets and down origins (`ProxyRepo`): single-item reads and writes, and only of items
+    // whose partition key starts with `PROXY#` (the DynamoDB IAM docs' fine-grained access).
+    yield* imageProxy.bind("ProxyBudgets", {
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+          Resource: [tableArn],
+          Condition: { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["PROXY#*"] } },
+        },
       ],
     });
     const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxy", {
@@ -416,14 +697,101 @@ export default Alchemy.Stack(
     });
     const functionUrlHost = (url: string | undefined) =>
       new URL(url ?? "https://missing.invalid").hostname;
-    // CachingOptimized keys the cache on the path alone and forwards no cookies, query or viewer
-    // headers, and honours the Lambda's `Cache-Control` (a day for images). No custom domain yet:
-    // mail points at the distribution's own `*.cloudfront.net` name until an ACM certificate
-    // (us-east-1, DNS-validated in Cloudflare) for `img.<app domain>` exists.
-    const images = yield* AWS.CloudFront.Distribution("Images", {
-      comment: `alias image proxy (${stage})`,
+
+    // The web app: a private bucket that only this distribution reads (OAC), with the build's
+    // hashed assets cached for a year and everything else (`index.html`) revalidated each time.
+    const web = yield* AWS.S3.Bucket("Web", { bucketName: webBucketName });
+    yield* AWS.Website.AssetDeployment("WebAssets", {
+      bucket: web,
+      sourcePath: webBuild,
+      purge: true,
+      fileOptions: [
+        { files: "assets/**", cacheControl: "public, max-age=31536000, immutable" },
+        { files: "**", cacheControl: "no-cache" },
+      ],
+    });
+    const webAccess = yield* AWS.CloudFront.OriginAccessControl("Web", {
+      originType: "s3",
+      signingBehavior: "always",
+      signingProtocol: "sigv4",
+    });
+
+    // What the API's origin custom header carries: the current origin secret, read now.
+    const originSecret = yield* Parameters.keyring(originSecretsParameter).pipe(
+      Effect.map((keys) => Redacted.value(OriginSecret.headerValue(keys))),
+      Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint: Option.none() })),
+      // Without it there's nothing to deploy: put the parameter first (above).
+      Effect.orDie,
+    );
+
+    const spaRoutes = yield* AWS.CloudFront.Function("SpaRoutes", {
+      comment: "SPA routes to index.html (PLAN.md §20.26)",
+      code: spaRoutesCode,
+    });
+    const headers = yield* AWS.CloudFront.Function("SecurityHeaders", {
+      comment: "Security headers of the app origin (PLAN.md §20.26)",
+      code: securityHeadersCode,
+    });
+    const withHeaders = [
+      { functionArn: headers.functionArn, eventType: "viewer-response" as const },
+    ];
+
+    const certificate = yield* AWS.ACM.Certificate("App", { domainName: appDomain });
+    const firewall = yield* AWS.WAFv2.WebACL("App", {
+      scope: "CLOUDFRONT",
+      description: `alias ${stage}: managed rules and rate limits (PLAN.md §20.26)`,
+      defaultAction: { Allow: {} },
+      rules: wafRules,
+      visibilityConfig: visibility("acl"),
+    });
+
+    // The API's behaviors: never cached; every viewer header but Host (function URLs expect
+    // their own) plus CloudFront's, among them CloudFront-Viewer-Address; every method.
+    const toApi = {
+      targetOriginId: "api",
+      viewerProtocolPolicy: "redirect-to-https" as const,
+      allowedMethods: ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"],
+      cachedMethods: ["GET", "HEAD"],
+      cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+      originRequestPolicyId: AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+      functionAssociations: withHeaders,
+    };
+
+    // One distribution for the app's origin (PLAN.md §20.26): a flat-rate plan covers exactly
+    // one, and the app, the API (passkeys, the OAuth issuer) and the image proxy share a domain.
+    // Five behaviors, the Free plan's maximum. The API stays behind its public function URL
+    // because OAC can't sign POST bodies for browsers; the origin secret stands in for it.
+    const app = yield* AWS.CloudFront.Distribution("App", {
+      comment: `alias (${stage})`,
+      ...(isCertificateIssued
+        ? {
+            aliases: [appDomain],
+            viewerCertificate: {
+              acmCertificateArn: certificate.certificateArn,
+              sslSupportMethod: "sni-only" as const,
+              minimumProtocolVersion: "TLSv1.2_2021" as const,
+            },
+          }
+        : {}),
       priceClass: "PriceClass_100",
+      httpVersion: "http2and3",
+      webAclId: firewall.webAclArn,
       origins: [
+        {
+          id: "web",
+          domainName: web.bucketRegionalDomainName,
+          s3Origin: true,
+          originAccessControlId: webAccess.originAccessControlId,
+        },
+        {
+          id: "api",
+          domainName: Output.map(functionUrlHost)(api.functionUrl),
+          customOriginConfig: { originProtocolPolicy: "https-only" },
+          // What tells the API a request came through here (above).
+          customHeaders: { [CloudFront.ORIGIN_SECRET_HEADER]: originSecret },
+          // The API Lambda runs up to 30 s (erasure); CloudFront's default waits 30 s too.
+          responseCompletionTimeout: "35 seconds",
+        },
         {
           id: "image-proxy",
           domainName: Output.map(functionUrlHost)(imageProxy.functionUrl),
@@ -432,13 +800,56 @@ export default Alchemy.Stack(
         },
       ],
       defaultCacheBehavior: {
-        targetOriginId: "image-proxy",
+        targetOriginId: "web",
         viewerProtocolPolicy: "redirect-to-https",
         allowedMethods: ["GET", "HEAD"],
         cachedMethods: ["GET", "HEAD"],
-        compress: false,
+        // Honours the objects' Cache-Control (above).
         cachePolicyId: AWS.CloudFront.MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        functionAssociations: [
+          { functionArn: spaRoutes.functionArn, eventType: "viewer-request" },
+          ...withHeaders,
+        ],
       },
+      orderedCacheBehaviors: [
+        { ...toApi, pathPattern: "/v1/*" },
+        // MCP and its OAuth metadata (PLAN.md §20.24); `/oauth/authorize` is the app's page.
+        { ...toApi, pathPattern: "/mcp" },
+        { ...toApi, pathPattern: "/.well-known/*" },
+        {
+          // CachingOptimized keys the cache on the path alone and forwards no cookies, query or
+          // viewer headers, and honours the Lambda's `Cache-Control` (a day for images). The
+          // proxy sets its own security headers, so no function here.
+          pathPattern: "/img/*",
+          targetOriginId: "image-proxy",
+          viewerProtocolPolicy: "redirect-to-https",
+          allowedMethods: ["GET", "HEAD"],
+          cachedMethods: ["GET", "HEAD"],
+          compress: false,
+          cachePolicyId: AWS.CloudFront.MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        },
+      ],
+    });
+    // Only this distribution reads the web bucket, and only over TLS. One policy, bound once the
+    // distribution exists (the bucket is its origin, so its ARN can't be in the bucket's props).
+    yield* web.bind("CloudFrontReads", {
+      policyStatements: [
+        {
+          Effect: "Deny",
+          Sid: "TlsOnly",
+          Principal: "*",
+          Action: ["s3:*"],
+          Resource: [`arn:aws:s3:::${webBucketName}`, `arn:aws:s3:::${webBucketName}/*`],
+          Condition: { Bool: { "aws:SecureTransport": "false" } },
+        },
+        {
+          Effect: "Allow",
+          Principal: { Service: "cloudfront.amazonaws.com" },
+          Action: ["s3:GetObject"],
+          Resource: `arn:aws:s3:::${webBucketName}/*`,
+          Condition: { StringEquals: { "AWS:SourceArn": app.distributionArn } },
+        },
+      ],
     });
     // OAC needs both: `InvokeFunctionUrl` for the URL and `InvokeFunction` for the call behind it,
     // each only for this distribution.
@@ -452,12 +863,17 @@ export default Alchemy.Stack(
           action,
           functionName: imageProxy.functionName,
           principal: "cloudfront.amazonaws.com",
-          sourceArn: images.distributionArn,
+          sourceArn: app.distributionArn,
           ...(action === "lambda:InvokeFunctionUrl"
             ? { functionUrlAuthType: "AWS_IAM" as const }
             : { invokedViaFunctionUrl: true }),
         }),
     );
+    // Proxied images point at the app domain once its certificate is live, before that at the
+    // distribution's own name (which keeps working for mail forwarded meanwhile).
+    const appOrigin = isCertificateIssued
+      ? Output.interpolate`https://${appDomain}`
+      : Output.interpolate`https://${app.domainName}`;
 
     // The inbound pipeline (`apps/inbound`), invoked by the receipt rule below. Raw mail is held in
     // memory (SES accepts up to 40 MB) and rewritten once, hence the memory size.
@@ -469,15 +885,17 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(60),
       logging,
       functionUrl: false,
-      // Lambda's defaults, spelled out: the pipeline's claims make retries safe (PLAN.md §20.6).
-      eventInvokeConfig: { maximumRetryAttempts: 2, maximumEventAge: "6 hours" },
+      reservedConcurrentExecutions: reservedConcurrency.inbound,
+      // The pipeline's claims make retries safe (PLAN.md §20.6); what Lambda gives up on is
+      // recorded, not dropped (§20.29).
+      eventInvokeConfig: asyncInvokes,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_SPOOL_BUCKET: spool.bucketName,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
-        ALIAS_IMAGE_PROXY_URL: Output.interpolate`https://${images.domainName}`,
+        ALIAS_IMAGE_PROXY_URL: appOrigin,
         ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
@@ -485,7 +903,8 @@ export default Alchemy.Stack(
         ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
       },
     });
-    // Inbox mode: put a sealed body, and delete it again when its alias vanished meanwhile.
+    // Inbox mode and kept failed deliveries (§20.33): put a sealed body, and delete it again when
+    // its alias vanished meanwhile.
     yield* inbound.bind("Inbox", {
       policyStatements: [
         { Effect: "Allow", Action: ["s3:PutObject", "s3:DeleteObject"], Resource: inboxObjects },
@@ -493,7 +912,8 @@ export default Alchemy.Stack(
       ],
     });
     // Least privilege: aliases, recipients and contacts are read by key or one partition Query;
-    // counters, quotas and delivery claims are single-item writes. A new contact and its id are
+    // counters, quotas, delivery claims and sent records (§20.28) are single-item writes. A new
+    // contact and its id are
     // one TransactWriteItems, which IAM authorizes per item: PutItem for the two items, and
     // ConditionCheckItem for the check that their alias still exists (PLAN.md §20.15). No index.
     yield* inbound.bind("DataAccess", {
@@ -526,6 +946,13 @@ export default Alchemy.Stack(
       policyStatements: [sendFromAliasDomains, ...denySendFromTempDomains],
     });
     yield* inbound.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
+    // Replies to an address on the suppression list are refused, not sent (PLAN.md §20.33).
+    yield* inbound.bind("SuppressionCheck", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ses:GetSuppressedDestination"], Resource: "*" },
+      ],
+    });
+    yield* inbound.bind("AsyncFailures", { policyStatements: [sendAsyncFailures] });
     // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
     // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of
     // this account use it through Parameter Store, and which takes no access policies of ours
@@ -565,13 +992,15 @@ export default Alchemy.Stack(
     });
     yield* AWS.SES.ActiveReceiptRuleSet("Active", { ruleSetName: ruleSet.ruleSetName });
 
-    // Bounces and complaints (PLAN.md §20.11): every send names the configuration set, whose
-    // event destination publishes BOUNCE and COMPLAINT to an SNS topic that invokes the feedback
-    // Lambda. SES itself suppresses hard-bounced addresses for this set; complaints only get
-    // recorded, so one "spam" click doesn't stop a user's forwarding.
+    // Bounces and complaints (PLAN.md §20.11, §20.28): every send names the configuration set,
+    // whose event destination publishes BOUNCE and COMPLAINT to an SNS topic that invokes the
+    // feedback Lambda. The set overrides the account's suppression settings with no reasons, so
+    // SES adds nothing to the suppression list by itself: SES calls a refused message's content a
+    // hard bounce too, and one crafted message must not stop a user's forwarding. The feedback
+    // Lambda suppresses only addresses that are gone; complaints only get recorded.
     yield* AWS.SES.ConfigurationSet("Events", {
       configurationSetName,
-      suppressedReasons: ["BOUNCE"],
+      suppressedReasons: [],
     });
     const feedbackTopic = yield* AWS.SNS.Topic("SesEvents", {});
     yield* AWS.SES.ConfigurationSetEventDestination("FeedbackTopic", {
@@ -588,15 +1017,20 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(30),
       logging,
       functionUrl: false,
+      reservedConcurrentExecutions: reservedConcurrency.feedback,
+      // SNS invokes it asynchronously; marking a recipient twice is harmless.
+      eventInvokeConfig: asyncInvokes,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
     });
-    // Marks recipients (one UpdateItem each), suppresses addresses, and tells the user's webhooks
-    // (one Query for their endpoints, then SendMessage), nothing else.
+    yield* feedback.bind("AsyncFailures", { policyStatements: [sendAsyncFailures] });
+    // Reads the send a bounce is about (GetItem), lists the user's recipients and counts their
+    // recent hard bounces (Query, PutItem), marks recipients (UpdateItem), suppresses addresses,
+    // and tells the user's webhooks (one Query for their endpoints, then SendMessage).
     yield* feedback.bind("Feedback", {
       policyStatements: [
         {
           Effect: "Allow",
-          Action: ["dynamodb:UpdateItem", "dynamodb:Query"],
+          Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"],
           Resource: [tableArn],
         },
         { Effect: "Allow", Action: ["ses:PutSuppressedDestination"], Resource: "*" },
@@ -624,6 +1058,7 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(120),
+      reservedConcurrentExecutions: reservedConcurrency.verifyDomains,
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_DOH_URL: dohUrl },
     });
@@ -675,7 +1110,7 @@ export default Alchemy.Stack(
           Version: "2012-10-17",
           Statement: [
             {
-              Sid: "AllowReputationAlarms",
+              Sid: "AllowStackAlarms",
               Effect: "Allow",
               Principal: { Service: "cloudwatch.amazonaws.com" },
               Action: "SNS:Publish",
@@ -706,7 +1141,7 @@ export default Alchemy.Stack(
     ] as const;
     yield* Effect.forEach(reputationAlarms, (alarm) =>
       AWS.CloudWatch.Alarm(`Ses-${alarm.name}`, {
-        name: `${alarmPrefix}${alarm.name}`,
+        name: `${alarmPrefix}ses-${alarm.name}`,
         AlarmDescription: `SES ${alarm.metric} >= ${alarm.threshold * 100}%. Runbook: PLAN.md §20.13.`,
         Namespace: "AWS/SES",
         MetricName: alarm.metric,
@@ -736,11 +1171,18 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(30),
+      reservedConcurrentExecutions: reservedConcurrency.webhookDelivery,
       functionUrl: false,
-      env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
+      env: {
+        ALIAS_TABLE_NAME: table.tableName,
+        ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+      },
     });
+    // The webhook keys open endpoint secrets (read once, at cold start).
     yield* delivery.bind("Deliver", {
       policyStatements: [
+        webhookKeys,
         {
           Effect: "Allow",
           Action: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
@@ -764,7 +1206,84 @@ export default Alchemy.Stack(
       eventSourceArn: webhookQueue.queueArn,
       batchSize: 10,
       functionResponseTypes: ["ReportBatchItemFailures"],
+      // No more pollers than the function may run, so batches aren't throttled and returned.
+      scalingConfig: { MaximumConcurrency: reservedConcurrency.webhookDelivery },
     });
+
+    // Capacity alarms (PLAN.md §20.29), on the same topic as the SES alarms. Inbound and feedback
+    // must never be throttled: their events wait, and are lost to the failures queue after six
+    // hours. A throttled API or image proxy means a flood reached its cap, which is the cap
+    // working, so those alarm only on a sustained count.
+    const capacityAlarms = [
+      {
+        name: "inbound-throttled",
+        what: "The inbound Lambda was throttled: SES mail is waiting.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: inbound.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 1,
+      },
+      {
+        name: "inbound-backlog",
+        what: "Mail waited more than 10 minutes for the inbound Lambda.",
+        Namespace: "AWS/Lambda",
+        MetricName: "AsyncEventAge",
+        Dimensions: [{ Name: "FunctionName", Value: inbound.functionName }],
+        Statistic: "Maximum" as const,
+        Threshold: 600_000,
+      },
+      {
+        name: "feedback-throttled",
+        what: "The feedback Lambda was throttled: bounces and complaints are waiting.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: feedback.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 1,
+      },
+      {
+        name: "async-failures",
+        what: "Lambda gave up on an SES or SNS event; it is in the async failures queue.",
+        Namespace: "AWS/SQS",
+        MetricName: "ApproximateNumberOfMessagesVisible",
+        Dimensions: [{ Name: "QueueName", Value: asyncFailuresQueueName }],
+        Statistic: "Maximum" as const,
+        Threshold: 1,
+      },
+      {
+        name: "api-throttled",
+        what: "The API reached its reserved concurrency for 5 minutes.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: api.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 100,
+      },
+      {
+        name: "image-proxy-throttled",
+        what: "The image proxy reached its reserved concurrency for 5 minutes.",
+        Namespace: "AWS/Lambda",
+        MetricName: "Throttles",
+        Dimensions: [{ Name: "FunctionName", Value: imageProxy.functionName }],
+        Statistic: "Sum" as const,
+        Threshold: 100,
+      },
+    ];
+    yield* Effect.forEach(capacityAlarms, ({ name, what, ...metric }) =>
+      AWS.CloudWatch.Alarm(`Capacity-${name}`, {
+        ...metric,
+        name: `${alarmPrefix}${name}`,
+        AlarmDescription: `${what} Runbook: PLAN.md §20.29.`,
+        Period: 300,
+        EvaluationPeriods: 1,
+        ComparisonOperator: "GreaterThanOrEqualToThreshold",
+        // No invocations, no datapoint: nothing is wrong.
+        TreatMissingData: "notBreaching",
+        AlarmActions: [alertTopic.topicArn],
+        OKActions: [alertTopic.topicArn],
+      }),
+    );
 
     return {
       apiUrl: api.functionUrl,
@@ -774,8 +1293,13 @@ export default Alchemy.Stack(
       inboundFunction: inbound.functionName,
       feedbackFunction: feedback.functionName,
       webhookDeliveryFunction: delivery.functionName,
-      imageProxyUrl: Output.interpolate`https://${images.domainName}`,
+      appUrl: appOrigin,
+      distributionDomain: app.domainName,
+      // The CNAME to put into Cloudflare DNS for ACM (PLAN.md §20.26).
+      certificateValidation: certificate.domainValidationOptions,
+      webAclArn: firewall.webAclArn,
       verifyDomainsFunction: verifyDomains.functionName,
+      asyncFailuresQueue: asyncFailures.queueUrl,
     };
   }),
 );

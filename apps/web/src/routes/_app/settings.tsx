@@ -4,13 +4,15 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
-import { FingerprintIcon } from "lucide-react";
 import type * as React from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { DeleteAccount } from "@/components/DeleteAccount";
 import { Page } from "@/components/Page";
 import { ApiTokens } from "@/components/settings/ApiTokens";
 import { ConnectedApps } from "@/components/settings/ConnectedApps";
+import { KeepFailedMail } from "@/components/settings/KeepFailedMail";
+import { Passkeys } from "@/components/settings/Passkeys";
+import { Sessions } from "@/components/settings/Sessions";
 import { Webhooks } from "@/components/settings/Webhooks";
 import { Separator } from "@/components/ui/separator";
 import { domainsQuery } from "@/lib/aliases";
@@ -81,18 +83,24 @@ const Settings = () => {
         })}
         <Separator />
         <Section
-          title="Sign-in"
-          description="Passkeys are bound to this site, so they can't be phished."
+          title="Failed deliveries"
+          description="Mail that couldn't be forwarded is listed under Failed deliveries for 7 days."
         >
-          <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
-            <FingerprintIcon className="size-4 text-muted-foreground" aria-hidden />
-            <div className="flex flex-col gap-0.5">
-              <span className="font-medium">Passkey</span>
-              <span className="text-xs text-muted-foreground">
-                The one you created at sign-up. There is no password to steal or reset.
-              </span>
-            </div>
-          </div>
+          <KeepFailedMail />
+        </Section>
+        <Separator />
+        <Section
+          title="Passkeys"
+          description="Passkeys are bound to this site, so they can't be phished. There is no password to steal or reset."
+        >
+          <Passkeys />
+        </Section>
+        <Separator />
+        <Section
+          title="Sessions"
+          description="Browsers signed in to your account. Sign out any you don't recognize; each ends at once."
+        >
+          <Sessions />
         </Section>
         <Separator />
         <Section

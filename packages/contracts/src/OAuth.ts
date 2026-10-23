@@ -25,21 +25,33 @@ const AuthorizationRequest = Schema.Struct({
   code_challenge_method: Schema.optionalKey(Param),
   scope: Schema.optionalKey(Param),
   state: Schema.optionalKey(Param),
-  /** RFC 8707: the resource the token is for, the MCP endpoint. */
+  /** RFC 8707: the resource the token is for, the MCP endpoint (the default) or the HTTP API. */
   resource: Schema.optionalKey(Param),
 });
 export type AuthorizationRequest = typeof AuthorizationRequest.Type;
 
-/** Who asks. Everything but `kind` and the redirect is what the client says about itself. */
+/**
+ * Who asks. What a client says about itself (`name`) is never verified, whatever its kind; what
+ * the consent screen can vouch for is `host` and `redirectHost` (PLAN.md §20.30).
+ */
 const RequestingClient = Schema.Struct({
   id: Schema.String,
+  /** The client's own `client_name`: shown as a claim, never as who it is. */
   name: Schema.String,
   /**
-   * `registered`: through dynamic registration (RFC 7591), so its name is unverified.
-   * `metadata-document`: its id is the HTTPS URL of its metadata document, so the name is at
-   * least published on that host.
+   * `registered`: through dynamic registration (RFC 7591), so nothing about it is verified but
+   * its redirect URIs. `metadata-document`: its id is the HTTPS URL of its metadata document.
    */
   kind: Schema.Literals(["registered", "metadata-document"]),
+  /**
+   * The host of a metadata-document client's `client_id` URL, which served the document: the one
+   * name of who asks that is verified. None for registered clients.
+   */
+  host: Schema.OptionFromOptionalKey(Schema.String),
+  /**
+   * The client's `client_uri`, only when it is on `host` or below it (same scheme), so it may be
+   * shown as a link. Never for registered clients.
+   */
   uri: Schema.OptionFromOptionalKey(Schema.String),
   /** Where the code goes, which the consent screen must show (MCP authorization spec). */
   redirectHost: Schema.String,

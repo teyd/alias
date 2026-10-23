@@ -17,6 +17,8 @@ const groups = {
   account: "The signed-in account: who it is, and erasing it (GDPR Art. 17).",
   aliases:
     "Aliases, addressed by their address. Other users' aliases answer `AliasNotFound`, so lookups reveal nothing.",
+  labels:
+    "Labels on aliases: listed with how many aliases carry them, and coloured. Set an alias's labels with `PATCH /v1/aliases/:domain/:local`.",
   contacts:
     "The people who wrote to an alias. Blocking one drops its mail and replies to it; deleting one revokes its reverse alias.",
   recipients:
@@ -31,14 +33,17 @@ const groups = {
   device:
     "The signed-in person's side of a device login: look up the code a device shows, then approve or deny it. Session-only.",
   outbox:
-    "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them. Session-only: no token sends mail.",
+    "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them, and new mail the person writes from an alias. Session-only: no token sends mail.",
+  failures:
+    "Mail to your aliases that could not be forwarded for good, for 7 days: metadata, and with `isFailedMailKept` an encrypted copy to download or send again.",
   consent:
     "The signed-in person's side of an MCP client's authorization (the web app's `/oauth/authorize` page), and the connected apps it created. Session-only.",
 } satisfies Record<string, string>;
 
 const schemes = {
   session: "The web app's session cookie, set by a passkey login.",
-  token: "A personal API token (`alias_pat_…`). Each operation names the scope it needs.",
+  token:
+    "A personal API token (`alias_pat_…`), or an OAuth access token issued for `<origin>/v1` (`alias_oat_…`). Each operation names the scope it needs.",
 } satisfies Record<string, string>;
 
 /** One line per operation, keyed by operation ID (`<group>.<endpoint>`). */
@@ -56,9 +61,14 @@ const summaries = {
   "aliases.domains": "Domains you may create aliases on",
   "aliases.create": "Create an alias",
   "aliases.lookup": "Get one alias",
+  "aliases.export": "Export every alias with its details, recipients and counters",
+  "aliases.import": "Create aliases on your own domains from a list, with a result per row",
+  "labels.list": "List your labels",
+  "labels.setColor": "Give a label a colour, or take it away",
   "aliases.update": "Enable, disable or change an alias",
   "aliases.remove": "Delete an alias for good",
   "contacts.list": "List an alias's contacts",
+  "contacts.create": "Add a contact to write to, and get its reverse alias",
   "contacts.update": "Block or unblock a contact",
   "contacts.remove": "Delete a contact and revoke its reverse alias",
   "recipients.list": "List your forwarding addresses",
@@ -85,9 +95,14 @@ const summaries = {
   "device.lookup": "Look up a device login by its user code",
   "device.approve": "Approve a device login: the device gets a token with the requested scopes",
   "device.deny": "Deny a device login",
+  "outbox.compose": "Write and send an email from one of your aliases to any address",
   "outbox.get": "Show a drafted email",
   "outbox.send": "Send a drafted email, once",
   "outbox.discard": "Discard a drafted email",
+  "failures.list": "List mail that could not be forwarded",
+  "failures.download": "Download the kept copy of a failed delivery",
+  "failures.resend": "Send a failed delivery's kept copy to your forwarding address again",
+  "failures.remove": "Delete a failed delivery and its kept copy",
   "consent.inspect": "Validate an MCP client's authorization request for the consent screen",
   "consent.decide": "Approve or deny an MCP client: the redirect with a code or an error",
   "consent.grants": "List the MCP clients you connected",
@@ -112,9 +127,9 @@ const tokenAccess = (() => {
   return R.fromEntries(entries);
 })();
 
-/** The token's roles in a security requirement: the scope it needs, or none for any token. */
+/** The token's roles in a security requirement: the scopes it needs, or none for any token. */
 const roles = (access: TokenAccess): Array<string> =>
-  P.isTagged(access, "Scope") ? [access.scope] : [];
+  P.isTagged(access, "Scope") ? [...access.scopes] : [];
 
 type Operation = OpenApi.OpenAPISpecOperation;
 
@@ -147,7 +162,13 @@ const document = (operation: Operation): Operation => {
       onSome: (found) =>
         Arr.match(roles(found), {
           onEmpty: () => "Any API token may call it.",
-          onNonEmpty: ([scope]) => `API tokens need the \`${scope}\` scope.`,
+          onNonEmpty: (scopes) =>
+            Arr.isArrayNonEmpty(Arr.drop(scopes, 1))
+              ? `API tokens need the ${Arr.join(
+                  Arr.map(scopes, (scope) => `\`${scope}\``),
+                  " and ",
+                )} scopes.`
+              : `API tokens need the \`${scopes[0]}\` scope.`,
         }),
     }),
     security: Option.match(access, {
@@ -178,7 +199,7 @@ export const openApiDocument: OpenApi.OpenAPISpec = {
     title: "Alias API",
     version: "1",
     description:
-      "Open-source email aliases. Authenticate with the browser session cookie or a personal API token (`Authorization: Bearer alias_pat_…`) that holds the scope an operation names.",
+      "Open-source email aliases. Authenticate with the browser session cookie, a personal API token (`Authorization: Bearer alias_pat_…`) or an OAuth access token for `<origin>/v1` that holds the scope an operation names.",
     license: { name: "AGPL-3.0-only", url: "https://www.gnu.org/licenses/agpl-3.0.html" },
   },
   tags: Arr.map(base.tags, (tag) =>

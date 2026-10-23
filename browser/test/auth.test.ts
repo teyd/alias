@@ -41,18 +41,30 @@ describe("signing in with a passkey", () => {
       }),
     );
 
-    it.effect("refuses a username that is already taken", () =>
-      Effect.gen(function* () {
-        const { page } = yield* openPage();
-        yield* signUp(page, "grace");
-        yield* ui(async () => {
-          await page.getByRole("button", { name: "Log out" }).click();
-          await page.goto("/register");
-          await page.getByRole("textbox", { name: "Username" }).fill("grace");
-          await page.getByRole("button", { name: "Create passkey" }).click();
-          await page.getByRole("alert").filter({ hasText: "That username is taken." }).waitFor();
-        });
-      }),
+    it.effect(
+      "refuses a username that is already taken, and takes another with a fresh widget",
+      () =>
+        Effect.gen(function* () {
+          const { page } = yield* openPage();
+          yield* signUp(page, "grace");
+          const token = page.locator('input[name="cf-turnstile-response"]');
+          yield* ui(async () => {
+            await page.getByRole("button", { name: "Log out" }).click();
+            await page.goto("/register");
+            // The button waits for the human check (Turnstile's test key, served by the emulator).
+            await page.getByRole("button", { name: "Create passkey" }).waitFor();
+            await page.getByRole("textbox", { name: "Username" }).fill("grace");
+            await page.getByRole("button", { name: "Create passkey" }).click();
+            await page.getByRole("alert").filter({ hasText: "That username is taken." }).waitFor();
+          });
+          // Tokens are single-use, so the failed attempt replaced the widget with a new one.
+          expect(yield* Effect.promise(() => token.count())).toBe(1);
+          yield* ui(async () => {
+            await page.getByRole("textbox", { name: "Username" }).fill("grace-hopper");
+            await page.getByRole("button", { name: "Create passkey" }).click();
+            await page.getByRole("button", { name: "Log out" }).waitFor();
+          });
+        }),
     );
 
     it.effect(

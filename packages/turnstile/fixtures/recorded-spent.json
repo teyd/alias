@@ -1,0 +1,17 @@
+{
+  "request": {
+    "form": {
+      "secret": "3x0000000000000000000000000000000AA",
+      "response": "XXXX.DUMMY.TOKEN.XXXX"
+    }
+  },
+  "status": 200,
+  "body": {
+    "error-codes": ["timeout-or-duplicate"],
+    "success": false,
+    "messages": [],
+    "metadata": {
+      "result_with_testing_key": true
+    }
+  }
+}

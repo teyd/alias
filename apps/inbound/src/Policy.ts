@@ -39,6 +39,10 @@ export const DropReason = Schema.Literals([
   "unencodable-sender",
   // Mail from a contact the owner blocked, or a reply to one.
   "blocked-contact",
+  // A sender on the owner's blocklist, for every alias of theirs, or a reply to one (§20.32).
+  "blocked-sender",
+  // One of the owner's rules blocks it (PLAN.md §20.32).
+  "rule-blocked",
   // A reverse alias whose token we didn't sign for this alias.
   "bad-token",
   // A reverse alias whose contact was deleted.
@@ -47,6 +51,10 @@ export const DropReason = Schema.Literals([
   "unauthenticated-reply",
   // A reply from someone other than the alias owner's verified recipients.
   "foreign-reply-sender",
+  // A reply to a contact whose address is on the SES suppression list (PLAN.md §20.33).
+  "suppressed-recipient",
+  // Past the owner's daily allowance of mail sent from their aliases (PLAN.md §20.33).
+  "send-limited",
   // The spool no longer holds the message (processed earlier, or expired).
   "spool-missing",
   "malformed-message",
@@ -94,13 +102,23 @@ export const screen = (
     : Option.none();
 };
 
-/** Where forwarded mail goes: the owner's default recipient, which is always a verified one. */
-export const forwardTarget = (
+/**
+ * The destination a rule's `forward-to` chose (PLAN.md §20.32), while it is one of the owner's
+ * recipients, verified and not bouncing. It replaces the alias's own recipients
+ * (`Forwarding.forwardTargets` in `@alias/db`) for that message; otherwise those apply, so a stale rule loses no mail.
+ */
+export const ruleTarget = (
   recipients: ReadonlyArray<RecipientRepo.Recipient>,
+  chosen: Option.Option<string>,
 ): Option.Option<RecipientRepo.Recipient> =>
-  Arr.findFirst(
-    recipients,
-    (recipient) => recipient.isDefault && Option.isSome(recipient.verifiedAt),
+  Option.flatMap(chosen, (recipientId) =>
+    Arr.findFirst(
+      recipients,
+      (recipient) =>
+        recipient.id === recipientId &&
+        Option.isSome(recipient.verifiedAt) &&
+        Option.isNone(recipient.bouncedAt),
+    ),
   );
 
 /** RFC 5321 §4.5.3.1.3: a path holds at most 256 octets, so an address at most 254. */

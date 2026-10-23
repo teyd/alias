@@ -1,7 +1,11 @@
+import { AliasCsv } from "@alias/core";
 import {
   AliasClient,
+  AliasExport,
+  type AliasChanges,
   type AliasView,
   Api,
+  MAX_IMPORT_ROWS,
   type Contact,
   DeviceLogin,
   type Scope,
@@ -11,13 +15,24 @@ import * as Console from "effect/Console";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
 import { Credentials } from "./Credentials.ts";
-import { InvalidAddress, NoCode, NoMail, NoSuchContact, NotConfirmed, forUser } from "./Errors.ts";
+import {
+  InvalidAddress,
+  NoCode,
+  NoMail,
+  NoSuchContact,
+  NoSuchRecipient,
+  NotConfirmed,
+  forUser,
+} from "./Errors.ts";
 import * as Output from "./Output.ts";
 import * as Session from "./Session.ts";
 
@@ -28,6 +43,8 @@ export const CLI_SCOPES = [
   "contacts:read",
   "contacts:write",
   "recipients:read",
+  "rules:read",
+  "rules:write",
   "inboxes:read",
   "inboxes:write",
 ] as const satisfies Arr.NonEmptyReadonlyArray<Scope>;
@@ -58,9 +75,11 @@ const aliasRow = (alias: AliasView): Output.Row => ({
   mode: alias.mode,
   forwarded: alias.forwardedCount,
   blocked: alias.blockedCount,
+  labels: Arr.join(alias.labels, ", "),
+  description: alias.description,
   id: alias.id,
 });
-const ALIAS_COLUMNS = ["address", "active", "mode", "forwarded", "blocked"];
+const ALIAS_COLUMNS = ["address", "active", "mode", "forwarded", "blocked", "labels"];
 
 const contactRow = (contact: Contact): Output.Row => ({
   id: contact.id,
@@ -243,14 +262,160 @@ const deleteAlias = Command.make(
   }, forUser),
 ).pipe(Command.withDescription("Delete an alias for good (needs --yes)"));
 
+const editAlias = Command.make(
+  "edit",
+  {
+    alias: aliasArgument,
+    description: Flag.String("description").pipe(
+      Flag.withDescription('What the alias is for ("" removes it)'),
+      Flag.optional,
+    ),
+    labels: Flag.String("label").pipe(
+      Flag.withDescription("A label; repeat for several. Replaces the alias's labels"),
+      Flag.atLeast(0),
+    ),
+    isClearingLabels: Flag.Boolean("no-labels").pipe(
+      Flag.withDescription("Remove every label"),
+      Flag.withDefault(false),
+    ),
+    recipients: Flag.String("recipient").pipe(
+      Flag.withDescription(
+        "Forward to this verified forwarding address; repeat for several (up to 5). Replaces the alias's",
+      ),
+      Flag.atLeast(0),
+    ),
+    isDefaultRecipient: Flag.Boolean("default-recipient").pipe(
+      Flag.withDescription("Forward to your default forwarding address again"),
+      Flag.withDefault(false),
+    ),
+    json,
+  },
+  Effect.fn("alias.aliases.edit")(function* (input) {
+    const client = yield* Session.client();
+    const params = yield* parseAddress(input.alias);
+    // Recipients are named by address here and by id in the API.
+    const recipientIds = Arr.isReadonlyArrayNonEmpty(input.recipients)
+      ? Option.some(
+          yield* Effect.flatMap(client.recipients.list(), (known) =>
+            Effect.forEach(
+              input.recipients,
+              (address) =>
+                Option.match(
+                  Arr.findFirst(
+                    known,
+                    (recipient) =>
+                      recipient.address === Str.toLowerCase(Str.trim(address)) &&
+                      recipient.isVerified,
+                  ),
+                  {
+                    onNone: () => Effect.fail(new NoSuchRecipient({ address })),
+                    onSome: (recipient) => Effect.succeed(recipient.id),
+                  },
+                ),
+              { concurrency: 1 },
+            ),
+          ),
+        )
+      : input.isDefaultRecipient
+        ? Option.some<ReadonlyArray<string>>([])
+        : Option.none();
+    const labels = Arr.isReadonlyArrayNonEmpty(input.labels)
+      ? Option.some(input.labels)
+      : input.isClearingLabels
+        ? Option.some<ReadonlyArray<string>>([])
+        : Option.none();
+    const payload: AliasChanges = {
+      ...Option.match(input.description, {
+        onNone: () => ({}),
+        onSome: (description) => ({ description }),
+      }),
+      ...Option.match(labels, { onNone: () => ({}), onSome: (chosen) => ({ labels: chosen }) }),
+      ...Option.match(recipientIds, {
+        onNone: () => ({}),
+        onSome: (chosen) => ({ recipientIds: chosen }),
+      }),
+    };
+    const updated = yield* client.aliases.update({ params, payload });
+    yield* Output.record(input.json, aliasRow(updated));
+  }, forUser),
+).pipe(Command.withDescription("Change an alias's description, labels or forwarding addresses"));
+
+const AliasExportJson = Schema.fromJsonString(AliasExport);
+
+const exportAliases = Command.make(
+  "export",
+  { json },
+  Effect.fn("alias.aliases.export")(function* ({ json: isJson }) {
+    const client = yield* Session.client();
+    const exported = yield* client.aliases.export();
+    yield* isJson
+      ? Effect.flatMap(Effect.orDie(Schema.encodeEffect(AliasExportJson)(exported)), Console.log)
+      : Console.log(AliasCsv.format(exported.aliases).trimEnd());
+  }, forUser),
+).pipe(
+  Command.withDescription(
+    "Print every alias with its details, forwarding addresses and counters as CSV (or --json)",
+  ),
+);
+
+const importAliases = Command.make(
+  "import",
+  {
+    file: Argument.FileText("file").pipe(
+      Argument.withDescription(
+        "A CSV file with an `address` column (and optionally description, labels, active)",
+      ),
+    ),
+    json,
+  },
+  Effect.fn("alias.aliases.import")(function* ({ file, json: isJson }) {
+    const client = yield* Session.client();
+    const rows = yield* Result.match(AliasCsv.parse(file), {
+      onSuccess: Effect.succeed,
+      onFailure: Effect.fail,
+    });
+    const results = yield* Effect.forEach(
+      Arr.chunksOf(rows, MAX_IMPORT_ROWS),
+      (chunk) =>
+        Effect.map(
+          client.aliases.import({
+            payload: { aliases: Arr.map(chunk, ({ row: _row, ...fields }) => fields) },
+          }),
+          ({ results: answered }) =>
+            Arr.zipWith(chunk, answered, (sent, result) => ({
+              row: sent.row,
+              ...Match.valueTags(result, {
+                Created: ({ alias }) => ({ address: alias.address, result: "created" }),
+                Failed: ({ address, reason }) => ({ address, result: reason }),
+              }),
+            })),
+        ),
+      { concurrency: 1 },
+    );
+    yield* Output.rows(
+      isJson,
+      ["row", "address", "result"],
+      Arr.flatten(results),
+      "No addresses in the file.",
+    );
+  }, forUser),
+).pipe(
+  Command.withDescription(
+    "Create aliases on your subdomain or custom domains from a CSV file, with a result per row",
+  ),
+);
+
 const aliases = Command.make("aliases").pipe(
   Command.withDescription("Your aliases"),
   Command.withSubcommands([
     listAliases,
     createAlias,
+    editAlias,
     setActive("enable", true),
     setActive("disable", false),
     deleteAlias,
+    exportAliases,
+    importAliases,
   ]),
 );
 
@@ -340,6 +505,102 @@ const recipients = Command.make("recipients").pipe(
   Command.withSubcommands([listRecipients]),
 );
 
+// --- blocklist and rules ---------------------------------------------------------------------
+
+const senderArgument = Argument.String("sender").pipe(
+  Argument.withDescription(
+    "An address (news@shop.example) or a domain (shop.example, *.shop.example)",
+  ),
+);
+
+/** What the user typed, as the API's entry: an address, or a domain (`*.` for subdomains). */
+const wantedEntry = (sender: string, isSubdomainIncluded: boolean) => ({
+  kind: sender.includes("@") ? ("address" as const) : ("domain" as const),
+  value: sender,
+  isSubdomainIncluded,
+});
+
+const listBlocked = Command.make(
+  "list",
+  { json },
+  Effect.fn("alias.blocklist.list")(function* ({ json: isJson }) {
+    const client = yield* Session.client();
+    const entries = yield* client.blocklist.list();
+    yield* Output.rows(
+      isJson,
+      ["entry", "kind"],
+      Arr.map(entries, (entry) => ({ entry: entry.id, kind: entry.kind })),
+      "Nobody is blocked.",
+    );
+  }, forUser),
+).pipe(Command.withDescription("List the senders blocked on every alias"), Command.withAlias("ls"));
+
+const addBlocked = Command.make(
+  "add",
+  {
+    sender: senderArgument,
+    isSubdomainIncluded: Flag.Boolean("subdomains").pipe(
+      Flag.withDescription("For a domain: block its subdomains too"),
+      Flag.withDefault(false),
+    ),
+  },
+  Effect.fn("alias.blocklist.add")(function* ({ sender, isSubdomainIncluded }) {
+    const client = yield* Session.client();
+    const entry = yield* client.blocklist.add({
+      payload: wantedEntry(sender, isSubdomainIncluded),
+    });
+    yield* Console.log(`Blocked ${entry.id}: its mail to any of your aliases is dropped.`);
+  }, forUser),
+).pipe(Command.withDescription("Block a sender address or domain on every alias"));
+
+const removeBlocked = Command.make(
+  "remove",
+  { sender: senderArgument },
+  Effect.fn("alias.blocklist.remove")(function* ({ sender }) {
+    const client = yield* Session.client();
+    const entryId = Str.toLowerCase(Str.trim(sender));
+    yield* client.blocklist.remove({ params: { entryId } });
+    yield* Console.log(`Unblocked ${entryId}.`);
+  }, forUser),
+).pipe(Command.withDescription("Let a blocked sender through again"), Command.withAlias("rm"));
+
+const blocklist = Command.make("blocklist").pipe(
+  Command.withDescription("Senders blocked on every alias"),
+  Command.withSubcommands([listBlocked, addBlocked, removeBlocked]),
+);
+
+const listRules = Command.make(
+  "list",
+  { json },
+  Effect.fn("alias.rules.list")(function* ({ json: isJson }) {
+    const client = yield* Session.client();
+    const rules = yield* client.rules.list();
+    yield* Output.rows(
+      isJson,
+      ["name", "enabled", "conditions", "actions"],
+      Arr.map(rules, (rule) => ({
+        id: rule.id,
+        name: rule.name,
+        enabled: rule.isEnabled,
+        conditions: rule.conditions.length,
+        actions: Arr.join(
+          Arr.map(rule.actions, (action) => action.type),
+          ", ",
+        ),
+      })),
+      "No rules yet: write them in the web app.",
+    );
+  }, forUser),
+).pipe(
+  Command.withDescription("List your rules, in the order they apply"),
+  Command.withAlias("ls"),
+);
+
+const rules = Command.make("rules").pipe(
+  Command.withDescription("Your rules"),
+  Command.withSubcommands([listRules]),
+);
+
 // --- temp ---------------------------------------------------------------------------------------
 
 /** The API's longest long poll (`MAX_WAIT_SECONDS`); the CLI waits longer by asking again. */
@@ -423,5 +684,15 @@ const temp = Command.make(
 /** `alias`: the whole command line. */
 export const alias = Command.make("alias").pipe(
   Command.withDescription("Email aliases from the terminal"),
-  Command.withSubcommands([login, logout, whoami, aliases, contacts, recipients, temp]),
+  Command.withSubcommands([
+    login,
+    logout,
+    whoami,
+    aliases,
+    contacts,
+    blocklist,
+    rules,
+    recipients,
+    temp,
+  ]),
 );

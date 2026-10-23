@@ -24,6 +24,8 @@
     "@alias/inbox": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
     "@alias/ses-emulator": "workspace:*",
+    "@alias/turnstile": "workspace:*",
+    "@alias/turnstile-emulator": "workspace:*",
     "@alias/webhooks": "workspace:*",
     "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",

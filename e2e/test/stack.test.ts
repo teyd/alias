@@ -1,16 +1,31 @@
 import { TestAuthenticator } from "@alias/api/testing";
-import { Inbound, Objects, SesEvent, SnsEvent, Transport } from "@alias/aws";
+import {
+  CloudFront,
+  FunctionUrl,
+  Inbound,
+  Objects,
+  SesEvent,
+  SnsEvent,
+  Transport,
+} from "@alias/aws";
 import { Username, Webhook } from "@alias/core";
-import { Dynamo } from "@alias/db";
+import { Dynamo, RecipientRepo } from "@alias/db";
 import { DohServer } from "@alias/doh-emulator";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Feedback, Pipeline } from "@alias/inbound";
-import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
+import {
+  CloudFrontServer,
+  FunctionUrlServer,
+  SnsSubscriber,
+  SqsEventSource,
+} from "@alias/lambda-emulator";
+import { TestKeys } from "@alias/turnstile-emulator";
 import { Receiver } from "@alias/webhooks/testing";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -30,6 +45,8 @@ import {
 } from "@modelcontextprotocol/client";
 import {
   apiHandler,
+  bounceBack,
+  behindCloudFront,
   inboxBucket,
   layer,
   sentTo,
@@ -100,7 +117,9 @@ const postForm = (path: string, fields: Readonly<Record<string, string>>) =>
 const signUp = (username: string) =>
   Effect.gen(function* () {
     const authenticator = TestAuthenticator.make(origin);
-    const started = yield* call("/v1/auth/register/options", { body: { username } });
+    const started = yield* call("/v1/auth/register/options", {
+      body: { username, turnstileToken: TestKeys.DUMMY_TOKEN },
+    });
     const registered = yield* call("/v1/auth/register", {
       body: {
         challengeId: started.body.challengeId,
@@ -644,6 +663,173 @@ describe("emulated stack", () => {
         }),
     );
 
+    // PLAN.md §20.33: new mail from an alias, written in the web app or from the owner's mailbox.
+    it.effect(
+      "writes new mail from an alias: composed in the app, or through a send-to address",
+      () =>
+        Effect.gen(function* () {
+          yield* Transport.ensureIdentity("alias.test");
+          const wren = yield* owner("wren");
+
+          // Composed in the web app, to someone who never wrote to the alias.
+          const composed = yield* call("/v1/outbox", {
+            cookie: wren.cookie,
+            body: {
+              from: wren.alias,
+              to: "grace@elsewhere.example",
+              subject: "Hello",
+              text: "Hi Grace!",
+            },
+          });
+          expect(composed).toMatchObject({ status: 200, body: { status: "sent" } });
+          const [toGrace, ...moreToGrace] = yield* sentTo("grace@elsewhere.example");
+          expect(moreToGrace).toEqual([]);
+          expect(toGrace?.from).toBe(wren.alias);
+          expect(toGrace?.to).toEqual(["grace@elsewhere.example"]);
+          const graceText = toGrace?.text ?? "";
+          expect(field(graceText, "from")).toEqual(Option.some(wren.alias));
+          expect(field(graceText, "message-id")).toEqual(
+            Option.some(expect.stringMatching(/^<[\w-]+@wren\.alias\.test>$/)),
+          );
+          // No trace of the owner's mailbox, in a header, the body or the envelope.
+          expect(graceText.toLowerCase()).not.toContain(wren.mailbox);
+          expect(JSON.stringify(toGrace?.to)).not.toContain(wren.mailbox);
+
+          // From the mailbox: add a contact, mail its send-to address, and it leaves as the alias.
+          const added = yield* call(`/v1/aliases/wren.alias.test/shop/contacts`, {
+            cookie: wren.cookie,
+            body: { address: "hal@elsewhere.example" },
+          });
+          expect(added.status).toBe(200);
+          const sendTo = String(added.body.replyAddress);
+          expect(sendTo).toMatch(/^shop\+r\.[a-z2-7]+@wren\.alias\.test$/);
+          const written = yield* smtp({
+            from: `"Wren" <${wren.mailbox}>`,
+            to: sendTo,
+            subject: "Introduction",
+            text: `Hello Hal,\r\n\r\nWren (${wren.mailbox})`,
+            headers: { "User-Agent": "Thunderbird/128.0" },
+          });
+          expect(yield* invoke(written)).toEqual([{ _tag: "Replied" }]);
+          const [toHal] = yield* sentTo("hal@elsewhere.example");
+          expect(toHal?.from).toBe(wren.alias);
+          expect(field(toHal?.text ?? "", "from")).toEqual(Option.some(wren.alias));
+          expect(field(toHal?.text ?? "", "user-agent")).toEqual(Option.none());
+          expect((toHal?.text ?? "").toLowerCase()).not.toContain(wren.mailbox);
+
+          // Nobody else can use the send-to address.
+          const stranger = yield* smtp({
+            from: "mallory@evil.example",
+            to: sendTo,
+            subject: "Hi",
+            text: "Spam",
+          });
+          expect(yield* invoke(stranger)).toEqual([
+            { _tag: "Dropped", reason: "foreign-reply-sender" },
+          ]);
+          expect(yield* sentTo("hal@elsewhere.example")).toHaveLength(1);
+        }),
+    );
+
+    it.effect("lists a failed forward, keeps it when asked, and sends it again once resumed", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        // The inbound Lambda stamps the failure's week with the test's clock, the API reads it in
+        // real time: start them at the same instant.
+        yield* TestClock.setTime(DateTime.toEpochMillis(yield* TestClock.withLive(DateTime.now)));
+        const yara = yield* owner("yara");
+        const settings = yield* call("/v1/settings", {
+          cookie: yara.cookie,
+          method: "PATCH",
+          body: { isFailedMailKept: true },
+        });
+        expect(settings.body).toMatchObject({ isFailedMailKept: true });
+        // The mailbox is paused, as after a bounce (§20.28).
+        const [recipient] = (yield* call("/v1/recipients", { cookie: yara.cookie })).body;
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          repo.markBounced(yara.userId, yara.mailbox, DateTime.makeUnsafe(1), "address-unknown"),
+        ).pipe(Effect.provide(RecipientRepo.layer));
+
+        const forward = yield* smtp({
+          from: '"Store" <orders@store.example>',
+          to: yara.alias,
+          subject: "Invoice",
+          text: "Your invoice is attached.",
+        });
+        expect(yield* invoke(forward)).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
+        const listed = yield* call("/v1/failed-deliveries", { cookie: yara.cookie });
+        expect(listed.body).toEqual([
+          {
+            id: expect.stringMatching(/^fail_/),
+            alias: yara.alias,
+            sender: "orders@store.example",
+            reason: "recipient-bounced",
+            receivedAt: expect.any(String),
+            expiresAt: expect.any(String),
+            size: expect.any(Number),
+            isKept: true,
+          },
+        ]);
+        const failureId = String(listed.body[0].id);
+        // The kept copy is sealed in the inbox bucket: no plaintext at rest.
+        const { url } = yield* FunctionUrlServer.FunctionUrlServer;
+        const download = yield* Effect.promise(() =>
+          fetch(`${url}/v1/failed-deliveries/${failureId}/message`, {
+            headers: { cookie: yara.cookie, origin },
+          }),
+        );
+        expect(download.headers.get("content-type")).toBe("message/rfc822");
+        const copy = yield* Effect.promise(() => download.text());
+        expect(copy).toContain("Your invoice is attached.");
+        expect(field(copy, "from")).toEqual(
+          Option.some(expect.stringMatching(/^"Store \(orders@store\.example\)" <shop\+r\./)),
+        );
+
+        // Resuming is the confirmation link again (§20.28); then the copy goes out. The API allows
+        // one confirmation mail a minute (real time), so the test does what confirming the
+        // Resume link does, in the repository: a new token, used up.
+        expect(
+          (yield* call(`/v1/failed-deliveries/${failureId}/resend`, {
+            cookie: yara.cookie,
+            body: {},
+          })).body,
+        ).toMatchObject({ _tag: "ResendFailed", reason: "recipient-bounced" });
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          Effect.gen(function* () {
+            const paused = yield* Effect.flatMap(
+              repo.find(yara.userId, recipient.id),
+              Effect.fromOption,
+            );
+            const now = yield* DateTime.now;
+            yield* repo.renewConfirmation(paused, {
+              tokenHash: "resume",
+              expiresAt: DateTime.add(now, { hours: 1 }),
+              sentAt: now,
+            });
+            const renewed = yield* Effect.flatMap(
+              repo.find(yara.userId, recipient.id),
+              Effect.fromOption,
+            );
+            yield* repo.confirm(renewed, "resume", now);
+          }),
+        ).pipe(Effect.provide(RecipientRepo.layer));
+        const before = (yield* sentTo(yara.mailbox)).length;
+        expect(
+          (yield* call(`/v1/failed-deliveries/${failureId}/resend`, {
+            cookie: yara.cookie,
+            body: {},
+          })).status,
+        ).toBe(204);
+        const delivered = (yield* sentTo(yara.mailbox)).slice(before);
+        expect(delivered).toHaveLength(1);
+        expect(delivered[0]?.from).toMatch(/^shop\+r\.[a-z2-7]+@yara\.alias\.test$/);
+        expect(delivered[0]?.text).toContain("Your invoice is attached.");
+        expect((yield* call("/v1/failed-deliveries", { cookie: yara.cookie })).body).toEqual([]);
+        // The failure and its copy's key are gone from the table.
+        expect(yield* itemsMentioning(failureId)).toEqual([]);
+      }),
+    );
+
     it.effect("drops spoofed replies: a stranger, or the owner's address without DKIM", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");
@@ -922,6 +1108,68 @@ describe("emulated stack", () => {
       }),
     );
 
+    it.effect(
+      "forwards an additional username's mail to its own destination, until it is deleted",
+      () =>
+        Effect.gen(function* () {
+          yield* Transport.ensureIdentity("alias.test");
+          const gwen = yield* owner("gwen");
+          const work = "gwen@office.example";
+          const added = yield* call("/v1/recipients", {
+            cookie: gwen.cookie,
+            body: { address: work },
+          });
+          const [confirmation] = yield* sentTo(work);
+          const token = new URL(
+            /https:\/\/alias\.test\/destinations\?\S+/.exec(confirmation?.text ?? "")?.[0] ?? "x:",
+          ).searchParams.get("token");
+          yield* call(`/v1/recipients/${added.body.id}/confirm`, {
+            cookie: gwen.cookie,
+            body: { token },
+          });
+          const username = yield* call("/v1/usernames", {
+            cookie: gwen.cookie,
+            body: { username: "gwen-work", turnstileToken: TestKeys.DUMMY_TOKEN },
+          });
+          expect(username).toMatchObject({ status: 201, body: { username: "gwen-work" } });
+          const changed = yield* call("/v1/usernames/gwen-work", {
+            cookie: gwen.cookie,
+            method: "PATCH",
+            body: { isOnTheFlyEnabled: true, defaultRecipientId: added.body.id },
+          });
+          expect(changed).toMatchObject({ status: 200, body: { isOnTheFlyEnabled: true } });
+          // As for the primary's subdomain (PLAN.md §20.5): fakecloud needs it verified itself.
+          yield* Transport.ensureIdentity("gwen-work.alias.test");
+          const mail = (to: string) =>
+            smtp({ from: "hr@corp.example", to, subject: "Payslip", text: "Your payslip." });
+
+          expect(yield* invoke(yield* mail("payroll@gwen-work.alias.test"))).toEqual([
+            { _tag: "Forwarded" },
+          ]);
+          const forwarded = (yield* sentTo(work)).at(-1);
+          expect(forwarded?.from).toMatch(/^payroll\+r\.[a-z2-7]+@gwen-work\.alias\.test$/);
+          expect(forwarded?.text).toContain("Your payslip.");
+          // The primary's aliases still go to the account's default destination.
+          expect(yield* invoke(yield* mail(gwen.alias))).toEqual([{ _tag: "Forwarded" }]);
+          expect((yield* sentTo(gwen.mailbox)).at(-1)?.text).toContain("Your payslip.");
+
+          const deleted = yield* call("/v1/usernames/gwen-work", {
+            cookie: gwen.cookie,
+            method: "DELETE",
+          });
+          expect(deleted.status).toBe(204);
+          expect(yield* invoke(yield* mail("payroll@gwen-work.alias.test"))).toEqual([
+            { _tag: "Dropped", reason: "unknown-alias" },
+          ]);
+          // Only the delivery claims (keyed by message, expiring in a week) still name the
+          // subdomain; the username's tombstone is keyed by its skeleton.
+          const left = yield* itemsMentioning("gwen-work");
+          expect(Arr.filter(left, (item) => !String(item.pk?.S).startsWith("DELIVERY#"))).toEqual(
+            [],
+          );
+        }),
+    );
+
     it.effect("drops a blocked sender's mail, and replies to a deleted contact", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");
@@ -972,6 +1220,126 @@ describe("emulated stack", () => {
       }),
     );
 
+    it.effect("forwards to every mailbox an alias names, and takes replies from each", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const lux = yield* owner("lux");
+        const work = "lux-work@mailbox.example";
+        const added = yield* call("/v1/recipients", {
+          cookie: lux.cookie,
+          body: { address: work },
+        });
+        const [confirmation] = yield* sentTo(work);
+        const token = new URL(
+          /https:\/\/alias\.test\/destinations\?\S+/.exec(confirmation?.text ?? "")?.[0] ?? "x:",
+        ).searchParams.get("token");
+        yield* call(`/v1/recipients/${added.body.id}/confirm`, {
+          cookie: lux.cookie,
+          body: { token },
+        });
+        const recipients = Schema.decodeUnknownSync(
+          Schema.Array(Schema.Struct({ id: Schema.String, address: Schema.String })),
+        )((yield* call("/v1/recipients", { cookie: lux.cookie })).body);
+        const idOf = (address: string) =>
+          recipients.find((recipient) => recipient.address === address)?.id ?? "";
+        const changed = yield* call("/v1/aliases/lux.alias.test/shop", {
+          cookie: lux.cookie,
+          method: "PATCH",
+          body: {
+            description: "Online shop",
+            labels: ["shopping"],
+            recipientIds: [idOf(work), idOf(lux.mailbox)],
+          },
+        });
+        expect(changed).toMatchObject({ status: 200, body: { labels: ["shopping"] } });
+
+        const mail = yield* smtp({
+          from: "orders@lux-store.example",
+          to: lux.alias,
+          subject: "Order",
+          text: "Thanks!",
+        });
+        expect(yield* invoke(mail)).toEqual([{ _tag: "Forwarded" }]);
+        const toWork = (yield* sentTo(work)).at(-1);
+        const toHome = (yield* sentTo(lux.mailbox)).at(-1);
+        expect(toWork?.text).toContain("Thanks!");
+        expect(toHome?.text).toContain("Thanks!");
+        // Both copies carry the same reverse alias; neither names the other mailbox.
+        expect(toWork?.from).toBe(toHome?.from);
+        expect(toWork?.text).not.toContain(lux.mailbox);
+        expect(toHome?.text).not.toContain(work);
+
+        const reply = yield* smtp({
+          from: work,
+          to: toWork?.from ?? "",
+          subject: "Re: Order",
+          text: "Where is it?",
+        });
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Replied" }]);
+        expect(yield* sentTo("orders@lux-store.example")).toHaveLength(1);
+
+        const exported = yield* call("/v1/aliases/export", { cookie: lux.cookie });
+        expect(exported.body).toMatchObject({
+          aliases: [
+            {
+              address: lux.alias,
+              description: "Online shop",
+              labels: ["shopping"],
+              recipients: [work, lux.mailbox],
+              forwardedCount: 1,
+            },
+          ],
+        });
+      }),
+    );
+
+    it.effect("blocks a domain on every alias and tags mail by rule, both set over the API", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const ned = yield* owner("ned");
+        const write = (from: string, subject: string) =>
+          smtp({ from, to: ned.alias, subject, text: "Hi" });
+        const blocked = yield* call("/v1/blocklist", {
+          cookie: ned.cookie,
+          method: "POST",
+          body: { kind: "domain", value: "pushy.example", isSubdomainIncluded: true },
+        });
+        expect(blocked).toMatchObject({ status: 201, body: { id: "*.pushy.example" } });
+        const rule = yield* call("/v1/rules", {
+          cookie: ned.cookie,
+          method: "POST",
+          body: {
+            name: "Invoices",
+            isEnabled: true,
+            match: "all",
+            conditions: [
+              { field: "subject", match: "starts-with", value: "invoice", isNegated: false },
+            ],
+            actions: [
+              { type: "prefix-subject", value: "[€]" },
+              { type: "set-display-name", value: "Billing" },
+            ],
+          },
+        });
+        expect(rule.status).toBe(201);
+
+        expect(yield* invoke(yield* write("x@eu.pushy.example", "Buy now"))).toEqual([
+          { _tag: "Dropped", reason: "blocked-sender" },
+        ]);
+        expect(yield* invoke(yield* write("billing@shop.example", "Invoice 42"))).toEqual([
+          { _tag: "Forwarded" },
+        ]);
+        const forwarded = (yield* sentTo(ned.mailbox)).at(-1)?.text ?? "";
+        // The prefix is not ASCII, so the subject goes out as an encoded-word.
+        const subject = /^Subject: (.*)$/m.exec(forwarded)?.[1]?.trim() ?? "";
+        const word = /^=\?UTF-8\?B\?([^?]*)\?=$/.exec(subject)?.[1] ?? "";
+        expect(Buffer.from(word, "base64").toString("utf8")).toBe("[€] Invoice 42");
+        expect(forwarded).toMatch(/^From: "Billing"\r\n <shop\+r\./m);
+        // The confirmation mail and the one forward; the blocked mail never left.
+        expect(yield* sentTo(ned.mailbox)).toHaveLength(2);
+      }),
+    );
+
     it.effect("stops forwarding to a mailbox that hard-bounces, and says so in the API", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");
@@ -984,11 +1352,15 @@ describe("emulated stack", () => {
           JSON.parse(JSON.stringify(yield* Queue.take(subscriber.events))),
         );
         expect(yield* Feedback.handle(event)).toEqual([
-          { _tag: "Bounced", suppressed: 1, marked: 1 },
+          { _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 },
         ]);
         const listed = yield* call("/v1/recipients", { cookie: ivy.cookie });
         expect(listed.body).toEqual([
-          expect.objectContaining({ address: bounce, bouncedAt: expect.any(String) }),
+          expect.objectContaining({
+            address: bounce,
+            bouncedAt: expect.any(String),
+            bounceReason: "address-unknown",
+          }),
         ]);
         const suppressed = yield* SESV2.getSuppressedDestination({ EmailAddress: bounce });
         expect(suppressed.SuppressedDestination?.Reason).toBe("BOUNCE");
@@ -1002,6 +1374,78 @@ describe("emulated stack", () => {
         });
         expect(yield* invoke(forward)).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
         expect(yield* sentTo(bounce)).toHaveLength(1);
+      }),
+    );
+
+    it.effect("a crafted content bounce doesn't pause forwarding; a user-unknown one does", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const hal = yield* owner("hal");
+        const forward = (subject: string) =>
+          Effect.flatMap(
+            smtp({ from: "mallory@evil.example", to: hal.alias, subject, text: "x" }),
+            invoke,
+          );
+        const lastSent = Effect.map(sentTo(hal.mailbox), (sent) => Arr.last(sent));
+        const bounceOf = (messageId: string, status: string, diagnosticCode: string) =>
+          bounceBack({
+            messageId,
+            userId: hal.userId,
+            kind: "forward",
+            address: hal.mailbox,
+            bounceSubType: "General",
+            status,
+            diagnosticCode,
+          });
+        const paused = Effect.map(
+          call("/v1/recipients", { cookie: hal.cookie }),
+          (listed) => listed.body,
+        );
+
+        // A sender gets the owner's provider to refuse one message for good, for its content.
+        expect(yield* forward("Crafted")).toEqual([{ _tag: "Forwarded" }]);
+        const crafted = yield* lastSent;
+        expect(
+          yield* bounceOf(
+            Option.getOrElse(
+              Option.map(crafted, (email) => email.messageId),
+              () => "",
+            ),
+            "5.7.1",
+            "smtp; 550 5.7.1 Message rejected: spam content",
+          ),
+        ).toEqual([{ _tag: "Ignored", reason: "message-bounce" }]);
+        expect(yield* paused).toEqual([
+          expect.not.objectContaining({ bouncedAt: expect.anything() }),
+        ]);
+        const notSuppressed = yield* Effect.flip(
+          SESV2.getSuppressedDestination({ EmailAddress: hal.mailbox }),
+        );
+        expect(notSuppressed._tag).toBe("NotFoundException");
+        // Forwarding goes on.
+        expect(yield* forward("Next")).toEqual([{ _tag: "Forwarded" }]);
+
+        // The mailbox is then deleted: its server says so for the next message.
+        const next = yield* lastSent;
+        expect(
+          yield* bounceOf(
+            Option.getOrElse(
+              Option.map(next, (email) => email.messageId),
+              () => "",
+            ),
+            "5.1.1",
+            "smtp; 550 5.1.1 <hal@mailbox.example>: Recipient address rejected: User unknown",
+          ),
+        ).toEqual([{ _tag: "Bounced", suppressed: 1, marked: 1, counted: 0 }]);
+        expect(yield* paused).toEqual([
+          expect.objectContaining({
+            bouncedAt: expect.any(String),
+            bounceReason: "address-unknown",
+          }),
+        ]);
+        expect(yield* forward("After")).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
+        // The confirmation and the two forwards.
+        expect(yield* sentTo(hal.mailbox)).toHaveLength(3);
       }),
     );
 
@@ -1170,7 +1614,9 @@ describe("emulated stack", () => {
 
         expect((yield* call("/v1/me", { cookie: moe.cookie })).status).toBe(401);
         expect(
-          yield* call("/v1/auth/register/options", { body: { username: "moe" } }),
+          yield* call("/v1/auth/register/options", {
+            body: { username: "moe", turnstileToken: TestKeys.DUMMY_TOKEN },
+          }),
         ).toMatchObject({ status: 409, body: { _tag: "UsernameTaken" } });
         expect(yield* invoke(yield* write())).toEqual([
           { _tag: "Dropped", reason: "unknown-alias" },
@@ -1347,6 +1793,131 @@ describe("emulated stack", () => {
           // The token reaches nothing but inboxes.
           expect((yield* call("/v1/aliases", { bearer })).status).toBe(403);
         }),
+    );
+  });
+});
+
+/** The emulated distribution in front of the API: one edge reached over IPv4, one over IPv6. */
+class Edges extends Context.Service<
+  Edges,
+  { readonly v4: string; readonly v6: string; readonly functionUrl: string }
+>()("e2e/Edges") {}
+
+const cloudFrontStack = layer(
+  Layer.effect(
+    Edges,
+    Effect.gen(function* () {
+      const { front, customHeaders } = yield* behindCloudFront();
+      const handler = yield* apiHandler({ id: "alias.test", origin }, front, {
+        challengesPerHour: CHALLENGES_PER_HOUR,
+      });
+      const functionUrl = yield* FunctionUrlServer.make({ handler });
+      const edge = (host: string) =>
+        CloudFrontServer.make({ origin: functionUrl.url, customHeaders, host });
+      return Edges.of({
+        v4: (yield* edge("127.0.0.1")).url,
+        v6: (yield* edge("::1")).url,
+        functionUrl: functionUrl.url,
+      });
+    }),
+  ),
+);
+
+const BAD_TOKEN = `alias_pat_${"B".repeat(43)}`;
+/** Sign-up and login challenges one client may ask for in an hour, low enough to reach. */
+const CHALLENGES_PER_HOUR = 5;
+/** Public, and one of the paths the distribution routes to the API. */
+const metadata = "/.well-known/oauth-authorization-server";
+
+const statusAt = (
+  base: string,
+  path: string,
+  headers: Record<string, string> = {},
+  method: "GET" | "POST" = "GET",
+) =>
+  Effect.map(
+    Effect.promise(() => fetch(`${base}${path}`, { method, headers: { origin, ...headers } })),
+    (response) => response.status,
+  );
+
+/** A login challenge as the web app asks for one: same-origin, JSON. */
+const loginOptions = (base: string, headers: Record<string, string> = {}) =>
+  statusAt(
+    base,
+    "/v1/auth/login/options",
+    { "content-type": "application/json", "sec-fetch-site": "same-origin", ...headers },
+    "POST",
+  );
+
+describe("emulated stack behind CloudFront (PLAN.md §20.26)", () => {
+  it.layer(cloudFrontStack, { timeout: 60_000 })((it) => {
+    it.effect("serves the API through the distribution only", () =>
+      Effect.gen(function* () {
+        const { v4, v6, functionUrl } = yield* Edges;
+        expect(yield* statusAt(v4, metadata)).toBe(200);
+        expect(yield* statusAt(v6, metadata)).toBe(200);
+        // Around CloudFront, nothing a client can send gets in.
+        expect(
+          yield* Effect.forEach(
+            [
+              {},
+              { [CloudFront.VIEWER_ADDRESS_HEADER]: "198.51.100.10:46532" },
+              {
+                [CloudFront.ORIGIN_SECRET_HEADER]: `2:${Buffer.alloc(32, 1).toString("base64url")}`,
+              },
+            ],
+            (headers) => statusAt(functionUrl, metadata, headers),
+            { concurrency: 1 },
+          ),
+        ).toEqual([403, 403, 403]);
+      }),
+    );
+
+    it.effect("rate-limits the viewer, not the edge, and ignores addresses viewers make up", () =>
+      Effect.gen(function* () {
+        const { v4, v6 } = yield* Edges;
+        // 20 bad tokens over IPv4, each claiming another address in every header we read.
+        const failures = yield* Effect.forEach(
+          Arr.range(1, 20),
+          (i) =>
+            statusAt(v4, "/v1/aliases", {
+              authorization: `Bearer ${BAD_TOKEN}`,
+              [CloudFront.VIEWER_ADDRESS_HEADER]: `198.51.100.${i}:443`,
+              [FunctionUrl.SOURCE_IP_HEADER]: `198.51.100.${i}`,
+              "x-forwarded-for": `198.51.100.${i}`,
+            }),
+          { concurrency: 1 },
+        );
+        expect(failures).toEqual(Arr.replicate(401, 20));
+        const bad = { authorization: `Bearer ${BAD_TOKEN}` };
+        expect(yield* statusAt(v4, "/v1/aliases", bad)).toBe(429);
+        // The IPv6 viewer reaches the same function URL from the same edge address, and isn't
+        // locked out: the limit counts CloudFront-Viewer-Address.
+        expect(yield* statusAt(v6, "/v1/aliases", bad)).toBe(401);
+      }),
+    );
+
+    it.effect("counts sign-up and login challenges per viewer, from the app's origin only", () =>
+      Effect.gen(function* () {
+        const { v4, v6 } = yield* Edges;
+        // CloudFront forwards Origin and Sec-Fetch-Site, so the same-origin check (§20.30) sees
+        // the app's origin; another site's page gets 403 before anything is counted.
+        expect(
+          yield* loginOptions(v4, {
+            origin: "https://evil.example",
+            "sec-fetch-site": "cross-site",
+          }),
+        ).toBe(403);
+        const issued = yield* Effect.forEach(
+          Arr.range(1, CHALLENGES_PER_HOUR),
+          (i) => loginOptions(v4, { [CloudFront.VIEWER_ADDRESS_HEADER]: `198.51.100.${i}:443` }),
+          { concurrency: 1 },
+        );
+        expect(issued).toEqual(Arr.replicate(200, CHALLENGES_PER_HOUR));
+        expect(yield* loginOptions(v4)).toBe(429);
+        // Another viewer on the same edge still gets its own allowance.
+        expect(yield* loginOptions(v6)).toBe(200);
+      }),
     );
   });
 });

@@ -107,12 +107,16 @@ const fromMetadataDocument = Effect.fn("Clients.fromMetadataDocument")(function*
   } satisfies Client;
 });
 
+/** A URL-formatted `client_id` names a metadata document; any other one, a registered client. */
+export const isMetadataDocumentId = (clientId: string) =>
+  Str.startsWith("https://")(clientId) || Str.startsWith("http://")(clientId);
+
 /**
  * The client a `client_id` names: one registered here (RFC 7591), or the metadata document at a
  * URL-formatted one. A URL that isn't allowed to be fetched is an unknown client.
  */
 export const resolve = Effect.fn("Clients.resolve")(function* (clientId: string) {
-  if (Str.startsWith("https://")(clientId) || Str.startsWith("http://")(clientId)) {
+  if (isMetadataDocumentId(clientId)) {
     const policy = yield* UrlPolicy.UrlPolicy;
     const url = WebhookUrl.check(clientId, policy);
     // The draft requires a path component: `https://example.com/` names no document.

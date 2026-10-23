@@ -116,6 +116,23 @@ export const value = (field: Field): string => {
     .trim();
 };
 
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * A field's value as text: UTF-8 when it is valid UTF-8 (RFC 6532 allows raw UTF-8 headers),
+ * otherwise one char per byte. Unfolded and trimmed; encoded-words are left to the caller.
+ */
+export const text = (field: Field): string => {
+  const decoded = Option.getOrElse(
+    Option.liftThrowable(() => strictUtf8.decode(field.bytes))(),
+    () => latin1.decode(field.bytes),
+  );
+  return decoded
+    .slice(decoded.indexOf(":") + 1)
+    .replace(/\r?\n(?=[ \t])/g, "")
+    .trim();
+};
+
 /** The values of every field called `name` (case-insensitive), in order. */
 export const values = (message: Message, name: string): ReadonlyArray<string> =>
   Arr.map(

@@ -1,11 +1,16 @@
 import { AwsClient } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { TestQueue } from "@alias/webhooks/testing";
+import { Dynamo, WebhookRepo } from "@alias/db";
+import { Secrets } from "@alias/webhooks";
+import { TestQueue, testWebhookKeys } from "@alias/webhooks/testing";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Order from "effect/Order";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as TestApi from "./support/TestApi.ts";
 
@@ -55,6 +60,58 @@ describe("webhooks API (handler on fakecloud)", () => {
       expect(fresh).not.toBe(secret);
       expect((yield* browser.delete(`/v1/webhooks/${id}`)).status).toBe(204);
       expect((yield* browser.get("/v1/webhooks")).body).toEqual([]);
+    }),
+  );
+
+  // SR-13 (PLAN.md §20.25): anyone reading the table or a backup could forge deliveries.
+  it.effect("stores the signing secret only sealed, bound to its webhook", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.make;
+      const ada = yield* TestApi.signedIn(api.browser, "ada");
+      const created = Schema.decodeUnknownSync(Created)(
+        (yield* ada.browser.post("/v1/webhooks", hook)).body,
+      );
+      const other = Schema.decodeUnknownSync(Created)(
+        (yield* ada.browser.post("/v1/webhooks", hook)).body,
+      );
+      const rotated = Schema.decodeUnknownSync(Created)(
+        (yield* ada.browser.post(`/v1/webhooks/${created.id}/secret`)).body,
+      );
+      const { name } = yield* Effect.provide(Effect.service(Dynamo.DynamoTable), api.context);
+      const table = JSON.stringify(
+        yield* DynamoDB.scan({ TableName: name }).pipe(Effect.provide(api.context)),
+      );
+      const keyOf = (secret: string) => secret.slice("whsec_".length);
+      const exposed = Arr.filter([created.secret, other.secret, rotated.secret], (secret) =>
+        table.includes(keyOf(secret)),
+      );
+      expect(exposed).toEqual([]);
+
+      // The delivery side opens them with the same keys; each only for its own webhook.
+      const opened = yield* Effect.gen(function* () {
+        const repo = yield* WebhookRepo.WebhookRepo;
+        const stored = yield* Effect.flatMap(repo.find(ada.userId, created.id), Effect.fromOption);
+        const owner = { userId: ada.userId, webhookId: created.id };
+        const current = yield* Secrets.open(owner, stored.sealedSecret);
+        const previous = yield* Secrets.open(
+          owner,
+          yield* Effect.fromOption(stored.previousSealedSecret),
+        );
+        const moved = yield* Effect.flip(
+          Secrets.open({ userId: ada.userId, webhookId: other.id }, stored.sealedSecret),
+        );
+        return { current: Redacted.value(current), previous: Redacted.value(previous), moved };
+      }).pipe(
+        Effect.provide(
+          Layer.merge(
+            WebhookRepo.layer.pipe(Layer.provide(Layer.succeedContext(api.context))),
+            testWebhookKeys(),
+          ),
+        ),
+      );
+      expect(opened.current).toBe(rotated.secret);
+      expect(opened.previous).toBe(created.secret);
+      expect(opened.moved._tag).toBe("SealError");
     }),
   );
 

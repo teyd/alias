@@ -8,7 +8,9 @@ export const WebhookEventType = Schema.Literals([
   "alias.deleted",
   "mail.forwarded",
   "mail.blocked",
+  "mail.failed",
   "recipient.bounced",
+  "rule.matched",
 ]);
 export type WebhookEventType = typeof WebhookEventType.Type;
 
@@ -45,6 +47,23 @@ export const WebhookEvent = Schema.Union([
     data: Schema.Struct({
       ...AliasRef,
       /** Why: `spam`, `virus`, `blocked-contact`, `loop`, `rate-limited`, `inactive-alias`, … */
+      reason: Schema.String,
+    }),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("rule.matched"),
+    timestamp: Schema.String,
+    /** One of the owner's rules with a `webhook` action matched mail to the alias (§20.32). */
+    data: Schema.Struct({ ...AliasRef, ruleId: Schema.String }),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("mail.failed"),
+    timestamp: Schema.String,
+    data: Schema.Struct({
+      ...AliasRef,
+      /** The failed delivery, to look up, download or send again (PLAN.md §20.33). */
+      failureId: Schema.String,
+      /** Why: `rejected`, `recipient-bounced`, `key-unusable` or `too-large`. */
       reason: Schema.String,
     }),
   }),

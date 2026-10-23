@@ -35,6 +35,7 @@ Prefer the lowest tier that can observe the behaviour, but every new path throug
 | Lambda function URLs | `FunctionUrlServer.layer({ handler })` | `FunctionUrl` schemas decode AWS-documented payloads; emulator events decode with them |
 | SESv2 identities (custom domains) | `FakeCloud.layer()` through `Identities.layer` | `Identities` decodes the documented responses and fakecloud's; fakecloud verifies at once, with fixed DKIM tokens (`tools/aws-emulators/test/ses-identities.test.ts`) |
 | DNS over HTTPS (not AWS) | `DohServer.layer()` from `@alias/doh-emulator`; set records with `setZone(apex, records)`, resolve with `Doh.layer(server.url)` | `Doh.Response` decodes the documented and recorded Cloudflare/Google answers; the emulator replays the recorded Cloudflare queries field for field (`packages/dns/fixtures`) |
+| Cloudflare Turnstile (not AWS) | `TurnstileServer.layer()` from `@alias/turnstile-emulator`; `Turnstile.layer({ url: server.url, siteKey, secret })` with a `TestKeys` secret; browsers send `TestKeys.DUMMY_TOKEN` (`TestApi.human` in API tests) | `Turnstile.Response` decodes the documented and recorded Siteverify answers; the emulator replays each recorded request with the same status and body; `browser/test/turnstile.test.ts` checks its `api.js` against the recorded widget |
 | The web origin (planned CloudFront: `/v1/*` → function URL, the rest → the SPA; not in infra yet) | `vite preview` with a proxy, in `browser/test/support/browser.ts` | not verified: it only routes by path (PLAN.md §20.17) |
 
 Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. A new AWS dependency needs an emulator and a contract test before any feature uses it.
@@ -50,9 +51,10 @@ Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. 
 
 `browser/test/support/browser.ts` gives each file the whole stack from `@alias/e2e/stack` (shared with `e2e`, add helpers there) plus:
 
-- the production bundle of `apps/web`, built into a temp dir and served by `vite preview` on `http://localhost:<port 0>`, which forwards `/v1` and `/health` to the API's function URL emulator. Browsers treat `localhost` as a secure context, so the `Secure` session cookie and WebAuthn work without TLS; the relying party is `localhost` with the preview server's origin;
+- the production bundle of `apps/web`, built into a temp dir and served by `vite preview` on `http://localhost:<port 0>`, which forwards `/v1`, `/health` and `/.well-known` to the API's function URL emulator. Browsers treat `localhost` as a secure context, so the `Secure` session cookie and WebAuthn work without TLS; the relying party is `localhost` with the preview server's origin;
 - headless Chromium (Playwright, the version pinned in the catalog);
 - `openPage()`: a fresh browser profile per test with a virtual WebAuthn authenticator over CDP (CTAP2, internal transport, discoverable credentials, user verification that always succeeds). `passkeys()` lists what it holds.
+- the browser extension: `openExtension()` (`support/extension.ts`, used with the `stack` layer instead of `layer`) builds `apps/extension` for Chromium and loads it unpacked into a persistent profile in Chromium's new headless mode (`channel: "chromium"`; the headless shell can't load extensions), with a sign-up page on `shop.example.co.uk` mapped to a port-0 server. Open the popup as a tab (`popupUrl`); `attachAuthenticator(context, page)` adds a passkey authenticator to any page. Tests can't click the toolbar button or a context menu, so the sign-up site is granted at install instead of through `activeTab`.
 
 Drive the page inside `ui(async () => …)` and mix it with Effect steps (`smtp`, `sentTo`, `Pipeline.handle`). Rules:
 

@@ -35,6 +35,12 @@ const services: Array<{ name: string; cwd: string; command: string; args: Array<
     ],
   },
   { name: "dns", cwd: `${root}/tools/doh-emulator`, command: "node", args: ["bin/serve.ts"] },
+  {
+    name: "turnstile",
+    cwd: `${root}/tools/turnstile-emulator`,
+    command: "node",
+    args: ["bin/serve.ts"],
+  },
   { name: "api", cwd: `${root}/apps/api`, command: "node", args: ["bin/dev.ts"] },
   { name: "web", cwd: `${root}/apps/web`, command: "pnpm", args: ["exec", "vp", "dev"] },
   { name: "inbound", cwd: `${root}/apps/inbound`, command: "node", args: ["bin/dev.ts"] },
@@ -75,5 +81,5 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 console.log(
-  `web http://localhost:${devEnv.ALIAS_WEB_PORT}  api http://localhost:${devEnv.ALIAS_API_PORT}  smtp localhost:${devEnv.ALIAS_SMTP_PORT}  images http://localhost:${devEnv.ALIAS_IMAGE_PROXY_PORT}  fakecloud http://localhost:${devEnv.ALIAS_FAKECLOUD_PORT}  doh http://localhost:${devEnv.ALIAS_DOH_PORT}/dns-query`,
+  `web http://localhost:${devEnv.ALIAS_WEB_PORT}  api http://localhost:${devEnv.ALIAS_API_PORT}  smtp localhost:${devEnv.ALIAS_SMTP_PORT}  images http://localhost:${devEnv.ALIAS_IMAGE_PROXY_PORT}  fakecloud http://localhost:${devEnv.ALIAS_FAKECLOUD_PORT}  doh http://localhost:${devEnv.ALIAS_DOH_PORT}/dns-query  turnstile http://localhost:${devEnv.ALIAS_TURNSTILE_PORT}`,
 );

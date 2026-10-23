@@ -18,7 +18,13 @@ describe("SendingEvent (contract: AWS documentation payloads)", () => {
         bounce: {
           bounceType: "Permanent",
           bounceSubType: "General",
-          bouncedRecipients: [{ emailAddress: "recipient@example.com" }],
+          bouncedRecipients: [
+            {
+              emailAddress: "recipient@example.com",
+              status: "5.1.1",
+              diagnosticCode: "smtp; 550 5.1.1 user unknown",
+            },
+          ],
         },
         mail: { messageId: "EXAMPLE7c191be45-e9aedb9a-02f9-4d12-a87d-dd0099a07f8a-000000" },
       });

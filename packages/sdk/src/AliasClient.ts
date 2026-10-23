@@ -9,7 +9,10 @@ import { HttpApiClient } from "effect/http-api";
 export interface Options {
   /** Where the API answers, e.g. `https://alias.example` (the web app's origin). */
   readonly baseUrl: string;
-  /** A personal API token (`alias_pat_…`), sent as `Authorization: Bearer`. */
+  /**
+   * A personal API token (`alias_pat_…`) or an access token from `CodeLogin` (`alias_oat_…`),
+   * sent as `Authorization: Bearer`.
+   */
   readonly token: Redacted.Redacted<string>;
 }
 

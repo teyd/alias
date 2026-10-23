@@ -1,0 +1,14 @@
+{
+  "request": {
+    "form": {
+      "secret": "1x0000000000000000000000000000000AA",
+      "response": ""
+    }
+  },
+  "status": 200,
+  "body": {
+    "error-codes": ["missing-input-response"],
+    "success": false,
+    "messages": []
+  }
+}

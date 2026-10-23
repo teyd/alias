@@ -89,7 +89,8 @@ const scan = Effect.fn("scan")(function* () {
  * app (its grant, a used and a current refresh token, two access tokens, the redeemed code and
  * one waiting), a drafted email and a day's send count, settings, a recipient, a creation quota, a custom domain, an
  * additional username with its settings, live and deleted aliases on a shared domain, on their
- * subdomains and on their custom domain, contacts, counters, a deletion that stopped halfway, and
+ * subdomains and on their custom domain (with descriptions, labels and chosen recipients), a
+ * label colour, contacts, counters, a deletion that stopped halfway, and
  * a temporary inbox with a stored message and its quotas.
  */
 const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) {
@@ -249,6 +250,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     }),
   );
   yield* aliases.reserveCreation(userId, at(1_000), 20);
+  yield* aliases.setLabelColor(userId, name, Option.some("blue"));
 
   // An additional username (PLAN.md §20.34), with its own settings.
   const work = `${name}-work`;
@@ -282,7 +284,17 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     ([key, address]) =>
       Effect.gen(function* () {
         const aliasId = `al_${name}_${key}`;
-        yield* aliases.insert({ id: aliasId, userId, mode: "forward", createdAt: 1, ...address });
+        // With the owner's details (PLAN.md §20.31), which name their recipient.
+        yield* aliases.insert({
+          id: aliasId,
+          userId,
+          mode: "forward",
+          createdAt: 1,
+          description: `${name}'s ${key}`,
+          labels: [name],
+          recipientIds: [`rcp_${name}`],
+          ...address,
+        });
         yield* contacts.create(
           {
             id: `c_${name}_${key}`.padEnd(16, "x"),

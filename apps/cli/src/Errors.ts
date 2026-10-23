@@ -5,11 +5,13 @@ import {
   DeviceLogin,
   Forbidden,
   InvalidAlias,
+  InvalidAliasRecipient,
   InvalidTemporaryInbox,
   TemporaryInboxLimit,
   TooManyAttempts,
   Unauthenticated,
 } from "@alias/sdk";
+import { AliasCsv } from "@alias/core";
 import * as Effect from "effect/Effect";
 import { CliError } from "effect/cli";
 import { HttpClientError } from "effect/http";
@@ -33,6 +35,11 @@ export class NoMail extends Schema.TaggedError<NoMail>()("NoMail", { address: Sc
 
 /** `alias temp --wait --otp`: mail arrived, but no code or verification link was found in it. */
 export class NoCode extends Schema.TaggedError<NoCode>()("NoCode", {}) {}
+
+/** None of the caller's verified recipients has this address. */
+export class NoSuchRecipient extends Schema.TaggedError<NoSuchRecipient>()("NoSuchRecipient", {
+  address: Schema.String,
+}) {}
 
 /** No contact of the alias has this id or address. */
 export class NoSuchContact extends Schema.TaggedError<NoSuchContact>()("NoSuchContact", {}) {}
@@ -69,6 +76,19 @@ const describe = <E>(error: E): string => {
   }
   if (error instanceof ContactNotFound || error instanceof NoSuchContact) {
     return "That alias has no such contact.";
+  }
+  if (error instanceof NoSuchRecipient) {
+    return `${error.address} isn't one of your verified forwarding addresses (\`alias recipients list\`).`;
+  }
+  if (error instanceof InvalidAliasRecipient) {
+    return "That forwarding address isn't verified yet. Confirm it from its mail first.";
+  }
+  if (error instanceof AliasCsv.CsvError) {
+    return {
+      empty: "The file is empty.",
+      "no-address-column": "The file has no `address` column in its first line.",
+      "unterminated-quote": "The file has a quote that never closes.",
+    }[error.reason];
   }
   if (error instanceof InvalidAddress) return `${error.input} isn't an address like name@domain.`;
   if (error instanceof NotConfirmed) {

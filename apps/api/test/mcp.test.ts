@@ -141,6 +141,7 @@ describe("MCP endpoint (API handler on fakecloud)", () => {
         "list_aliases",
         "create_alias",
         "set_alias_active",
+        "set_alias_details",
         "list_contacts",
         "block_contact",
         "send_mail",
@@ -193,12 +194,33 @@ describe("MCP endpoint (API handler on fakecloud)", () => {
         textOf(body).content[0].text.split("<untrusted-mail-data>")[0];
       expect(outside(own.body)).toBe("Created the alias; its address is in the data.\n");
       expect(outside(disabled.body)).toBe("The alias is now disabled.\n");
+      const described = yield* Mcp.callTool(api, token, "set_alias_details", {
+        address: "shop@ada.alias.test",
+        description: "Online shop",
+        labels: ["shopping", "eu"],
+      });
+      expect(described.body).toMatchObject({
+        result: {
+          isError: false,
+          structuredContent: { description: "Online shop", labels: ["shopping", "eu"] },
+        },
+      });
+      expect(outside(described.body)).toBe("Updated the alias; its details are in the data.\n");
+      const badLabel = yield* Mcp.callTool(api, token, "set_alias_details", {
+        address: "shop@ada.alias.test",
+        labels: ["a;b"],
+      });
+      expect(badLabel.body).toMatchObject({ result: { isError: true } });
+      expect(textOf(badLabel.body).content[0].text).toMatch(/^Invalid arguments: a label is/);
 
       const listed = yield* Mcp.callTool(api, token, "list_aliases");
       expect(listed.body).toMatchObject({
         result: {
           structuredContent: {
-            aliases: [{ address }, { address: "shop@ada.alias.test", isActive: false }],
+            aliases: [
+              { address, labels: [] },
+              { address: "shop@ada.alias.test", isActive: false, description: "Online shop" },
+            ],
             domains: {
               shared: ["alias.test", "alias2.test"],
               subdomains: ["ada.alias.test", "ada.alias2.test"],

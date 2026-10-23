@@ -138,8 +138,12 @@ export const authenticationLayer = Layer.effect(
         if (!(yield* isLiveUser(token.userId))) return yield* new Unauthenticated();
         const access = Context.getOption(endpoint.annotations, TokenAccessAnnotation);
         if (Option.isNone(access)) return yield* new Forbidden({});
-        if (access.value._tag === "Scope" && !Arr.contains(token.scopes, access.value.scope)) {
-          return yield* new Forbidden({ scope: access.value.scope });
+        if (access.value._tag === "Scope") {
+          const missing = Arr.findFirst(
+            access.value.scopes,
+            (scope) => !Arr.contains(token.scopes, scope),
+          );
+          if (Option.isSome(missing)) return yield* new Forbidden({ scope: missing.value });
         }
         // Bookkeeping only: a failed write must not fail the request.
         yield* tokens

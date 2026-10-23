@@ -17,6 +17,8 @@ const groups = {
   account: "The signed-in account: who it is, and erasing it (GDPR Art. 17).",
   aliases:
     "Aliases, addressed by their address. Other users' aliases answer `AliasNotFound`, so lookups reveal nothing.",
+  labels:
+    "Labels on aliases: listed with how many aliases carry them, and coloured. Set an alias's labels with `PATCH /v1/aliases/:domain/:local`.",
   contacts:
     "The people who wrote to an alias. Blocking one drops its mail and replies to it; deleting one revokes its reverse alias.",
   recipients:
@@ -56,6 +58,10 @@ const summaries = {
   "aliases.domains": "Domains you may create aliases on",
   "aliases.create": "Create an alias",
   "aliases.lookup": "Get one alias",
+  "aliases.export": "Export every alias with its details, recipients and counters",
+  "aliases.import": "Create aliases on your own domains from a list, with a result per row",
+  "labels.list": "List your labels",
+  "labels.setColor": "Give a label a colour, or take it away",
   "aliases.update": "Enable, disable or change an alias",
   "aliases.remove": "Delete an alias for good",
   "contacts.list": "List an alias's contacts",
@@ -112,9 +118,9 @@ const tokenAccess = (() => {
   return R.fromEntries(entries);
 })();
 
-/** The token's roles in a security requirement: the scope it needs, or none for any token. */
+/** The token's roles in a security requirement: the scopes it needs, or none for any token. */
 const roles = (access: TokenAccess): Array<string> =>
-  P.isTagged(access, "Scope") ? [access.scope] : [];
+  P.isTagged(access, "Scope") ? [...access.scopes] : [];
 
 type Operation = OpenApi.OpenAPISpecOperation;
 
@@ -147,7 +153,13 @@ const document = (operation: Operation): Operation => {
       onSome: (found) =>
         Arr.match(roles(found), {
           onEmpty: () => "Any API token may call it.",
-          onNonEmpty: ([scope]) => `API tokens need the \`${scope}\` scope.`,
+          onNonEmpty: (scopes) =>
+            Arr.isArrayNonEmpty(Arr.drop(scopes, 1))
+              ? `API tokens need the ${Arr.join(
+                  Arr.map(scopes, (scope) => `\`${scope}\``),
+                  " and ",
+                )} scopes.`
+              : `API tokens need the \`${scopes[0]}\` scope.`,
         }),
     }),
     security: Option.match(access, {

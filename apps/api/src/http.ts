@@ -33,6 +33,7 @@ import type { Turnstile } from "@alias/turnstile";
 import { AliasesLive } from "./aliases.ts";
 import { AccountLive, AuthLive } from "./auth.ts";
 import { ContactsLive } from "./contacts.ts";
+import { LabelsLive } from "./labels.ts";
 import { DeviceLive, OAuthLive } from "./device.ts";
 import { DomainsLive } from "./domains.ts";
 import { InboxesLive } from "./inboxes.ts";
@@ -119,6 +120,7 @@ const ApiLive = Layer.mergeAll(
     AccountLive,
     AliasesLive,
     ContactsLive,
+    LabelsLive,
     InboxesLive,
     RecipientsLive,
     SettingsLive,

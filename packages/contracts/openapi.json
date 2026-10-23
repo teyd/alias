@@ -1259,6 +1259,24 @@
                           7,
                           30
                         ]
+                      },
+                      "createdAt": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "recipientIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -1268,7 +1286,10 @@
                       "isActive",
                       "forwardedCount",
                       "blockedCount",
-                      "retentionDays"
+                      "retentionDays",
+                      "createdAt",
+                      "labels",
+                      "recipientIds"
                     ],
                     "additionalProperties": false
                   }
@@ -1375,6 +1396,24 @@
                         7,
                         30
                       ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "recipientIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -1384,7 +1423,10 @@
                     "isActive",
                     "forwardedCount",
                     "blockedCount",
-                    "retentionDays"
+                    "retentionDays",
+                    "createdAt",
+                    "labels",
+                    "recipientIds"
                   ],
                   "additionalProperties": false
                 }
@@ -1392,11 +1434,18 @@
             }
           },
           "400": {
-            "description": "InvalidAlias",
+            "description": "InvalidAlias | InvalidAliasRecipient",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidAliasEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidAliasEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidAliasRecipientEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -1473,6 +1522,25 @@
                           "inbox",
                           "both"
                         ]
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 10,
+                        "uniqueItems": true
+                      },
+                      "recipientIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 5,
+                        "uniqueItems": true
                       }
                     },
                     "required": [
@@ -1501,6 +1569,25 @@
                           "inbox",
                           "both"
                         ]
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 10,
+                        "uniqueItems": true
+                      },
+                      "recipientIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 5,
+                        "uniqueItems": true
                       }
                     },
                     "required": [
@@ -1616,6 +1703,415 @@
         "description": "API tokens need the `aliases:read` scope."
       }
     },
+    "/v1/aliases/export": {
+      "get": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.export",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:read",
+              "recipients:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exportedAt": {
+                      "type": "string"
+                    },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "address": {
+                            "type": "string"
+                          },
+                          "isActive": {
+                            "type": "boolean"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "forward",
+                              "inbox",
+                              "both"
+                            ]
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "labels": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "recipients": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "forwardedCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "blockedCount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "address",
+                          "isActive",
+                          "mode",
+                          "labels",
+                          "recipients",
+                          "forwardedCount",
+                          "blockedCount",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "exportedAt",
+                    "aliases"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Export every alias with its details, recipients and counters",
+        "description": "API tokens need the `aliases:read` and `recipients:read` scopes."
+      }
+    },
+    "/v1/aliases/import": {
+      "post": {
+        "tags": [
+          "aliases"
+        ],
+        "operationId": "aliases.import",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Created"
+                                ]
+                              },
+                              "row": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "alias": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": "string"
+                                  },
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "forward",
+                                      "inbox",
+                                      "both"
+                                    ]
+                                  },
+                                  "isActive": {
+                                    "type": "boolean"
+                                  },
+                                  "forwardedCount": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "blockedCount": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "retentionDays": {
+                                    "type": "number",
+                                    "enum": [
+                                      1,
+                                      7,
+                                      30
+                                    ]
+                                  },
+                                  "createdAt": {
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "type": "string"
+                                  },
+                                  "labels": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "recipientIds": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "address",
+                                  "mode",
+                                  "isActive",
+                                  "forwardedCount",
+                                  "blockedCount",
+                                  "retentionDays",
+                                  "createdAt",
+                                  "labels",
+                                  "recipientIds"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "row",
+                              "alias"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "_tag": {
+                                "type": "string",
+                                "enum": [
+                                  "Failed"
+                                ]
+                              },
+                              "row": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "address": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string",
+                                "enum": [
+                                  "invalid-address",
+                                  "unknown-domain",
+                                  "not-your-subdomain",
+                                  "domain-not-verified",
+                                  "random-only-on-shared-domain",
+                                  "reserved-local-part",
+                                  "role-address",
+                                  "taken",
+                                  "duplicate",
+                                  "invalid-description",
+                                  "invalid-labels"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "_tag",
+                              "row",
+                              "address",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "results"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aliases": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "address": {
+                          "type": "string",
+                          "maxLength": 320
+                        },
+                        "description": {
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        "labels": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "maxItems": 50
+                        },
+                        "isActive": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "address"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 100
+                  }
+                },
+                "required": [
+                  "aliases"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Create aliases on your own domains from a list, with a result per row",
+        "description": "API tokens need the `aliases:write` scope."
+      }
+    },
     "/v1/aliases/{domain}/{local}": {
       "get": {
         "tags": [
@@ -1692,6 +2188,24 @@
                         7,
                         30
                       ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "recipientIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -1701,7 +2215,10 @@
                     "isActive",
                     "forwardedCount",
                     "blockedCount",
-                    "retentionDays"
+                    "retentionDays",
+                    "createdAt",
+                    "labels",
+                    "recipientIds"
                   ],
                   "additionalProperties": false
                 }
@@ -1834,6 +2351,24 @@
                         7,
                         30
                       ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "recipientIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -1843,9 +2378,22 @@
                     "isActive",
                     "forwardedCount",
                     "blockedCount",
-                    "retentionDays"
+                    "retentionDays",
+                    "createdAt",
+                    "labels",
+                    "recipientIds"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidAliasRecipient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidAliasRecipientEncoded"
                 }
               }
             }
@@ -1922,6 +2470,25 @@
                       7,
                       30
                     ]
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 10,
+                    "uniqueItems": true
+                  },
+                  "recipientIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 5,
+                    "uniqueItems": true
                   }
                 },
                 "additionalProperties": false
@@ -2402,6 +2969,263 @@
         },
         "summary": "Delete a contact and revoke its reverse alias",
         "description": "API tokens need the `contacts:write` scope."
+      }
+    },
+    "/v1/labels": {
+      "get": {
+        "tags": [
+          "labels"
+        ],
+        "operationId": "labels.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "color": {
+                        "type": "string",
+                        "enum": [
+                          "gray",
+                          "red",
+                          "orange",
+                          "yellow",
+                          "green",
+                          "teal",
+                          "blue",
+                          "violet",
+                          "pink"
+                        ]
+                      },
+                      "aliasCount": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "aliasCount"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List your labels",
+        "description": "API tokens need the `aliases:read` scope."
+      }
+    },
+    "/v1/labels/{label}": {
+      "put": {
+        "tags": [
+          "labels"
+        ],
+        "operationId": "labels.setColor",
+        "parameters": [
+          {
+            "name": "label",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "aliases:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "string",
+                      "enum": [
+                        "gray",
+                        "red",
+                        "orange",
+                        "yellow",
+                        "green",
+                        "teal",
+                        "blue",
+                        "violet",
+                        "pink"
+                      ]
+                    },
+                    "aliasCount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "aliasCount"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "TooManyLabelColors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyLabelColorsEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "gray",
+                          "red",
+                          "orange",
+                          "yellow",
+                          "green",
+                          "teal",
+                          "blue",
+                          "violet",
+                          "pink"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "color"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Give a label a colour, or take it away",
+        "description": "API tokens need the `aliases:write` scope."
       }
     },
     "/v1/inboxes": {
@@ -10124,6 +10948,27 @@
         ],
         "additionalProperties": false
       },
+      "TooManyLabelColorsEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyLabelColors"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
       "ContactNotFoundEncoded": {
         "type": "object",
         "properties": {
@@ -10159,6 +11004,33 @@
         "required": [
           "_tag",
           "address"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidAliasRecipientEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidAliasRecipient"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "unverified"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -10274,6 +11146,10 @@
     {
       "name": "contacts",
       "description": "The people who wrote to an alias. Blocking one drops its mail and replies to it; deleting one revokes its reverse alias."
+    },
+    {
+      "name": "labels",
+      "description": "Labels on aliases: listed with how many aliases carry them, and coloured. Set an alias's labels with `PATCH /v1/aliases/:domain/:local`."
     },
     {
       "name": "inboxes"

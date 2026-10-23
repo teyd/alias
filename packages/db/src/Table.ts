@@ -29,6 +29,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | HardBounce        | `USER#<userId>`              | `BOUNCE#<recipientId>#<sesMessageId>` |             |                           | `expiresAt` |
  * | Sent              | `USER#<userId>`              | `SENT#<sesMessageId>`  |                            |                           | `expiresAt` |
  * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
+ * | LabelColor        | `USER#<userId>`              | `LABEL#<label>`        |                            |                           |             |
 
  * | UsernameEntry     | `USER#<userId>`              | `USERNAME#<username>`  |                            |                           |             |
  * | UsernameCount     | `USER#<userId>`              | `USERNAMES`            |                            |                           |             |
@@ -40,6 +41,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Session           | `SESSION#<sha256(token)>`    | `SESSION`              | `SESSIONS#<userId>`        | `SESSION#<sha256(token)>` | `expiresAt` |
  * | Challenge         | `CHALLENGE#<id>`             | `CHALLENGE`            |                            |                           | `expiresAt` |
  * | Delivery          | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>`  |                            |                           | `expiresAt` |
+ * | TargetDelivery    | `DELIVERY#<sesMessageId>`    | `RECIPIENT#<address>#TO#<recipientId>` |            |                           | `expiresAt` |
  * | Token             | `TOKEN#<sha256(secret)>`     | `TOKEN`                | `TOKENS#<userId>`          | `TOKEN#<id>`              | `expiresAt` |
  * | AuthFailures      | `AUTHFAIL#<sha256(ip)>`      | `FAILURES#<hour>`      |                            |                           | `expiresAt` |
  * | DeviceGrant       | `DEVICE#<sha256(deviceCode)>` | `DEVICE`              |                            |                           | `expiresAt` |
@@ -147,6 +149,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * A Delivery is the inbound Lambda's idempotency claim: one conditional PutItem per SES message
  * and recipient, written before any mail is sent. A redelivered event finds it and sends nothing
  * again. It carries no content and expires after a week, well past Lambda's 6-hour retry window.
+ * An alias that forwards to several of its owner's recipients (PLAN.md §20.31) also claims each
+ * copy as a TargetDelivery before sending it, so a retry after one copy failed for now sends only
+ * the copies still missing.
+ *
+ * An alias item may carry the owner's `description`, `labels` and `recipientIds` (lists, left out
+ * when empty). The forward path reads the user's recipients with one Query anyway, so choosing
+ * recipients per alias costs no read. A LabelColor is a colour the user gave one of their labels;
+ * listing them is one Query on `begins_with(sk, "LABEL#")`, and a label without one has no item.
  *
  * A Sent item traces a bounce to the message it is about (PLAN.md §20.28): one PutItem after
  * each SES send, in the sender's partition under the ID SES returned, naming the kind of mail and

@@ -1053,6 +1053,79 @@ describe("emulated stack", () => {
       }),
     );
 
+    it.effect("forwards to every mailbox an alias names, and takes replies from each", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const lux = yield* owner("lux");
+        const work = "lux-work@mailbox.example";
+        const added = yield* call("/v1/recipients", {
+          cookie: lux.cookie,
+          body: { address: work },
+        });
+        const [confirmation] = yield* sentTo(work);
+        const token = new URL(
+          /https:\/\/alias\.test\/destinations\?\S+/.exec(confirmation?.text ?? "")?.[0] ?? "x:",
+        ).searchParams.get("token");
+        yield* call(`/v1/recipients/${added.body.id}/confirm`, {
+          cookie: lux.cookie,
+          body: { token },
+        });
+        const recipients = Schema.decodeUnknownSync(
+          Schema.Array(Schema.Struct({ id: Schema.String, address: Schema.String })),
+        )((yield* call("/v1/recipients", { cookie: lux.cookie })).body);
+        const idOf = (address: string) =>
+          recipients.find((recipient) => recipient.address === address)?.id ?? "";
+        const changed = yield* call("/v1/aliases/lux.alias.test/shop", {
+          cookie: lux.cookie,
+          method: "PATCH",
+          body: {
+            description: "Online shop",
+            labels: ["shopping"],
+            recipientIds: [idOf(work), idOf(lux.mailbox)],
+          },
+        });
+        expect(changed).toMatchObject({ status: 200, body: { labels: ["shopping"] } });
+
+        const mail = yield* smtp({
+          from: "orders@lux-store.example",
+          to: lux.alias,
+          subject: "Order",
+          text: "Thanks!",
+        });
+        expect(yield* invoke(mail)).toEqual([{ _tag: "Forwarded" }]);
+        const toWork = (yield* sentTo(work)).at(-1);
+        const toHome = (yield* sentTo(lux.mailbox)).at(-1);
+        expect(toWork?.text).toContain("Thanks!");
+        expect(toHome?.text).toContain("Thanks!");
+        // Both copies carry the same reverse alias; neither names the other mailbox.
+        expect(toWork?.from).toBe(toHome?.from);
+        expect(toWork?.text).not.toContain(lux.mailbox);
+        expect(toHome?.text).not.toContain(work);
+
+        const reply = yield* smtp({
+          from: work,
+          to: toWork?.from ?? "",
+          subject: "Re: Order",
+          text: "Where is it?",
+        });
+        expect(yield* invoke(reply)).toEqual([{ _tag: "Replied" }]);
+        expect(yield* sentTo("orders@lux-store.example")).toHaveLength(1);
+
+        const exported = yield* call("/v1/aliases/export", { cookie: lux.cookie });
+        expect(exported.body).toMatchObject({
+          aliases: [
+            {
+              address: lux.alias,
+              description: "Online shop",
+              labels: ["shopping"],
+              recipients: [work, lux.mailbox],
+              forwardedCount: 1,
+            },
+          ],
+        });
+      }),
+    );
+
     it.effect("stops forwarding to a mailbox that hard-bounces, and says so in the API", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");

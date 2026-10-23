@@ -36,13 +36,17 @@ if ((process.env.ALIAS_ALERT_EMAIL?.trim() ?? "") === "") {
 
 // The service runs in eu-west-1 only; ACM and Budgets name their own regions.
 process.env.AWS_REGION = "eu-west-1";
+// Alchemy refuses its prompts when it sees a coding agent's variables (`AI_AGENT`, `CLAUDECODE`,
+// …), which terminals opened from such tools inherit; this keeps the prompts for a person at a
+// terminal. Without a TTY (CI, an agent's pipe) Alchemy still runs non-interactively.
+process.env.ALCHEMY_TUI = "1";
 
 const run = (command: string, args: Array<string>, cwd = root) =>
   execFileSync(command, args, { cwd, stdio: "inherit", env: process.env });
 
 run("pnpm", ["--filter", "@alias/web", "build"]);
 run(
-  "pnpm",
-  ["exec", "alchemy", "deploy", "--stage", stage, ...process.argv.slice(2)],
+  join(root, "infra/node_modules/.bin/alchemy"),
+  ["deploy", "--stage", stage, ...process.argv.slice(2)],
   join(root, "infra"),
 );

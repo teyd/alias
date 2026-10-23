@@ -35,10 +35,10 @@ export type Scope = typeof Scope.Type;
 /**
  * Which tokens may call an endpoint; a signed-in browser always may. An endpoint without this
  * annotation is session-only, so a new endpoint is closed to tokens until it names a scope.
- * `Scope` needs a token holding that scope; `AnyToken` takes any live token.
+ * `Scope` needs a token holding every one of `scopes`; `AnyToken` takes any live token.
  */
 export type TokenAccess =
-  | { readonly _tag: "Scope"; readonly scope: Scope }
+  | { readonly _tag: "Scope"; readonly scopes: readonly [Scope, ...Array<Scope>] }
   | { readonly _tag: "AnyToken" };
 
 export class TokenAccessAnnotation extends Context.Service<TokenAccessAnnotation, TokenAccess>()(
@@ -50,11 +50,14 @@ interface Annotatable<E> {
   annotate(key: typeof TokenAccessAnnotation, value: TokenAccess): E;
 }
 
-/** Opens the endpoint to tokens holding `scope`. */
+/**
+ * Opens the endpoint to tokens holding `scope`, and every one of `others` too (an endpoint that
+ * returns two resources' data needs both).
+ */
 export const requires =
-  (scope: Scope) =>
+  (scope: Scope, ...others: Array<Scope>) =>
   <E extends Annotatable<E>>(endpoint: E): E =>
-    endpoint.annotate(TokenAccessAnnotation, { _tag: "Scope", scope });
+    endpoint.annotate(TokenAccessAnnotation, { _tag: "Scope", scopes: [scope, ...others] });
 
 /** Opens the endpoint to every live token. */
 export const anyToken = <E extends Annotatable<E>>(endpoint: E): E =>

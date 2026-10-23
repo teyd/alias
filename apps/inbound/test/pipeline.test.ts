@@ -4,6 +4,7 @@ import { ImageProxy, Keyring, Pgp, SharedDomains, TempDomains, Username } from "
 import {
   AliasRepo,
   ContactRepo,
+  DeliveryRepo,
   DomainRepo,
   RecipientRepo,
   SentRepo,
@@ -1234,12 +1235,10 @@ describe("inbound pipeline (fakecloud)", () => {
     const encryptTo = Effect.fn("encryptTo")(function* (
       publicKey: openpgp.PublicKey,
       isSubjectHidden = false,
+      recipientId = "rcp_ada@mail.example",
     ) {
       const repo = yield* RecipientRepo.RecipientRepo;
-      const found = yield* Effect.flatMap(
-        repo.find("usr_1", "rcp_ada@mail.example"),
-        Effect.fromOption,
-      );
+      const found = yield* Effect.flatMap(repo.find("usr_1", recipientId), Effect.fromOption);
       const key = yield* Pgp.readKey(publicKey.armor(), yield* DateTime.now);
       yield* repo.setEncryption(found, {
         publicKey: key.armored,
@@ -1398,6 +1397,63 @@ describe("inbound pipeline (fakecloud)", () => {
       ),
     );
 
+    it.effect("encrypts each copy to its own recipient's key, and sends the others plain", () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(DateTime.toEpochMillis(now));
+          yield* recipient("ada@mail.example");
+          yield* recipient("work@mail.example");
+          yield* alias({ recipientIds: ["rcp_work@mail.example", "rcp_ada@mail.example"] });
+          const { publicKey, privateKey } = yield* generate();
+          yield* encryptTo(publicKey, false, "rcp_work@mail.example");
+          const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+          expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+          const emails = yield* sent;
+          expect(Arr.map(emails, (email) => email.to)).toEqual([
+            ["work@mail.example"],
+            ["ada@mail.example"],
+          ]);
+          const [work, ada] = Arr.map(emails, (email) => text(email.raw));
+          expect(work).not.toContain("Thanks for your order!");
+          expect(yield* decrypt(work ?? "", privateKey)).toBe("\r\nThanks for your order!\r\n");
+          expect(ada).toContain("Thanks for your order!");
+          // One message to the alias: counted once.
+          expect(yield* counters).toEqual(Option.some([1, 0]));
+        }),
+      ),
+    );
+
+    it.effect("drops only the copy whose key expired; the others go out", () =>
+      withPipeline(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(DateTime.toEpochMillis(now));
+          yield* recipient("ada@mail.example");
+          yield* recipient("work@mail.example");
+          yield* alias({ recipientIds: ["rcp_ada@mail.example", "rcp_work@mail.example"] });
+          yield* encryptTo((yield* generate(2 * 24 * 3600)).publicKey);
+          yield* TestClock.adjust("3 days");
+          const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+          expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+          expect(Arr.map(yield* sent, (email) => email.to)).toEqual([["work@mail.example"]]);
+          expect(yield* counters).toEqual(Option.some([1, 0]));
+
+          // With every copy's key unusable, the message is blocked as before.
+          // Valid for five days from yesterday: usable now, expired two days on.
+          yield* encryptTo(
+            (yield* generate(5 * 24 * 3600)).publicKey,
+            false,
+            "rcp_work@mail.example",
+          );
+          yield* TestClock.adjust("2 days");
+          const again = yield* receive({ recipients: ["shop@alias.test"] });
+          expect(yield* Pipeline.handle(again.event)).toEqual([
+            { _tag: "Dropped", reason: "key-unusable" },
+          ]);
+          expect(yield* counters).toEqual(Option.some([1, 1]));
+        }),
+      ),
+    );
+
     it.effect("leaves the owner's replies alone: they go to the contact as written", () =>
       withPipeline(
         Effect.gen(function* () {
@@ -1416,6 +1472,150 @@ describe("inbound pipeline (fakecloud)", () => {
       ),
     );
   });
+});
+
+describe("recipients per alias (PLAN.md §20.31)", () => {
+  const sentTo = Effect.map(sent, (emails) => Arr.map(emails, (email) => email.to));
+
+  it.effect("forwards one copy to each of the alias's recipients, in its order", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("work@mail.example");
+        yield* recipient("home@mail.example");
+        yield* recipient("pending@mail.example", { isPending: true });
+        yield* alias({
+          recipientIds: [
+            "rcp_home@mail.example",
+            "rcp_gone",
+            "rcp_pending@mail.example",
+            "rcp_work@mail.example",
+          ],
+        });
+        const { outcomes, reverse } = yield* forwardFrom("shop@store.example");
+        expect(outcomes).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* sentTo).toEqual([["home@mail.example"], ["work@mail.example"]]);
+        // Both copies come from the same reverse alias, and each is traced to its recipient.
+        const emails = yield* sent;
+        expect(Arr.dedupe(Arr.map(emails, (email) => email.from))).toHaveLength(1);
+        const traced = yield* SentRepo.SentRepo.use((repo) =>
+          Effect.forEach(emails, (email) => repo.find("usr_1", email.messageId), {
+            concurrency: 1,
+          }),
+        );
+        expect(
+          Arr.map(
+            traced,
+            Option.map((found) => found.recipientId),
+          ),
+        ).toEqual([
+          Option.some(Option.some("rcp_home@mail.example")),
+          Option.some(Option.some("rcp_work@mail.example")),
+        ]);
+        expect(yield* counters).toEqual(Option.some([1, 0]));
+
+        // A reply is accepted from any of the owner's verified recipients.
+        const { event } = yield* receive({
+          from: "work@mail.example",
+          recipients: [Option.getOrElse(reverse, () => "")],
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Replied" }]);
+      }),
+    ),
+  );
+
+  it.effect("falls back to the default recipient when none of the alias's can take mail", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("pending@mail.example", { isPending: true });
+        yield* alias({ recipientIds: ["rcp_gone", "rcp_pending@mail.example"] });
+        const { outcomes } = yield* forwardFrom("shop@store.example");
+        expect(outcomes).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* sentTo).toEqual([["ada@mail.example"]]);
+      }),
+    ),
+  );
+
+  it.effect("skips a paused recipient, and drops when every chosen one is paused", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("work@mail.example");
+        yield* alias({ recipientIds: ["rcp_ada@mail.example", "rcp_work@mail.example"] });
+        const repo = yield* RecipientRepo.RecipientRepo;
+        yield* repo.markBounced(
+          "usr_1",
+          "work@mail.example",
+          yield* DateTime.now,
+          "address-unknown",
+        );
+        yield* forwardFrom("shop@store.example");
+        expect(yield* sentTo).toEqual([["ada@mail.example"]]);
+
+        yield* repo.markBounced(
+          "usr_1",
+          "ada@mail.example",
+          yield* DateTime.now,
+          "address-unknown",
+        );
+        const { outcomes } = yield* forwardFrom("shop@store.example");
+        expect(outcomes).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
+      }),
+    ),
+  );
+
+  it.effect("drops only the copy SES refuses", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("work@mail.example");
+        yield* alias({ recipientIds: ["rcp_work@mail.example", "rcp_ada@mail.example"] });
+        yield* SESV2.putSuppressedDestination({
+          EmailAddress: "work@mail.example",
+          Reason: "BOUNCE",
+        });
+        const { outcomes } = yield* forwardFrom("shop@store.example");
+        expect(outcomes).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* sentTo).toEqual([["ada@mail.example"]]);
+      }),
+    ),
+  );
+
+  it.effect("sends each copy at most once across redeliveries and retries", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("work@mail.example");
+        yield* alias({ recipientIds: ["rcp_ada@mail.example", "rcp_work@mail.example"] });
+        const { messageId, event } = yield* receive({ recipients: ["shop@alias.test"] });
+        // An earlier invocation sent the first copy and then died before the second.
+        const deliveries = yield* DeliveryRepo.DeliveryRepo;
+        const expiresAt = DateTime.add(yield* DateTime.now, { days: 1 });
+        yield* deliveries.claim(
+          { messageId, recipient: "shop@alias.test#TO#rcp_ada@mail.example" },
+          expiresAt,
+        );
+        yield* SESV2.putAccountSendingAttributes({ SendingEnabled: false });
+
+        // SES can't send now: deferred, the spool stays, and nothing counted yet.
+        expect(yield* Effect.flip(Pipeline.handle(event))).toMatchObject({
+          _tag: "InboundDeferred",
+          codes: ["SendingPausedException"],
+        });
+        expect(yield* spoolHolds(messageId)).toBe(true);
+        expect(yield* counters).toEqual(Option.some([0, 0]));
+
+        yield* SESV2.putAccountSendingAttributes({ SendingEnabled: true });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+        // Only the missing copy went out, and the message counts once.
+        expect(yield* sentTo).toEqual([["work@mail.example"]]);
+        expect(yield* counters).toEqual(Option.some([1, 0]));
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Duplicate" }]);
+        expect(yield* sent).toHaveLength(1);
+      }),
+    ),
+  );
 });
 
 /**

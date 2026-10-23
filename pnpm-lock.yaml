@@ -390,6 +390,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@alias/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@alias/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

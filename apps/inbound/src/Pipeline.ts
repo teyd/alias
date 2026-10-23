@@ -94,16 +94,27 @@ interface Send {
   >;
 }
 
+type RewriteError = Effect.Error<ReturnType<typeof Pgp.encrypt>>;
+
 /** An admitted message: how it is rewritten and where it goes. */
 interface Outgoing {
   /** Who wrote, for a forward: named in the `mail.forwarded` webhook event. */
   readonly contactId: Option.Option<string>;
+  /** Header rewrite and scrubbing, the same for every copy. */
+  readonly rewrite: (raw: Uint8Array) => Effect.Effect<Uint8Array, RewriteError, Crypto.Crypto>;
+  /**
+   * One per mailbox it goes to: a reply goes to its contact, a forward to each of the alias's
+   * recipients (PLAN.md §20.31).
+   */
+  readonly copies: Arr.NonEmptyReadonlyArray<Copy>;
+}
+
+/** One copy of an admitted message, sent on its own. */
+interface Copy {
   /** The owner's recipient it goes to, for a forward: its bounces are about that recipient. */
   readonly recipientId: Option.Option<string>;
-  /** Header rewrite, scrubbing, and for a recipient with a key, encryption last. */
-  readonly rewrite: (
-    raw: Uint8Array,
-  ) => Effect.Effect<Uint8Array, Effect.Error<ReturnType<typeof Pgp.encrypt>>, Crypto.Crypto>;
+  /** For a recipient with a key, encryption, after every other rewrite. */
+  readonly seal: (rewritten: Uint8Array) => Effect.Effect<Uint8Array, RewriteError, Crypto.Crypto>;
   readonly envelope: Transport.Envelope;
 }
 
@@ -195,9 +206,11 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   alias: AliasRepo.Alias,
 ) {
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
-  const target = Policy.forwardTarget(recipients, yield* usernameRecipient(alias));
-  if (Option.isNone(target)) return Plan.Drop({ reason: "no-recipient" });
-  if (Option.isSome(target.value.bouncedAt)) return Plan.Drop({ reason: "recipient-bounced" });
+  const targets = Policy.forwardTargets(alias, recipients, yield* usernameRecipient(alias));
+  if (Option.isNone(targets)) return Plan.Drop({ reason: "no-recipient" });
+  // Paused recipients get nothing; mail goes on to the others.
+  const live = Arr.filter(targets.value, (target) => Option.isNone(target.bouncedAt));
+  if (!Arr.isReadonlyArrayNonEmpty(live)) return Plan.Drop({ reason: "recipient-bounced" });
   const sender = Policy.sender(record.ses.mail);
   if (Option.isNone(sender)) return Plan.Drop({ reason: "no-sender" });
   if (!Policy.isStorableAddress(sender.value.address)) {
@@ -222,11 +235,10 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   const imageProxy = yield* ImageProxySigner;
   const aliases = yield* AliasRepo.AliasRepo;
   const { forwardsPerHour } = yield* Limits.Limits;
-  const { encryption } = target.value;
   // Encryption comes after every other rewrite: what is encrypted is exactly what the owner
   // would otherwise have received.
-  const encrypt = (forwarded: Uint8Array) =>
-    Option.match(encryption, {
+  const encrypt = (target: RecipientRepo.Recipient) => (forwarded: Uint8Array) =>
+    Option.match(target.encryption, {
       onNone: () => Effect.succeed(forwarded),
       onSome: (key) =>
         Effect.flatMap(DateTime.now, (now) =>
@@ -267,9 +279,9 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     if (Option.isNone(token)) {
       return Result.fail<Refusal>(Plan.Drop({ reason: "unencodable-sender" }));
     }
+    const from = Address.format(Address.reverseAddress(address, token.value));
     return Result.succeed<Outgoing>({
       contactId: Option.some(contact.id),
-      recipientId: Option.some(target.value.id),
       rewrite: (raw) =>
         Mail.forward(raw, {
           alias: address,
@@ -279,12 +291,12 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
           // Proxied images spend the alias owner's fetch budget (PLAN.md §20.29).
           imageProxy: { ...imageProxy, owner: { aliasId: alias.id, userId: alias.userId } },
           // Signing image URLs needs a working SHA-256; without one nothing can run.
-        }).pipe(Effect.catchTag("PlatformError", Effect.die), Effect.flatMap(encrypt)),
-      envelope: {
-        from: Address.format(Address.reverseAddress(address, token.value)),
-        to: [target.value.address],
-        tags: SendingEvent.tags(alias.userId, "forward"),
-      },
+        }).pipe(Effect.catchTag("PlatformError", Effect.die)),
+      copies: Arr.map(live, (target) => ({
+        recipientId: Option.some(target.id),
+        seal: encrypt(target),
+        envelope: { from, to: [target.address], tags: SendingEvent.tags(alias.userId, "forward") },
+      })),
     });
   });
   return Plan.Send({ kind: "forward", alias, admit });
@@ -315,13 +327,18 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   const messageId = yield* Effect.orDie((yield* Crypto.Crypto).randomUUIDv4());
   const outgoing: Outgoing = {
     contactId: Option.none(),
-    recipientId: Option.none(),
     rewrite: (raw) => Mail.reply(raw, { alias: address, to: contact, messageId, owner }),
-    envelope: {
-      from: Address.format(address),
-      to: [contact],
-      tags: SendingEvent.tags(alias.userId, "reply"),
-    },
+    copies: [
+      {
+        recipientId: Option.none(),
+        seal: Effect.succeed,
+        envelope: {
+          from: Address.format(address),
+          to: [contact],
+          tags: SendingEvent.tags(alias.userId, "reply"),
+        },
+      },
+    ],
   };
   return Plan.Send({
     kind: "reply",
@@ -551,6 +568,68 @@ const refuse = (
       )
     : Effect.succeed(dropped(refusal.reason));
 
+/** What became of one copy of a message going to several mailboxes. */
+type CopyOutcome = Data.TaggedEnum<{
+  /** Sent now, or (`isEarlier`) by an earlier invocation. */
+  Sent: { readonly isEarlier: boolean };
+  Refused: { readonly reason: "rejected" | "key-unusable" };
+  Deferred: { readonly error: Transport.TransportRetryable };
+}>;
+const CopyOutcome = Data.taggedEnum<CopyOutcome>();
+
+/** Seals one copy for its mailbox, sends it, and remembers it for its bounces. */
+const sendCopy = Effect.fn("Pipeline.sendCopy")(function* (
+  planned: Send,
+  copy: Copy,
+  rewritten: Uint8Array,
+) {
+  const sealed = yield* copy.seal(rewritten);
+  const messageId = yield* (yield* Transport.Transport).send(sealed, copy.envelope);
+  yield* SentRepo.remember({
+    messageId,
+    userId: planned.alias.userId,
+    kind: planned.kind,
+    recipientId: copy.recipientId,
+  });
+});
+
+/**
+ * Sends each copy of a message that goes to several mailboxes once, under its own claim
+ * (`<recipient>#TO#<recipientId>`): a retry after one copy failed for now sends only the copies
+ * still missing. A copy SES refuses, or whose recipient's key can't encrypt, is dropped alone.
+ */
+const sendCopies = Effect.fn("Pipeline.sendCopies")(function* (
+  delivery: DeliveryRepo.Delivery,
+  planned: Send,
+  copies: Arr.NonEmptyReadonlyArray<Copy>,
+  rewritten: Uint8Array,
+) {
+  const deliveries = yield* DeliveryRepo.DeliveryRepo;
+  const expiresAt = DateTime.addDuration(yield* DateTime.now, CLAIM_LIFETIME);
+  return yield* Effect.forEach(
+    copies,
+    Effect.fnUntraced(function* (copy) {
+      const claim: DeliveryRepo.Delivery = {
+        messageId: delivery.messageId,
+        recipient: `${delivery.recipient}#TO#${Option.getOrElse(copy.recipientId, () => "")}`,
+      };
+      if (!(yield* deliveries.claim(claim, expiresAt))) {
+        return CopyOutcome.Sent({ isEarlier: true });
+      }
+      return yield* sendCopy(planned, copy, rewritten).pipe(
+        Effect.as(CopyOutcome.Sent({ isEarlier: false })),
+        Effect.catchTags({
+          TransportRejected: () => Effect.succeed(CopyOutcome.Refused({ reason: "rejected" })),
+          InvalidKey: () => Effect.succeed(CopyOutcome.Refused({ reason: "key-unusable" })),
+          TransportRetryable: (error) =>
+            Effect.as(deliveries.release(claim), CopyOutcome.Deferred({ error })),
+        }),
+      );
+    }),
+    { concurrency: 1 },
+  );
+});
+
 /** Size check, read, header checks, rewrite, send: everything after the claim. */
 const send = Effect.fn("Pipeline.send")(function* (
   delivery: DeliveryRepo.Delivery,
@@ -566,13 +645,30 @@ const send = Effect.fn("Pipeline.send")(function* (
   if (Result.isFailure(admitted)) return yield* refuse(delivery, admitted.failure);
   const outgoing = admitted.success;
   const rewritten = yield* outgoing.rewrite(raw);
-  const messageId = yield* (yield* Transport.Transport).send(rewritten, outgoing.envelope);
-  yield* SentRepo.remember({
-    messageId,
-    userId: planned.alias.userId,
-    kind: planned.kind,
-    recipientId: outgoing.recipientId,
-  });
+  const [first, ...others] = outgoing.copies;
+  if (Arr.isArrayNonEmpty(others)) {
+    // Several mailboxes: each copy on its own (one copy's failure is handled like a single one's
+    // below, but for that copy alone).
+    const outcomes = yield* sendCopies(delivery, planned, outgoing.copies, rewritten);
+    const later = Arr.findFirst(outcomes, CopyOutcome.$is("Deferred"));
+    if (Option.isSome(later)) return yield* later.value.error;
+    const refusals = Arr.filter(outcomes, CopyOutcome.$is("Refused"));
+    yield* Effect.forEach(
+      refusals,
+      ({ reason }) => Effect.logInfo("inbound copy dropped", reason),
+      { concurrency: 1, discard: true },
+    );
+    if (Arr.length(refusals) === Arr.length(outcomes)) {
+      return yield* refuse(
+        delivery,
+        Arr.some(refusals, ({ reason }) => reason === "key-unusable")
+          ? Plan.Block({ alias: planned.alias, reason: "key-unusable" })
+          : Plan.Drop({ reason: "rejected" }),
+      );
+    }
+  } else {
+    yield* sendCopy(planned, first, rewritten);
+  }
   if (planned.kind === "reply") return replied;
   yield* count(planned.alias, "forwarded");
   if (Option.isSome(outgoing.contactId)) {

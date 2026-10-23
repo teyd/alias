@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as R from "effect/Record";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as Stream from "effect/Stream";
 import { DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
@@ -37,6 +38,15 @@ export const Alias = Schema.Struct({
   inboxExpiresAt: Schema.Option(Schema.Number),
   /** How many days stored messages are kept, when the owner chose; none means the default. */
   retentionDays: Schema.Option(Schema.Number),
+  /** The owner's note on what the alias is for. */
+  description: Schema.Option(Schema.String),
+  /** The owner's tags, in the order they gave them. */
+  labels: Schema.Array(Schema.String),
+  /**
+   * The owner's recipients (by id) mail to this alias goes to, in order. Empty: their default
+   * recipient. Ids of recipients deleted since are kept here and skipped by readers.
+   */
+  recipientIds: Schema.Array(Schema.String),
 });
 export type Alias = typeof Alias.Type;
 
@@ -49,6 +59,11 @@ export interface NewAlias {
   readonly createdAt: number;
   readonly inboxExpiresAt?: number;
   readonly retentionDays?: number;
+  readonly description?: string;
+  readonly labels?: ReadonlyArray<string>;
+  readonly recipientIds?: ReadonlyArray<string>;
+  /** True unless given. */
+  readonly isActive?: boolean;
 }
 
 export class AliasTaken extends Schema.TaggedError<AliasTaken>()("AliasTaken", {
@@ -66,6 +81,18 @@ interface AliasChanges {
   readonly mode?: AliasMode;
   readonly isActive?: boolean;
   readonly retentionDays?: number;
+  /** None removes it. */
+  readonly description?: Option.Option<string>;
+  /** Replaces the labels; empty removes them all. */
+  readonly labels?: ReadonlyArray<string>;
+  /** Replaces the recipients; empty goes back to the default recipient. */
+  readonly recipientIds?: ReadonlyArray<string>;
+}
+
+/** A label the owner gave a colour (labels without one have no item). */
+export interface LabelColor {
+  readonly label: string;
+  readonly color: string;
 }
 
 type Counter = "forwarded" | "blocked";
@@ -149,6 +176,16 @@ export class AliasRepo extends Context.Service<
       now: DateTime.Utc,
       maxPerDay: number,
     ) => Effect.Effect<boolean, DatabaseError>;
+    /** The colours the user gave their labels, by label name. */
+    readonly labelColors: (
+      userId: string,
+    ) => Effect.Effect<ReadonlyArray<LabelColor>, DatabaseError>;
+    /** Gives a label a colour, or (none) takes it away. */
+    readonly setLabelColor: (
+      userId: string,
+      label: string,
+      color: Option.Option<string>,
+    ) => Effect.Effect<void, DatabaseError>;
   }
 >()("@alias/db/AliasRepo") {}
 
@@ -176,6 +213,19 @@ const temporaryQuotaKey = (userId: string, day: string) => ({
   sk: { S: `TEMP-INBOXES#${day}` },
 });
 
+/** A label's colour, in the user's partition. */
+const labelColorKey = (userId: string, label: string) => ({
+  pk: { S: userPartition(userId) },
+  sk: { S: `${LABEL_PREFIX}${label}` },
+});
+
+const LABEL_PREFIX = "LABEL#";
+
+const LabelColorItem = Item.codec(
+  Schema.Struct({ label: Attribute.S, color: Attribute.S }),
+  "LabelColor",
+);
+
 /** Zero-padded so string order on the index matches creation order. */
 const userSortKey = (alias: NewAlias) =>
   `ALIAS#${String(alias.createdAt).padStart(15, "0")}#${alias.id}`;
@@ -193,6 +243,13 @@ const AliasItem = Schema.Struct({
   blockedCount: Attribute.N,
   inboxExpiresAt: Schema.OptionFromOptionalKey(Attribute.N),
   retentionDays: Schema.OptionFromOptionalKey(Attribute.N),
+  description: Schema.OptionFromOptionalKey(Attribute.S),
+  labels: Schema.OptionFromOptionalKey(Attribute.StringList),
+  recipientIds: Schema.OptionFromOptionalKey(Attribute.StringList),
+});
+
+const stringList = (values: ReadonlyArray<string>): DynamoDB.AttributeValue => ({
+  L: Arr.map(values, (value) => ({ S: value })),
 });
 
 const counterAttribute = { forwarded: "forwardedCount", blocked: "blockedCount" } as const;
@@ -229,6 +286,12 @@ const decodeFields = Schema.decodeUnknownEffect(Alias);
 
 const decodeAlias = (item: DynamoDB.AttributeMap) =>
   decodeItem(item).pipe(
+    // Empty lists aren't stored.
+    Effect.map((decoded) => ({
+      ...decoded,
+      labels: Option.getOrElse(decoded.labels, Arr.empty),
+      recipientIds: Option.getOrElse(decoded.recipientIds, Arr.empty),
+    })),
     Effect.flatMap(decodeFields),
     Effect.mapError(databaseError("DecodeAlias")),
   );
@@ -252,7 +315,7 @@ export const retire = Effect.fn("AliasRepo.retire")(function* (
     UpdateExpression:
       "SET deletedAt = :deletedAt, gsi1pk = :deleted, gsi1sk = :address " +
       "REMOVE #domain, #localPart, #mode, #isActive, #createdAt, #forwarded, #blocked, " +
-      "#inboxExpiresAt, #retentionDays",
+      "#inboxExpiresAt, #retentionDays, #description, #labels, #recipientIds",
     ConditionExpression: "userId = :userId AND attribute_not_exists(deletedAt)",
     ExpressionAttributeNames: {
       "#domain": "domain",
@@ -264,6 +327,9 @@ export const retire = Effect.fn("AliasRepo.retire")(function* (
       "#blocked": "blockedCount",
       "#inboxExpiresAt": "inboxExpiresAt",
       "#retentionDays": "retentionDays",
+      "#description": "description",
+      "#labels": "labels",
+      "#recipientIds": "recipientIds",
     },
     ExpressionAttributeValues: {
       ":userId": { S: address.userId },
@@ -356,7 +422,7 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
           domain: { S: domain },
           localPart: { S: localPart },
           mode: { S: alias.mode },
-          isActive: { BOOL: true },
+          isActive: { BOOL: alias.isActive ?? true },
           createdAt: { N: String(alias.createdAt) },
           forwardedCount: { N: "0" },
           blockedCount: { N: "0" },
@@ -368,6 +434,21 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
             retentionDays: Option.map(
               Option.fromUndefinedOr(alias.retentionDays),
               (days): DynamoDB.AttributeValue => ({ N: String(days) }),
+            ),
+            description: Option.map(
+              Option.filter(Option.fromUndefinedOr(alias.description), Str.isNonEmpty),
+              (description): DynamoDB.AttributeValue => ({ S: description }),
+            ),
+            labels: Option.map(
+              Option.filter(Option.fromUndefinedOr(alias.labels), Arr.isReadonlyArrayNonEmpty),
+              stringList,
+            ),
+            recipientIds: Option.map(
+              Option.filter(
+                Option.fromUndefinedOr(alias.recipientIds),
+                Arr.isReadonlyArrayNonEmpty,
+              ),
+              stringList,
             ),
           }),
         },
@@ -435,7 +516,7 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         ),
 
     update: (address, changes) => {
-      const values = R.getSomes<string, DynamoDB.AttributeValue>({
+      const set = R.getSomes<string, DynamoDB.AttributeValue>({
         mode: Option.map(Option.fromUndefinedOr(changes.mode), (mode) => ({ S: mode })),
         isActive: Option.map(Option.fromUndefinedOr(changes.isActive), (isActive) => ({
           BOOL: isActive,
@@ -443,20 +524,64 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         retentionDays: Option.map(Option.fromUndefinedOr(changes.retentionDays), (days) => ({
           N: String(days),
         })),
+        description: Option.flatMap(Option.fromUndefinedOr(changes.description), (description) =>
+          Option.map(Option.filter(description, Str.isNonEmpty), (text) => ({ S: text })),
+        ),
+        labels: Option.map(
+          Option.filter(Option.fromUndefinedOr(changes.labels), Arr.isReadonlyArrayNonEmpty),
+          stringList,
+        ),
+        recipientIds: Option.map(
+          Option.filter(Option.fromUndefinedOr(changes.recipientIds), Arr.isReadonlyArrayNonEmpty),
+          stringList,
+        ),
       });
-      const names = R.keys(values);
-      return DynamoDB.updateItem({
-        TableName: table.name,
-        Key: aliasKey(address.domain, address.localPart),
-        // With nothing to change, a no-op SET still checks ownership and returns the item.
-        UpdateExpression: Arr.match(names, {
-          onEmpty: () => "SET userId = userId",
-          onNonEmpty: (list) =>
+      // Empty values aren't stored: setting one removes the attribute.
+      const removed = Arr.filter(
+        R.keys(
+          R.getSomes({
+            description: Option.as(
+              Option.filter(Option.fromUndefinedOr(changes.description), Option.isNone),
+              true,
+            ),
+            labels: Option.as(
+              Option.filter(Option.fromUndefinedOr(changes.labels), Arr.isReadonlyArrayEmpty),
+              true,
+            ),
+            recipientIds: Option.as(
+              Option.filter(Option.fromUndefinedOr(changes.recipientIds), Arr.isReadonlyArrayEmpty),
+              true,
+            ),
+          }),
+        ),
+        P.isString,
+      );
+      const names = Arr.appendAll(R.keys(set), removed);
+      const clauses = Arr.appendAll(
+        Arr.match(R.keys(set), {
+          // With nothing to change, a no-op SET still checks ownership and returns the item.
+          onEmpty: () => (Arr.isReadonlyArrayEmpty(removed) ? ["SET userId = userId"] : []),
+          onNonEmpty: (list) => [
             `SET ${Arr.join(
               Arr.map(list, (name) => `#${name} = :${name}`),
               ", ",
             )}`,
+          ],
         }),
+        Arr.match(removed, {
+          onEmpty: () => [],
+          onNonEmpty: (list) => [
+            `REMOVE ${Arr.join(
+              Arr.map(list, (name) => `#${name}`),
+              ", ",
+            )}`,
+          ],
+        }),
+      );
+      return DynamoDB.updateItem({
+        TableName: table.name,
+        Key: aliasKey(address.domain, address.localPart),
+        UpdateExpression: Arr.join(clauses, " "),
         ConditionExpression: "userId = :userId AND attribute_not_exists(deletedAt)",
         // Placeholders keep attribute names clear of DynamoDB's reserved words.
         ...Arr.match(names, {
@@ -467,7 +592,7 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         }),
         ExpressionAttributeValues: {
           ":userId": { S: address.userId },
-          ...R.mapKeys(values, (name) => `:${name}`),
+          ...R.mapKeys(set, (name) => `:${name}`),
         },
         ReturnValues: "ALL_NEW",
       }).pipe(
@@ -568,6 +693,37 @@ export const make = Effect.fn("AliasRepo.make")(function* () {
         Effect.provide(client),
       );
     },
+
+    labelColors: (userId) =>
+      DynamoDB.query
+        .items({
+          TableName: table.name,
+          KeyConditionExpression: "pk = :pk AND begins_with(sk, :prefix)",
+          ExpressionAttributeValues: {
+            ":pk": { S: userPartition(userId) },
+            ":prefix": { S: LABEL_PREFIX },
+          },
+          ConsistentRead: true,
+        })
+        .pipe(
+          Stream.mapError(databaseError("Query")),
+          Stream.mapEffect(LabelColorItem.decode),
+          Stream.runCollect,
+          Effect.provide(client),
+        ),
+
+    setLabelColor: (userId, label, color) =>
+      Option.match(color, {
+        onNone: () =>
+          DynamoDB.deleteItem({ TableName: table.name, Key: labelColorKey(userId, label) }).pipe(
+            Effect.mapError(databaseError("DeleteItem")),
+          ),
+        onSome: (chosen) =>
+          DynamoDB.putItem({
+            TableName: table.name,
+            Item: { ...labelColorKey(userId, label), label: { S: label }, color: { S: chosen } },
+          }).pipe(Effect.mapError(databaseError("PutItem"))),
+      }).pipe(Effect.asVoid, Effect.provide(client)),
   });
 });
 

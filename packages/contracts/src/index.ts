@@ -13,3 +13,4 @@ export * from "./Tokens.ts";
 export * from "./Usernames.ts";
 export * from "./Webhooks.ts";
 export * from "./OpenApiDocument.ts";
+export * from "./Labels.ts";

@@ -158,7 +158,7 @@ describe("alias CLI against the API on the function URL emulator", () => {
 
         const table = yield* run(["aliases", "list"]);
         expect(table.text.split("\n")).toEqual([
-          expect.stringMatching(/^ADDRESS\s+ACTIVE\s+MODE\s+FORWARDED\s+BLOCKED$/),
+          expect.stringMatching(/^ADDRESS\s+ACTIVE\s+MODE\s+FORWARDED\s+BLOCKED\s+LABELS$/),
           expect.stringMatching(new RegExp(`^${address}\\s+true\\s+forward\\s+0\\s+0$`)),
         ]);
 
@@ -171,6 +171,8 @@ describe("alias CLI against the API on the function URL emulator", () => {
             mode: "forward",
             forwarded: 0,
             blocked: 0,
+            labels: "",
+            description: null,
             id: expect.any(String),
           },
         ]);
@@ -194,6 +196,79 @@ describe("alias CLI against the API on the function URL emulator", () => {
           "shop@someone-else.alias.test",
         ]);
         expect(Exit.isFailure(taken.exit)).toBe(true);
+      }),
+    );
+
+    it.effect("edits an alias's details, exports them as CSV and JSON, and imports a file", () =>
+      Effect.gen(function* () {
+        const { run } = yield* loggedIn();
+        yield* run(["aliases", "create", "--address", "shop@ada.alias.test"]);
+        const edited = yield* run([
+          "aliases",
+          "edit",
+          "shop@ada.alias.test",
+          "--description",
+          "=cmd|' /C calc'!A0",
+          "--label",
+          "shopping",
+          "--label",
+          "eu",
+          "--json",
+        ]);
+        expect(JSON.parse(edited.text)).toMatchObject({
+          description: "=cmd|' /C calc'!A0",
+          labels: "shopping, eu",
+        });
+        const unknown = yield* run([
+          "aliases",
+          "edit",
+          "shop@ada.alias.test",
+          "--recipient",
+          "nobody@mailbox.test",
+        ]);
+        expect(Exit.isFailure(unknown.exit)).toBe(true);
+        expect(Arr.join(unknown.err, "\n")).toContain(
+          "nobody@mailbox.test isn't one of your verified forwarding addresses",
+        );
+
+        const csv = yield* run(["aliases", "export"]);
+        expect(csv.text.split("\r\n")).toEqual([
+          "address,active,mode,description,labels,recipients,forwarded,blocked,created_at",
+          expect.stringMatching(
+            /^shop@ada\.alias\.test,true,forward,'=cmd\|' \/C calc'!A0,shopping; eu,,0,0,\d{4}-/,
+          ),
+        ]);
+        const exported = JSON.parse((yield* run(["aliases", "export", "--json"])).text);
+        expect(exported.aliases).toEqual([
+          expect.objectContaining({ address: "shop@ada.alias.test", labels: ["shopping", "eu"] }),
+        ]);
+
+        // The export imports again: the existing address is reported, new ones are created.
+        const fs = yield* FileSystem.FileSystem;
+        const file = `${yield* fs.makeTempDirectoryScoped()}/aliases.csv`;
+        yield* fs.writeFileString(
+          file,
+          `${csv.text}\r\nnew@ada.alias.test,false,forward,"New, one",work,,0,0,x\r\nx@other.test\r\n`,
+        );
+        const imported = yield* run(["aliases", "import", file, "--json"]);
+        expect(JSON.parse(imported.text)).toEqual([
+          { row: 1, address: "shop@ada.alias.test", result: "taken" },
+          { row: 2, address: "new@ada.alias.test", result: "created" },
+          { row: 3, address: "x@other.test", result: "unknown-domain" },
+        ]);
+        const listed = JSON.parse((yield* run(["aliases", "list", "--json"])).text);
+        // Same clock time, so the list order between the two is the ids'.
+        expect(listed).toContainEqual(
+          expect.objectContaining({
+            address: "new@ada.alias.test",
+            active: false,
+            description: "New, one",
+            labels: "work",
+          }),
+        );
+        yield* fs.writeFileString(file, "email\nx@ada.alias.test\n");
+        const bad = yield* run(["aliases", "import", file]);
+        expect(Arr.join(bad.err, "\n")).toContain("The file has no `address` column");
       }),
     );
 

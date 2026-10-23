@@ -1,20 +1,33 @@
 import type { AliasView } from "@alias/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as Struct from "effect/Struct";
-import { AtSignIcon, FilterIcon, GlobeIcon, PlusIcon, SearchIcon } from "lucide-react";
+
+import {
+  AtSignIcon,
+  DownloadIcon,
+  FilterIcon,
+  GlobeIcon,
+  PlusIcon,
+  SearchIcon,
+  TagIcon,
+  UploadIcon,
+} from "lucide-react";
 import { AliasRow } from "@/components/aliases/AliasRow";
 import { ContactsSheet } from "@/components/aliases/ContactsSheet";
 import { CreateAliasDialog } from "@/components/aliases/CreateAliasDialog";
 import { DeleteAliasDialog } from "@/components/aliases/DeleteAliasDialog";
+import { EditAliasDialog } from "@/components/aliases/EditAliasDialog";
+import { ImportDialog } from "@/components/aliases/ImportDialog";
+import { LabelsDialog } from "@/components/aliases/LabelsDialog";
 import { OnTheFlySetting } from "@/components/aliases/OnTheFlySetting";
 import { TrackerSettings } from "@/components/aliases/TrackerSettings";
 import { Page } from "@/components/Page";
-import { EmptyState, LoadFailed, SkeletonRows } from "@/components/states";
+import { EmptyState, LoadFailed, Problem, SkeletonRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
@@ -33,7 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { aliasesQuery, domainsQuery } from "@/lib/aliases";
+import { aliasesQuery, domainsQuery, exportCsv, labelsQuery } from "@/lib/aliases";
 import { usernamesQuery } from "@/lib/usernames";
 
 /**
@@ -45,8 +58,10 @@ const Search = Schema.Struct({
   status: Schema.optionalKey(Schema.Literals(["active", "inactive"])),
   domain: Schema.optionalKey(Schema.String),
   username: Schema.optionalKey(Schema.String),
-  dialog: Schema.optionalKey(Schema.Literal("create")),
+  label: Schema.optionalKey(Schema.String),
+  dialog: Schema.optionalKey(Schema.Literals(["create", "labels", "import"])),
   contacts: Schema.optionalKey(Schema.String),
+  edit: Schema.optionalKey(Schema.String),
   delete: Schema.optionalKey(Schema.String),
 });
 type Search = typeof Search.Type;
@@ -56,25 +71,50 @@ const ALL = "all";
 /** The domain part of an address. */
 const domainOf = (address: string) => address.slice(address.lastIndexOf("@") + 1);
 
+/** The search box matches the address, the description and the labels. */
+const matches = (q: string, alias: AliasView) =>
+  Arr.some(
+    Arr.appendAll([alias.address, Option.getOrElse(alias.description, () => "")], alias.labels),
+    (text) => Str.includes(q)(Str.toLowerCase(text)),
+  );
+
 /**
  * `subdomains` are those of the username the filter names (PLAN.md §20.34); an alias matches when
  * it lives on one of them.
  */
 const isShown = (search: Search, subdomains: ReadonlyArray<string>) => (alias: AliasView) =>
-  Str.includes(Str.toLowerCase(Str.trim(search.q ?? "")))(alias.address) &&
+  matches(Str.toLowerCase(Str.trim(search.q ?? "")), alias) &&
   (search.status === undefined || alias.isActive === (search.status === "active")) &&
   (search.domain === undefined || domainOf(alias.address) === search.domain) &&
-  (search.username === undefined || Arr.contains(subdomains, domainOf(alias.address)));
+  (search.username === undefined || Arr.contains(subdomains, domainOf(alias.address))) &&
+  (search.label === undefined || Arr.contains(alias.labels, search.label));
+
+/** Hands the browser a file to save, from a click. */
+const download = (name: string, text: string) => {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+};
 
 const Aliases = () => {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const aliases = useQuery(aliasesQuery);
   const domains = useQuery(domainsQuery);
+  const labels = useQuery(labelsQuery);
+  const exporting = useMutation({
+    mutationFn: exportCsv,
+    onSuccess: (csv) => download("aliases.csv", csv),
+  });
   const change = (next: (current: Search) => Search) =>
     void navigate({ search: next, replace: true });
   const without = (key: keyof Search) => change((current) => Struct.omit(current, [key]));
   const openCreate = () => change((current) => ({ ...current, dialog: "create" }));
+  const openDialog = (dialog: "labels" | "import") => change((current) => ({ ...current, dialog }));
+  const labelNames = Arr.dedupe(Arr.flatMap(aliases.data ?? [], (alias) => alias.labels));
   const allDomains = Arr.appendAll(domains.data?.shared ?? [], domains.data?.subdomains ?? []);
   const usernames = useQuery(usernamesQuery);
   const filtered = Option.flatMap(Option.fromUndefinedOr(search.username), (name) =>
@@ -188,6 +228,29 @@ const Aliases = () => {
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
+          <Select
+            value={search.label ?? ALL}
+            disabled={!Arr.isReadonlyArrayNonEmpty(labelNames)}
+            onValueChange={(value) =>
+              value === null || value === ALL
+                ? without("label")
+                : change((current) => ({ ...current, label: value }))
+            }
+          >
+            <SelectTrigger aria-label="Filter by label">
+              <TagIcon />
+              <SelectValue>{(value: string) => (value === ALL ? "All labels" : value)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectItem value={ALL}>All labels</SelectItem>
+              <SelectSeparator />
+              {Arr.map(labelNames, (label) => (
+                <SelectItem key={label} value={label}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center gap-4">
           {aliases.isSuccess && (
@@ -196,12 +259,29 @@ const Aliases = () => {
               <span className="data">{inactive}</span> inactive
             </span>
           )}
+          <Button variant="outline" onClick={() => openDialog("labels")}>
+            <TagIcon />
+            Labels
+          </Button>
+          <Button variant="outline" onClick={() => openDialog("import")}>
+            <UploadIcon />
+            Import
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!hasAliases || exporting.isPending}
+            onClick={() => exporting.mutate()}
+          >
+            <DownloadIcon />
+            Export CSV
+          </Button>
           <Button onClick={openCreate}>
             <PlusIcon />
             New alias
           </Button>
         </div>
       </div>
+      <Problem error={exporting.error} />
 
       {domains.isSuccess && <OnTheFlySetting subdomains={domains.data.subdomains} />}
       <TrackerSettings />
@@ -257,6 +337,8 @@ const Aliases = () => {
                       <AliasRow
                         key={alias.id}
                         alias={alias}
+                        labels={labels.data ?? []}
+                        onEdit={() => change((current) => ({ ...current, edit: alias.address }))}
                         onContacts={() =>
                           change((current) => ({ ...current, contacts: alias.address }))
                         }
@@ -284,6 +366,12 @@ const Aliases = () => {
         aliasAddress={Option.fromUndefinedOr(search.contacts)}
         onClose={() => without("contacts")}
       />
+      <EditAliasDialog
+        alias={Arr.findFirst(aliases.data ?? [], (alias) => alias.address === search.edit)}
+        onClose={() => without("edit")}
+      />
+      <LabelsDialog isOpen={search.dialog === "labels"} onClose={() => without("dialog")} />
+      <ImportDialog isOpen={search.dialog === "import"} onClose={() => without("dialog")} />
       <DeleteAliasDialog
         aliasAddress={Option.fromUndefinedOr(search.delete)}
         onClose={() => without("delete")}

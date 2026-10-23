@@ -54,6 +54,9 @@ export const aliasRepoSuite = (
                 blockedCount: 0,
                 inboxExpiresAt: Option.none(),
                 retentionDays: Option.none(),
+                description: Option.none(),
+                labels: [],
+                recipientIds: [],
               }),
             );
           }),
@@ -114,6 +117,28 @@ export const aliasRepoSuite = (
             const switched = yield* repo.update(owned, { mode: "inbox" });
             expect(switched).toMatchObject({ mode: "inbox", isActive: false });
             expect(yield* repo.findByAddress("alias.test", "shop")).toEqual(Option.some(switched));
+          }),
+        ),
+      );
+
+      it.effect("keeps label colours per user, and takes one away again", () =>
+        withRepo(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            expect(yield* repo.labelColors("usr_1")).toEqual([]);
+            yield* repo.setLabelColor("usr_1", "work", Option.some("blue"));
+            yield* repo.setLabelColor("usr_1", "home", Option.some("green"));
+            yield* repo.setLabelColor("usr_1", "work", Option.some("red"));
+            yield* repo.setLabelColor("usr_2", "work", Option.some("pink"));
+            expect(yield* repo.labelColors("usr_1")).toEqual([
+              { label: "home", color: "green" },
+              { label: "work", color: "red" },
+            ]);
+            yield* repo.setLabelColor("usr_1", "home", Option.none());
+            // Taking away a colour that isn't there is fine.
+            yield* repo.setLabelColor("usr_1", "never", Option.none());
+            expect(yield* repo.labelColors("usr_1")).toEqual([{ label: "work", color: "red" }]);
+            expect(yield* repo.labelColors("usr_2")).toEqual([{ label: "work", color: "pink" }]);
           }),
         ),
       );
@@ -187,12 +212,73 @@ export const aliasRepoSuite = (
       });
       const shop = { domain: "alias.test", localPart: "shop" };
 
+      it.effect("stores a description, labels and recipients, changes them and clears them", () =>
+        withTable(
+          Effect.gen(function* () {
+            const repo = yield* AliasRepo.AliasRepo;
+            yield* repo.insert(
+              alias({
+                description: "Online shop",
+                labels: ["shopping", "Ünïcode label"],
+                recipientIds: ["rcp_b", "rcp_a"],
+                isActive: false,
+              }),
+            );
+            expect(yield* repo.findByAddress("alias.test", "shop")).toEqual(
+              Option.some(
+                expect.objectContaining({
+                  isActive: false,
+                  description: Option.some("Online shop"),
+                  labels: ["shopping", "Ünïcode label"],
+                  recipientIds: ["rcp_b", "rcp_a"],
+                }),
+              ),
+            );
+
+            // Only what's given changes.
+            const relabelled = yield* repo.update(owned, { labels: ["work"], isActive: true });
+            expect(relabelled).toMatchObject({
+              isActive: true,
+              description: Option.some("Online shop"),
+              labels: ["work"],
+              recipientIds: ["rcp_b", "rcp_a"],
+            });
+
+            // Setting empty values removes the attributes, alone or next to other changes.
+            const cleared = yield* repo.update(owned, {
+              description: Option.none(),
+              labels: [],
+              recipientIds: [],
+            });
+            expect(cleared).toMatchObject({
+              description: Option.none(),
+              labels: [],
+              recipientIds: [],
+            });
+            const items = yield* partition("ALIAS#alias.test#shop");
+            expect(R.keys(items[0] ?? {})).not.toEqual(expect.arrayContaining(["description"]));
+            expect(
+              Arr.some(items, (item) => R.has(item, "labels") || R.has(item, "recipientIds")),
+            ).toBe(false);
+            const mixed = yield* repo.update(owned, {
+              mode: "both",
+              description: Option.some("Newsletters"),
+              labels: [],
+            });
+            expect(mixed).toMatchObject({ mode: "both", description: Option.some("Newsletters") });
+            expect(yield* repo.findByAddress("alias.test", "shop")).toEqual(Option.some(mixed));
+          }),
+        ),
+      );
+
       it.effect("deletes an alias with its contacts and counters, leaving a tombstone", () =>
         withTable(
           Effect.gen(function* () {
             const repo = yield* AliasRepo.AliasRepo;
             const contacts = yield* ContactRepo.ContactRepo;
-            yield* repo.insert(alias());
+            yield* repo.insert(
+              alias({ description: "Shop", labels: ["work"], recipientIds: ["rcp_1"] }),
+            );
             yield* repo.increment("alias.test", "shop", "forwarded");
             yield* contacts.create(contact("c1aaaaaaaaaaaaaa", "a@store.example"), shop);
             yield* contacts.create(contact("c2aaaaaaaaaaaaaa", "b@store.example"), shop);

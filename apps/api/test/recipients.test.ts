@@ -1,5 +1,4 @@
 import { Transport } from "@alias/aws";
-import { FakeCloud } from "@alias/aws-emulators";
 import { Dynamo, RecipientRepo, SentRepo } from "@alias/db";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
@@ -18,17 +17,18 @@ import * as openpgp from "openpgp";
 import { CONFIRMATION_MAILS_PER_DAY, MAX_PENDING_RECIPIENTS } from "../src/recipients.ts";
 import * as Browser from "./support/Browser.ts";
 import { TestAuthenticator } from "./support/index.ts";
+import {
+  add,
+  addRecipient,
+  addVerified,
+  confirm,
+  lastMailTo,
+  mailsTo,
+  Recipient,
+} from "./support/Recipients.ts";
 import * as TestApi from "./support/TestApi.ts";
 
 type Api = Effect.Success<typeof TestApi.make>;
-
-const Recipient = Schema.Struct({
-  id: Schema.String,
-  address: Schema.String,
-  isVerified: Schema.Boolean,
-  isDefault: Schema.Boolean,
-  createdAt: Schema.String,
-});
 
 const Me = Schema.Struct({ userId: Schema.String, username: Schema.String });
 
@@ -41,58 +41,6 @@ const signedIn = Effect.fn("signedIn")(function* (api: Api, username: string) {
     username,
   );
   return { browser, me: Schema.decodeUnknownSync(Me)(registered.body) };
-});
-
-const add = (browser: Browser.Client, address: string) =>
-  browser.post("/v1/recipients", { address });
-
-const addRecipient = Effect.fn("addRecipient")(function* (
-  browser: Browser.Client,
-  address: string,
-) {
-  const response = yield* add(browser, address);
-  expect(response.status).toBe(201);
-  return Schema.decodeUnknownSync(Recipient)(response.body);
-});
-
-const LINK = /https:\/\/alias\.test\/destinations\?\S+/;
-
-/** Every confirmation mail fakecloud SES accepted for `address`, oldest first. */
-const mailsTo = Effect.fn("mailsTo")(function* (api: Api, address: string) {
-  const emails = yield* FakeCloud.sentEmails().pipe(Effect.provide(api.context));
-  return Arr.map(
-    Arr.filter(emails, (email) => Arr.contains(email.to, address)),
-    (email) => {
-      const text = Option.match(email.raw, {
-        onNone: () => "",
-        onSome: (raw) => new TextDecoder().decode(raw),
-      });
-      const link = new URL(
-        Option.getOrElse(Option.fromUndefinedOr(LINK.exec(text)?.[0]), () => "x:"),
-      );
-      const param = (name: string) =>
-        Option.getOrElse(Option.fromNullOr(link.searchParams.get(name)), () => "");
-      return { email, text, recipientId: param("confirm"), token: param("token") };
-    },
-  );
-});
-
-const lastMailTo = (api: Api, address: string) =>
-  Effect.flatMap(mailsTo(api, address), (mails) => Effect.fromOption(Arr.last(mails)));
-
-const confirm = (browser: Browser.Client, recipientId: string, token: string) =>
-  browser.post(`/v1/recipients/${recipientId}/confirm`, { token });
-
-/** Adds `address` and confirms it with the token from the mail. */
-const addVerified = Effect.fn("addVerified")(function* (
-  api: Api,
-  browser: Browser.Client,
-  address: string,
-) {
-  const added = yield* addRecipient(browser, address);
-  const mail = yield* lastMailTo(api, address);
-  expect((yield* confirm(browser, added.id, mail.token)).status).toBe(200);
-  return added;
 });
 
 const list = (browser: Browser.Client) =>

@@ -1,10 +1,18 @@
-import { CurrentUser, type NewAlias, type Scope } from "@alias/contracts";
+import {
+  AliasDescription,
+  AliasLabels,
+  type AliasView,
+  CurrentUser,
+  type NewAlias,
+  type Scope,
+} from "@alias/contracts";
 import type { SharedDomains, TempDomains } from "@alias/core";
 import {
   type AliasRepo,
   type ContactRepo,
   type DomainRepo,
   OutboxRepo,
+  type RecipientRepo,
   type UsernameRepo,
 } from "@alias/db";
 import type { Inbox } from "@alias/inbox";
@@ -40,6 +48,7 @@ export type ToolServices =
   | Crypto.Crypto
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
+  | RecipientRepo.RecipientRepo
   | DomainRepo.DomainRepo
   | UsernameRepo.UsernameRepo
   | SharedDomains.SharedDomains
@@ -221,6 +230,9 @@ const AliasOutput = Schema.Struct({
   isActive: Schema.Boolean,
   forwardedCount: Schema.Int,
   blockedCount: Schema.Int,
+  /** The user's note on what the alias is for. */
+  description: Schema.optionalKey(Schema.String),
+  labels: Schema.Array(Schema.String),
 });
 type AliasOutput = typeof AliasOutput.Type;
 
@@ -242,13 +254,20 @@ const contactOutput = (contact: {
   return Option.match(contact.name, { onNone: () => base, onSome: (name) => ({ ...base, name }) });
 };
 
-const aliasOutput = (alias: AliasOutput): AliasOutput => ({
-  id: alias.id,
-  address: alias.address,
-  isActive: alias.isActive,
-  forwardedCount: alias.forwardedCount,
-  blockedCount: alias.blockedCount,
-});
+const aliasOutput = (alias: AliasView): AliasOutput => {
+  const base = {
+    id: alias.id,
+    address: alias.address,
+    isActive: alias.isActive,
+    forwardedCount: alias.forwardedCount,
+    blockedCount: alias.blockedCount,
+    labels: alias.labels,
+  };
+  return Option.match(alias.description, {
+    onNone: () => base,
+    onSome: (description) => ({ ...base, description }),
+  });
+};
 
 const writes = (isDestructive: boolean, isIdempotent: boolean): Annotations => ({
   readOnlyHint: false,
@@ -344,7 +363,7 @@ export const tools: ReadonlyArray<Tool> = [
     name: "list_aliases",
     title: "List aliases",
     description:
-      "Lists the user's email aliases with whether each is active and how much mail it forwarded or blocked, plus the domains new aliases can be created on.",
+      "Lists the user's email aliases with whether each is active, how much mail it forwarded or blocked, and the description and labels the user gave it, plus the domains new aliases can be created on.",
     scope: "aliases:read",
     input: Schema.Struct({}),
     output: Schema.Struct({
@@ -419,6 +438,33 @@ export const tools: ReadonlyArray<Tool> = [
     summary: (alias) => `The alias is now ${alias.isActive ? "active" : "disabled"}.`,
     run: (input) =>
       Aliases.update(split(input.address), { isActive: input.isActive }).pipe(
+        Effect.map(aliasOutput),
+        Effect.mapError(explain),
+      ),
+  }),
+  define({
+    name: "set_alias_details",
+    title: "Describe or label an alias",
+    description:
+      "Sets an alias's description (what it is for; an empty string removes it) and/or its labels (replacing all of them; an empty list removes them). Only what is given changes.",
+    scope: "aliases:write",
+    input: Schema.Struct({
+      address: Address,
+      description: Schema.optionalKey(
+        AliasDescription.annotate({ description: "Up to 200 characters; empty removes it" }),
+      ),
+      labels: Schema.optionalKey(
+        AliasLabels.annotate({
+          description:
+            "Up to 10 distinct labels of 1–32 letters, digits, spaces, '.', '_' or '-'; replaces the alias's labels",
+        }),
+      ),
+    }),
+    output: AliasOutput,
+    annotations: writes(false, true),
+    summary: () => "Updated the alias; its details are in the data.",
+    run: ({ address, ...details }) =>
+      Aliases.update(split(address), details).pipe(
         Effect.map(aliasOutput),
         Effect.mapError(explain),
       ),

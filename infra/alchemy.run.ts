@@ -23,6 +23,7 @@ import {
 } from "@distilled.cloud/aws/Credentials";
 import * as Region from "@distilled.cloud/aws/Region";
 import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as PricingPlans from "@distilled.cloud/aws/pricing-plan-manager";
 import * as ServiceQuotas from "@distilled.cloud/aws/service-quotas";
 import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
@@ -254,9 +255,35 @@ const awsCalls = (
  */
 const deployActions = (credentials: Effect.Effect<ResolvedCredentials, CredentialsError>) => {
   const ssm = awsCalls(credentials, AwsClient.region);
-  // CloudFront takes certificates from us-east-1 only.
+  // CloudFront takes certificates from us-east-1 only; its pricing plans live there too.
   const acm = awsCalls(credentials, "us-east-1");
   return {
+    /**
+     * Puts the distribution on CloudFront's flat-rate Free plan (PLAN.md §20.26, §20.37): $0 a
+     * month for CloudFront and the web ACL, which pay-as-you-go would bill at about $9 a month
+     * from day one. Keeps any plan the distribution already has, e.g. Pro chosen in the console.
+     * A distribution on a plan can't be deleted: cancel the plan before `alchemy destroy`
+     * (`pnpm infra:aws pricing-plan-manager cancel-subscription --region us-east-1 --arn …`;
+     * a Free plan ends at once).
+     */
+    FlatRatePlan: Alchemy.Action(
+      "FlatRatePlan",
+      Effect.fn(function* (input: { distributionArn: string; webAclArn: string }) {
+        const { subscriptionSummaries } = yield* PricingPlans.listSubscriptions({}).pipe(
+          Effect.provide(acm),
+        );
+        const current = subscriptionSummaries.find(({ resourceArns }) =>
+          resourceArns.includes(input.distributionArn),
+        );
+        if (current !== undefined) return { subscriptionArn: current.arn, tier: current.planTier };
+        const { subscription } = yield* PricingPlans.createSubscription({
+          planFamily: "CloudFront",
+          planTier: "FREE",
+          resourceArns: [input.distributionArn, input.webAclArn],
+        }).pipe(Effect.provide(acm));
+        return { subscriptionArn: subscription.arn, tier: "FREE" };
+      }),
+    ),
     /**
      * Creates a keyring parameter with one fresh key (`1:<base64url of 32 random bytes>`,
      * `Keyring.parse` in `@alias/core`) unless it exists. `PutParameter` without `Overwrite`
@@ -366,19 +393,6 @@ function handler(event) {
   return event.response;
 }`;
 
-/** Paths whose requests WAF counts separately: sign-up, login, OAuth and device login. */
-const authPaths = ["/v1/auth/", "/v1/oauth/", "/v1/device/"];
-
-/** A WAF statement matching request paths that start with `prefix`. */
-const pathStartsWith = (prefix: string) => ({
-  ByteMatchStatement: {
-    SearchString: new TextEncoder().encode(prefix),
-    FieldToMatch: { UriPath: {} },
-    PositionalConstraint: "STARTS_WITH" as const,
-    TextTransformations: [{ Priority: 0, Type: "NONE" as const }],
-  },
-});
-
 const visibility = (name: string) => ({
   SampledRequestsEnabled: true,
   CloudWatchMetricsEnabled: true,
@@ -395,41 +409,29 @@ const managedRules = (name: string, priority: number) => ({
 });
 
 /**
- * The web ACL's rules (PLAN.md §20.26), five at most so the flat-rate Free plan fits: AWS's IP
- * reputation and known-bad-inputs groups, and two rate rules per viewer IP over 5 minutes as a
- * second layer to the app's own limits. Left out on purpose: the core rule set (it blocks bodies
- * over 8 KB, HTML and URLs in bodies, and long URI paths, so drafts, OpenPGP keys and image proxy
- * URLs would trip it; the API decodes every payload with a schema and renders no HTML), the
- * anonymous IP list (it blocks VPNs and Tor, which privacy users rely on), and a rate rule on
- * `/img/*` (Gmail and Apple Mail fetch images for all their users from a few addresses).
+ * The web ACL's rules (PLAN.md §20.26, §20.37), what the CloudFront flat-rate Free plan accepts:
+ * AWS's IP reputation and known-bad-inputs groups, and one rate rule per viewer IP over 5 minutes
+ * as a second layer to the app's own limits. The Free plan takes rate rules only without a
+ * scope-down statement (`WAFFeatureNotIncludedInPricingPlanException`, tried), so the stricter rule
+ * on sign-up, login and OAuth paths and the exemption of `/img/*` need the Pro plan; the app's own
+ * limits (§20.27) cover those paths. Left out on purpose: the core rule set (it blocks bodies over
+ * 8 KB, HTML and URLs in bodies, and long URI paths, so drafts, OpenPGP keys and image proxy URLs
+ * would trip it; the API decodes every payload with a schema and renders no HTML) and the anonymous
+ * IP list (it blocks VPNs and Tor, which privacy users rely on).
  */
 const wafRules = [
   managedRules("AWSManagedRulesAmazonIpReputationList", 0),
   managedRules("AWSManagedRulesKnownBadInputsRuleSet", 1),
   {
-    Name: "auth-rate",
-    Priority: 2,
-    // Logins take two requests; `alias login` polls the token endpoint every 5 s (60 in 5 min).
-    Statement: {
-      RateBasedStatement: {
-        Limit: 300,
-        EvaluationWindowSec: 300,
-        AggregateKeyType: "IP" as const,
-        ScopeDownStatement: { OrStatement: { Statements: authPaths.map(pathStartsWith) } },
-      },
-    },
-    Action: { Block: {} },
-    VisibilityConfig: visibility("auth-rate"),
-  },
-  {
     Name: "flood-rate",
-    Priority: 3,
+    Priority: 2,
+    // Every path, `/img/*` too: Gmail and Apple Mail fetch images for many users from a few
+    // addresses, so a busy stage may need this higher (or Pro, to exempt `/img/*` again).
     Statement: {
       RateBasedStatement: {
         Limit: 3000,
         EvaluationWindowSec: 300,
         AggregateKeyType: "IP" as const,
-        ScopeDownStatement: { NotStatement: { Statement: pathStartsWith("/img/") } },
       },
     },
     Action: { Block: {} },
@@ -460,8 +462,13 @@ export default Alchemy.Stack(
         ),
       );
     }
-    const { Keyring, OriginSecretHeader, CertificateValidationRecord, CertificateIssued } =
-      deployActions(credentials);
+    const {
+      FlatRatePlan,
+      Keyring,
+      OriginSecretHeader,
+      CertificateValidationRecord,
+      CertificateIssued,
+    } = deployActions(credentials);
     // Reservations need room: Lambda keeps 100 unreserved, so the applied quota must cover the sum
     // plus 100 (`lambdaConcurrencyQuota`, the request below). Until AWS grants it (a new account
     // starts at 10, and a request may wait days for a support case), the functions deploy without
@@ -1016,7 +1023,9 @@ export default Alchemy.Stack(
             },
           }
         : {}),
-      priceClass: "PriceClass_100",
+      // All edge locations: the flat-rate Free plan refuses a distribution limited to a price class
+      // ("not eligible", no reason given; PriceClass_100 was the one setting that made it fail).
+      priceClass: "PriceClass_All",
       httpVersion: "http2and3",
       webAclId: firewall.webAclArn,
       origins: [
@@ -1073,6 +1082,7 @@ export default Alchemy.Stack(
         },
       ],
     });
+    yield* FlatRatePlan({ distributionArn: app.distributionArn, webAclArn: firewall.webAclArn });
     // Only this distribution reads the web bucket, and only over TLS. One policy, bound once the
     // distribution exists (the bucket is its origin, so its ARN can't be in the bucket's props).
     yield* web.bind("CloudFrontReads", {

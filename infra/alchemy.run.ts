@@ -954,7 +954,8 @@ export default Alchemy.Stack(
       : undefined;
     const firewall = yield* AWS.WAFv2.WebACL("AppFirewall", {
       scope: "CLOUDFRONT",
-      description: `alias ${stage}: managed rules and rate limits (PLAN.md §20.26)`,
+      // WAF allows letters, digits, whitespace and `+=:#@/-,.` here: no `§`, no parentheses.
+      description: `alias ${stage}: managed rules and rate limits, PLAN.md 20.26`,
       defaultAction: { Allow: {} },
       rules: wafRules,
       visibilityConfig: visibility("acl"),

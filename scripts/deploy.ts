@@ -3,8 +3,9 @@
  * Alchemy's confirmation. Settings come from the environment or `infra/.env` (every one is
  * described in `infra/.env.example`); the one-time account steps are PLAN.md §20.37.
  *
- * Builds the web app (`apps/web/dist`, which the stack uploads), then runs `alchemy deploy --stage
- * <ALIAS_STAGE>` in `infra/`. Everything else, the keyrings included, is the stack's. AWS
+ * Builds the web app (`apps/web/dist`, which the stack uploads), makes sure Alchemy's assets bucket
+ * exists (`alchemy provider aws bootstrap`: where Lambda code is uploaded; idempotent, with the AWS
+ * profile in `AWS_PROFILE`), then runs `alchemy deploy --stage <ALIAS_STAGE>` in `infra/`. Everything else, the keyrings included, is the stack's. AWS
  * credentials are Alchemy's own (its profile, `pnpm infra:alchemy profile edit`); it runs under
  * `mise -E deploy`, so the `aws sso login` Alchemy starts for an SSO profile finds the AWS CLI
  * from `mise.deploy.toml`.
@@ -21,7 +22,7 @@ if (existsSync(envFile)) process.loadEnvFile(envFile);
 const stage = process.env.ALIAS_STAGE?.trim() ?? "";
 // Cloudflare's credentials may come from the environment or from Alchemy's profile, which only
 // Alchemy can tell; it stops with its own message when neither has them.
-const required = ["ALIAS_STAGE", "ALIAS_SHARED_DOMAINS"];
+const required = ["ALIAS_STAGE", "ALIAS_SHARED_DOMAINS", "AWS_PROFILE"];
 const missing = required.filter((name) => (process.env[name]?.trim() ?? "") === "");
 if (missing.length > 0) {
   console.error(`Missing ${missing.join(", ")}: see infra/.env.example.`);
@@ -41,9 +42,19 @@ process.env.ALCHEMY_TUI = "1";
 const run = (command: string, args: Array<string>, cwd = root) =>
   execFileSync(command, args, { cwd, stdio: "inherit", env: process.env });
 
+const alchemy = join(root, "infra/node_modules/.bin/alchemy");
 run("pnpm", ["--filter", "@alias/web", "build"]);
 run(
-  join(root, "infra/node_modules/.bin/alchemy"),
-  ["deploy", "--stage", stage, ...process.argv.slice(2)],
+  alchemy,
+  [
+    "provider",
+    "aws",
+    "bootstrap",
+    "--aws-profile",
+    process.env.AWS_PROFILE ?? "",
+    "--region",
+    "eu-west-1",
+  ],
   join(root, "infra"),
 );
+run(alchemy, ["deploy", "--stage", stage, ...process.argv.slice(2)], join(root, "infra"));

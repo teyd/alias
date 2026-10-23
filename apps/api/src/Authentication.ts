@@ -9,7 +9,7 @@ import {
   TooManyAttempts,
   Unauthenticated,
 } from "@alias/contracts";
-import { SessionRepo, TokenRepo, UserRepo } from "@alias/db";
+import { OAuthRepo, SessionRepo, TokenRepo, UserRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -22,6 +22,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
 import { clientSource } from "./ClientSource.ts";
+import { Issuer, PREFIX } from "./oauth/Issuer.ts";
 import { RelyingParty } from "./RelyingParty.ts";
 import { hashToken } from "./Secrets.ts";
 import { sessionId } from "./Sessions.ts";
@@ -36,8 +37,22 @@ export const MAX_FAILURES_PER_HOUR = 20;
 /** `lastUsedAt` moves at most this often per token, whatever the request rate. */
 const TOUCH_EVERY = Duration.minutes(5);
 
-/** `alias_pat_` and 32 random bytes in base64url. Anything else is refused without a lookup. */
-const WELL_FORMED = new RegExp(`^${TOKEN_PREFIX}[A-Za-z0-9_-]{43}$`);
+/**
+ * `alias_pat_` (a personal API token) or `alias_oat_` (an OAuth access token) and 32 random bytes
+ * in base64url. Anything else is refused without a lookup.
+ */
+const wellFormed = (prefix: string) => new RegExp(`^${prefix}[A-Za-z0-9_-]{43}$`);
+const PERSONAL = wellFormed(TOKEN_PREFIX);
+const ACCESS = wellFormed(PREFIX.access);
+
+/** What a request may do with a token, whichever kind it is. */
+interface Holder {
+  readonly userId: string;
+  readonly username: string;
+  readonly scopes: ReadonlyArray<string>;
+  /** Bookkeeping for personal tokens; OAuth access tokens live an hour and record nothing. */
+  readonly touch: Effect.Effect<void>;
+}
 
 /** Methods that change nothing; everything else is a change. */
 const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
@@ -87,8 +102,45 @@ export const authenticationLayer = Layer.effect(
     const crypto = yield* Crypto.Crypto;
     const sessions = yield* SessionRepo.SessionRepo;
     const tokens = yield* TokenRepo.TokenRepo;
+    const oauth = yield* OAuthRepo.OAuthRepo;
     const users = yield* UserRepo.UserRepo;
     const relyingParty = yield* RelyingParty;
+    const issuer = yield* Issuer;
+
+    /**
+     * The holder of a personal API token, or of an OAuth access token issued for this API
+     * (PLAN.md §20.35): one bound to the MCP server is refused here, as personal tokens are
+     * there, since a resource server accepts only tokens issued for it (RFC 8707).
+     */
+    const holder = Effect.fn("Authentication.holder")(function* (
+      secret: string,
+      now: DateTime.Utc,
+    ) {
+      const hash = yield* Effect.orDie(hashToken(crypto, secret));
+      if (PERSONAL.test(secret)) {
+        return Option.map(yield* Effect.orDie(tokens.findByHash(hash)), (token): Holder => ({
+          ...token,
+          // Bookkeeping only: a failed write must not fail the request.
+          touch: tokens
+            .touch(token, now, TOUCH_EVERY)
+            .pipe(
+              Effect.catchTag("DatabaseError", (error) =>
+                Effect.logWarning("token use not recorded", error.operation),
+              ),
+            ),
+        }));
+      }
+      if (ACCESS.test(secret)) {
+        return Option.map(
+          Option.filter(
+            yield* Effect.orDie(oauth.findAccess(hash)),
+            (access) => access.resource === issuer.apiResource,
+          ),
+          (access): Holder => ({ ...access, touch: Effect.void }),
+        );
+      }
+      return Option.none<Holder>();
+    });
 
     /** A credential of a user who is gone (an erased account) authenticates nothing. */
     const isLiveUser = (userId: string) =>
@@ -125,11 +177,7 @@ export const authenticationLayer = Layer.effect(
         if ((yield* Effect.orDie(tokens.failures(source, now))) >= MAX_FAILURES_PER_HOUR) {
           return yield* new TooManyAttempts();
         }
-        const found = WELL_FORMED.test(secret)
-          ? yield* Effect.orDie(
-              Effect.flatMap(hashToken(crypto, secret), (hash) => tokens.findByHash(hash)),
-            )
-          : Option.none<TokenRepo.Token>();
+        const found = yield* holder(secret, now);
         if (Option.isNone(found)) {
           yield* Effect.orDie(tokens.recordFailure(source, now, MAX_FAILURES_PER_HOUR));
           return yield* new Unauthenticated();
@@ -145,14 +193,7 @@ export const authenticationLayer = Layer.effect(
           );
           if (Option.isSome(missing)) return yield* new Forbidden({ scope: missing.value });
         }
-        // Bookkeeping only: a failed write must not fail the request.
-        yield* tokens
-          .touch(token, now, TOUCH_EVERY)
-          .pipe(
-            Effect.catchTag("DatabaseError", (error) =>
-              Effect.logWarning("token use not recorded", error.operation),
-            ),
-          );
+        yield* token.touch;
         return yield* Effect.provideService(httpEffect, CurrentUser, {
           userId: token.userId,
           username: token.username,

@@ -42,7 +42,8 @@ const groups = {
 
 const schemes = {
   session: "The web app's session cookie, set by a passkey login.",
-  token: "A personal API token (`alias_pat_…`). Each operation names the scope it needs.",
+  token:
+    "A personal API token (`alias_pat_…`), or an OAuth access token issued for `<origin>/v1` (`alias_oat_…`). Each operation names the scope it needs.",
 } satisfies Record<string, string>;
 
 /** One line per operation, keyed by operation ID (`<group>.<endpoint>`). */
@@ -198,7 +199,7 @@ export const openApiDocument: OpenApi.OpenAPISpec = {
     title: "Alias API",
     version: "1",
     description:
-      "Open-source email aliases. Authenticate with the browser session cookie or a personal API token (`Authorization: Bearer alias_pat_…`) that holds the scope an operation names.",
+      "Open-source email aliases. Authenticate with the browser session cookie, a personal API token (`Authorization: Bearer alias_pat_…`) or an OAuth access token for `<origin>/v1` that holds the scope an operation names.",
     license: { name: "AGPL-3.0-only", url: "https://www.gnu.org/licenses/agpl-3.0.html" },
   },
   tags: Arr.map(base.tags, (tag) =>

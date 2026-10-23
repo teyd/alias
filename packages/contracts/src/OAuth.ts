@@ -25,7 +25,7 @@ const AuthorizationRequest = Schema.Struct({
   code_challenge_method: Schema.optionalKey(Param),
   scope: Schema.optionalKey(Param),
   state: Schema.optionalKey(Param),
-  /** RFC 8707: the resource the token is for, the MCP endpoint. */
+  /** RFC 8707: the resource the token is for, the MCP endpoint (the default) or the HTTP API. */
   resource: Schema.optionalKey(Param),
 });
 export type AuthorizationRequest = typeof AuthorizationRequest.Type;

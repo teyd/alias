@@ -5,17 +5,20 @@ import * as Layer from "effect/Layer";
 import { RelyingParty } from "../RelyingParty.ts";
 
 /**
- * Where the authorization server and the MCP resource live (PLAN.md §20.24). Both sit on the web
- * app's origin, like the API: the issuer is the origin itself, the authorization endpoint a page
- * of the web app, the protocol endpoints under `/v1/oauth`, and the one protected resource the
- * MCP endpoint, `<origin>/mcp`, which every token is bound to (RFC 8707).
+ * Where the authorization server and its resources live (PLAN.md §20.24). All sit on the web
+ * app's origin: the issuer is the origin itself, the authorization endpoint a page of the web
+ * app, the protocol endpoints under `/v1/oauth`. Every token is bound to one of two protected
+ * resources (RFC 8707): the MCP endpoint, `<origin>/mcp`, or the HTTP API, `<origin>/v1`, which
+ * the browser extension asks for (§20.35).
  */
 export class Issuer extends Context.Service<
   Issuer,
   {
     readonly issuer: string;
-    /** The canonical URI of the MCP server, every token's audience. */
+    /** The canonical URI of the MCP server, the audience when a client names none. */
     readonly resource: string;
+    /** The canonical URI of the HTTP API, for clients that call it with an access token. */
+    readonly apiResource: string;
     readonly authorizationEndpoint: string;
     readonly tokenEndpoint: string;
     readonly registrationEndpoint: string;
@@ -27,6 +30,7 @@ export class Issuer extends Context.Service<
 const make = (origin: string): Issuer["Service"] => ({
   issuer: origin,
   resource: `${origin}/mcp`,
+  apiResource: `${origin}/v1`,
   authorizationEndpoint: `${origin}/oauth/authorize`,
   tokenEndpoint: `${origin}/v1/oauth/token`,
   registrationEndpoint: `${origin}/v1/oauth/register`,

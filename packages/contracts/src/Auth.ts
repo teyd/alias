@@ -39,7 +39,10 @@ export class CrossSiteRequest extends Schema.TaggedError<CrossSiteRequest>()(
  */
 export const sessionCookie = HttpApiSecurity.apiKey({ key: "__Host-alias_session", in: "cookie" });
 
-/** A personal API token (`alias_pat_…`) in `Authorization: Bearer`. */
+/**
+ * A personal API token (`alias_pat_…`), or an OAuth access token issued for the API
+ * (`alias_oat_…`, PLAN.md §20.35), in `Authorization: Bearer`.
+ */
 const bearerToken = HttpApiSecurity.bearer;
 
 /**

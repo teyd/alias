@@ -3,8 +3,10 @@
  * Alchemy's confirmation. Settings come from the environment or `infra/.env` (every one is
  * described in `infra/.env.example`); the one-time account steps are PLAN.md §20.37.
  *
- * 1. AWS credentials: unless `AWS_ACCESS_KEY_ID` is set, the session of `aws sso login` (the
- *    profile in `AWS_PROFILE`) is exported once into the environment, so Alchemy, the bootstrap
+ * Runs under `mise -E deploy`, which adds the AWS CLI (`mise.deploy.toml`) to mise.toml's tools.
+ *
+ * 1. AWS credentials: unless `AWS_ACCESS_KEY_ID` is set, the session of `pnpm infra:aws sso login`
+ *    (the profile in `AWS_PROFILE`) is exported once into the environment, so Alchemy, the bootstrap
  *    and the stack's own reads (the origin secret, ACM) all use the same short-lived keys.
  * 2. The web app's production build (`apps/web/dist`), which the stack uploads.
  * 3. `scripts/bootstrap-stage.ts`: the stage's SSM keyrings, made once and never overwritten.

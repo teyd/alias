@@ -7,7 +7,8 @@
  * of the Alchemy state (the owner's decision); only `origin-secrets` is read back, by the deploy.
  *
  * Usage: `ALIAS_STAGE=<stage> node scripts/bootstrap-stage.ts`, with AWS credentials in the
- * environment (`scripts/deploy.ts` runs it with them). Needs the AWS CLI v2.
+ * environment and the AWS CLI on the PATH (`scripts/deploy.ts` runs it with both; the CLI comes
+ * from `mise.deploy.toml`).
  */
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";

@@ -243,7 +243,6 @@ const subdomainOwner = Effect.fn("subdomainOwner")(function* (isOnTheFlyEnabled:
       createdAt,
       lastUsedAt: Option.none(),
     },
-    Option.none(),
   );
   yield* users.updateSettings("usr_1", { isOnTheFlyEnabled });
   yield* recipient("ada@mail.example");

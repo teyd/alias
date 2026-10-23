@@ -9,7 +9,6 @@ export * as DomainRepo from "./DomainRepo.ts";
 export * as FilterRepo from "./FilterRepo.ts";
 export * as Dynamo from "./Dynamo.ts";
 export * as FailureRepo from "./FailureRepo.ts";
-export * as InviteRepo from "./InviteRepo.ts";
 export * as Forwarding from "./Forwarding.ts";
 export * as OAuthRepo from "./OAuthRepo.ts";
 export * as OutboxRepo from "./OutboxRepo.ts";

@@ -23,8 +23,10 @@ import {
 } from "@distilled.cloud/aws/Credentials";
 import * as Region from "@distilled.cloud/aws/Region";
 import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as ServiceQuotas from "@distilled.cloud/aws/service-quotas";
 import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
@@ -460,6 +462,31 @@ export default Alchemy.Stack(
     }
     const { Keyring, OriginSecretHeader, CertificateValidationRecord, CertificateIssued } =
       deployActions(credentials);
+    // Reservations need room: Lambda keeps 100 unreserved, so the applied quota must cover the sum
+    // plus 100 (`lambdaConcurrencyQuota`, the request below). Until AWS grants it (a new account
+    // starts at 10, and a request may wait days for a support case), the functions deploy without
+    // reservations, uncapped within the small quota; the first deploy after the grant adds them.
+    const neededConcurrency = Object.values(reservedConcurrency).reduce<number>(
+      (sum, n) => sum + n,
+      100,
+    );
+    const appliedConcurrency = yield* ServiceQuotas.getServiceQuota({
+      ServiceCode: "lambda",
+      QuotaCode: "L-B99A9384",
+    }).pipe(
+      Effect.map(({ Quota }) => Quota?.Value ?? 0),
+      Effect.provide(awsCalls(credentials, AwsClient.region)),
+      Effect.orDie,
+    );
+    const hasConcurrencyRoom = appliedConcurrency >= neededConcurrency;
+    if (!hasConcurrencyRoom) {
+      yield* Effect.logWarning(
+        `Lambda concurrency quota is ${appliedConcurrency}, reservations need ${neededConcurrency}: deploying without reserved concurrency until the increase is granted (PLAN.md §20.29, §20.37).`,
+      );
+    }
+    const reserve = (count: number) =>
+      hasConcurrencyRoom ? { reservedConcurrentExecutions: count } : {};
+
     // The keyrings (above). The functions take their names from these Outputs, so none starts
     // before its keys exist.
     const keyrings = {
@@ -711,7 +738,7 @@ export default Alchemy.Stack(
       // is resumable, but each retry costs the user a passkey prompt.
       timeout: Duration.seconds(30),
       logging,
-      reservedConcurrentExecutions: reservedConcurrency.api,
+      ...reserve(reservedConcurrency.api),
       functionUrl: true,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
@@ -855,7 +882,7 @@ export default Alchemy.Stack(
       logging,
       // The fetch has a 5 s deadline (`Proxy.limits`).
       timeout: Duration.seconds(10),
-      reservedConcurrentExecutions: reservedConcurrency.imageProxy,
+      ...reserve(reservedConcurrency.imageProxy),
       functionUrl: { authType: "AWS_IAM" },
       env: {
         ALIAS_IMAGE_PROXY_KEYS_PARAMETER: keyrings.imageProxyKeys.name,
@@ -1101,7 +1128,7 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(60),
       logging,
       functionUrl: false,
-      reservedConcurrentExecutions: reservedConcurrency.inbound,
+      ...reserve(reservedConcurrency.inbound),
       // The pipeline's claims make retries safe (PLAN.md §20.6); what Lambda gives up on is
       // recorded, not dropped (§20.29).
       eventInvokeConfig: asyncInvokes,
@@ -1235,7 +1262,7 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(30),
       logging,
       functionUrl: false,
-      reservedConcurrentExecutions: reservedConcurrency.feedback,
+      ...reserve(reservedConcurrency.feedback),
       // SNS invokes it asynchronously; marking a recipient twice is harmless.
       eventInvokeConfig: asyncInvokes,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
@@ -1276,7 +1303,7 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(120),
-      reservedConcurrentExecutions: reservedConcurrency.verifyDomains,
+      ...reserve(reservedConcurrency.verifyDomains),
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_DOH_URL: dohUrl },
     });
@@ -1362,14 +1389,14 @@ export default Alchemy.Stack(
     }
 
     // Room for `reservedConcurrency` (PLAN.md §20.29). New accounts may start with as few as 10
-    // concurrent executions; the request is submitted only while the applied quota is lower. It
-    // isn't waited for: until AWS approves it, creating the reserved functions fails, and
-    // deploying again afterwards picks up where this one stopped (PLAN.md §20.37).
+    // concurrent executions; the request is submitted only while the applied quota is lower, and
+    // isn't waited for (`reserve`, above). It belongs to the account, not a stage: any stage takes
+    // over an open request, e.g. one a destroyed stage left behind.
     yield* AWS.ServiceQuotas.ServiceQuotaIncreaseRequest("LambdaConcurrency", {
       serviceCode: "lambda",
       quotaCode: "L-B99A9384",
       desiredValue: lambdaConcurrencyQuota,
-    });
+    }).pipe(adopt(true));
 
     // SES reputation alarms (PLAN.md §20.13). SES reviews the account at a 5% bounce or 0.1%
     // complaint rate and may pause sending at 10% / 0.5%; these warn at half the review level and
@@ -1466,7 +1493,7 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(30),
-      reservedConcurrentExecutions: reservedConcurrency.webhookDelivery,
+      ...reserve(reservedConcurrency.webhookDelivery),
       functionUrl: false,
       env: {
         ALIAS_TABLE_NAME: table.tableName,

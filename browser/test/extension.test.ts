@@ -4,10 +4,12 @@ import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Schema from "effect/Schema";
 import type { Page } from "playwright";
-import { api, attachAuthenticator, signUp, stack, ui } from "./support/browser.ts";
+import { api, attachAuthenticator, goTo, signUp, stack, ui } from "./support/browser.ts";
 import { openExtension } from "./support/extension.ts";
 
-const Aliases = Schema.Array(Schema.Struct({ address: Schema.String }));
+const Aliases = Schema.Array(
+  Schema.Struct({ address: Schema.String, description: Schema.optionalKey(Schema.String) }),
+);
 const Grants = Schema.Array(
   Schema.Struct({ clientName: Schema.String, scopes: Schema.Array(Schema.String) }),
 );
@@ -29,6 +31,15 @@ describe("the browser extension (Chromium, new headless mode)", () => {
         const app = yield* Effect.promise(() => context.newPage());
         yield* attachAuthenticator(context, app);
         yield* signUp(app, "ada");
+        // A second username (PLAN.md §20.34), behind the emulated human check.
+        yield* ui(async () => {
+          await goTo(app, "Domains");
+          await app.getByRole("button", { name: "Add username" }).click();
+          const dialog = app.getByRole("dialog", { name: "Add a username" });
+          await dialog.getByRole("textbox", { name: "Username" }).fill("ada-work");
+          await dialog.getByRole("button", { name: "Add username" }).click();
+          await dialog.waitFor({ state: "detached" });
+        });
 
         // Sign in from the popup: the authorization page opens in its own window, where Ada,
         // already signed in, allows exactly the alias scopes.
@@ -80,12 +91,31 @@ describe("the browser extension (Chromium, new headless mode)", () => {
         });
         const random = (yield* emailOf(form)).value;
         expect(random).toMatch(/^[a-z0-9]+@alias\.test$/);
-        const addresses = Arr.map(
-          yield* api(app, "/v1/aliases", Aliases),
-          (alias) => alias.address,
+
+        // On the other username, picked in the popup.
+        yield* ui(async () => {
+          await popup
+            .getByRole("combobox", { name: "Username" })
+            .selectOption("ada-work.alias.test");
+          await popup
+            .getByRole("button", { name: "Alias for example.co.uk: example@ada-work.alias.test" })
+            .click();
+          await popup.getByRole("button", { name: "Copy example@ada-work.alias.test" }).waitFor();
+        });
+        expect((yield* emailOf(form)).value).toBe("example@ada-work.alias.test");
+
+        // Each records the site it was made for.
+        const created = yield* api(app, "/v1/aliases", Aliases);
+        expect(
+          Arr.sort(
+            Arr.map(created, (alias) => alias.address),
+            Order.String,
+          ),
+        ).toEqual(
+          Arr.sort(["example@ada.alias.test", "example@ada-work.alias.test", random], Order.String),
         );
-        expect(Arr.sort(addresses, Order.String)).toEqual(
-          Arr.sort(["example@ada.alias.test", random], Order.String),
+        expect(Arr.map(created, (alias) => alias.description)).toEqual(
+          Arr.map(created, () => "example.co.uk (browser extension)"),
         );
         yield* ui(() => popup.getByRole("button", { name: `Copy ${random}` }).waitFor());
 

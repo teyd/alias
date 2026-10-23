@@ -1,5 +1,4 @@
 import { AliasClient, CodeLogin } from "@alias/sdk";
-import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -38,7 +37,6 @@ const Login = Schema.Struct({
   server: Schema.String,
   clientId: Schema.String,
   username: Schema.String,
-  subdomain: Schema.OptionFromOptionalKey(Schema.String),
   refreshToken: Schema.String,
 });
 type Login = typeof Login.Type;
@@ -57,7 +55,6 @@ const statusOf = (login: Option.Option<Login>, server: Option.Option<string>): S
       Status.cases.SignedIn.make({
         server: found.server,
         username: found.username,
-        subdomain: found.subdomain,
       }),
   });
 
@@ -132,14 +129,12 @@ const make = Effect.fn("Session.make")(function* (defaultServer: Option.Option<s
     const tokens = yield* CodeLogin.finish(pending, redirected);
     const client = yield* AliasClient.make({ baseUrl: server, token: tokens.accessToken });
     const me = yield* client.account.me();
-    const domains = yield* client.aliases.domains();
     // A sign-in replaces the one before; that one's grant goes.
     yield* signOutQuietly();
     const current: Login = {
       server,
       clientId,
       username: me.username,
-      subdomain: Arr.head(domains.subdomains),
       refreshToken: Redacted.value(tokens.refreshToken),
     };
     yield* store(current, tokens);

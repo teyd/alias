@@ -46,10 +46,11 @@ const createAndFill = Effect.fn("background.createAndFill")(function* (
   kind: AliasKind,
   tabId: number,
   frameId: Option.Option<number>,
+  subdomain: Option.Option<string>,
 ) {
   const session = yield* Session.Session;
   const client = yield* session.client();
-  const created = yield* Aliases.create(client, kind, yield* Browser.tabUrl(tabId));
+  const created = yield* Aliases.create(client, kind, yield* Browser.tabUrl(tabId), subdomain);
   const isFilled = yield* Fill.fill(tabId, frameId, created.address).pipe(
     Effect.catchTag("BrowserFailed", () => Effect.succeed(false)),
   );
@@ -62,11 +63,17 @@ const answer = Effect.fn("background.answer")(function* (request: Request) {
     GetStatus: () => session.status,
     SignIn: ({ server }) => session.signIn(server),
     SignOut: () => session.signOut,
-    CreateAlias: ({ kind, tabId }) => createAndFill(kind, tabId, Option.none()),
+    CreateAlias: ({ kind, tabId, subdomain }) =>
+      createAndFill(kind, tabId, Option.none(), subdomain),
     ListRecent: () =>
       session.client().pipe(
         Effect.flatMap(Aliases.recent),
         Effect.map((aliases) => Answer.cases.Recent.make({ aliases })),
+      ),
+    ListSubdomains: () =>
+      session.client().pipe(
+        Effect.flatMap(Aliases.subdomains),
+        Effect.map((subdomains) => Answer.cases.Subdomains.make({ subdomains })),
       ),
     Fill: ({ tabId, address }) =>
       Effect.map(Fill.fill(tabId, Option.none(), address), (isFilled) =>
@@ -148,7 +155,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (Option.isNone(item) || Option.isNone(tabId)) return;
   const kind = item.value === MENU.site ? "site" : "random";
   void runtime.runPromise(
-    createAndFill(kind, tabId.value, Option.fromNullishOr(info.frameId)).pipe(
+    // The context menu has no picker: site aliases go on the primary username's subdomain.
+    createAndFill(kind, tabId.value, Option.fromNullishOr(info.frameId), Option.none()).pipe(
       Effect.asVoid,
       Effect.catchCause(() =>
         Effect.tryPromise(() => chrome.action.openPopup()).pipe(Effect.ignore),

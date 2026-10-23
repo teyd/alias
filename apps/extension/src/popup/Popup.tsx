@@ -1,4 +1,4 @@
-import { useForm } from "@tanstack/react-form";
+import { useForm, useStore } from "@tanstack/react-form";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
@@ -13,6 +13,11 @@ const statusQuery = queryOptions({
 });
 
 const tabQuery = queryOptions({ queryKey: ["tab"], queryFn: activeTab });
+
+const subdomainsQuery = queryOptions({
+  queryKey: ["subdomains"],
+  queryFn: () => ask(Request.cases.ListSubdomains.make({}), Answer.cases.Subdomains),
+});
 
 const recentQuery = queryOptions({
   queryKey: ["recent"],
@@ -115,6 +120,66 @@ const RecentAliases = ({ onCopy }: { readonly onCopy: (address: string) => void 
   });
 };
 
+/**
+ * "Alias for example.co.uk: example@ada.alias.example", on the subdomain of the username picked
+ * below it when the account has more than one (PLAN.md §20.34), the primary one's first.
+ */
+const SiteAlias = ({
+  site,
+  isPending,
+  onCreate,
+}: {
+  readonly site: Site.Site;
+  readonly isPending: boolean;
+  readonly onCreate: (subdomain: string) => void;
+}) => {
+  const subdomains = useQuery(subdomainsQuery).data?.subdomains ?? [];
+  const form = useForm({ defaultValues: { subdomain: "" } });
+  const chosen = useStore(form.store, (state) => state.values.subdomain);
+  return Option.match(
+    Option.orElse(
+      Arr.findFirst(subdomains, (own) => own === chosen),
+      () => Arr.head(subdomains),
+    ),
+    {
+      onNone: () => null,
+      onSome: (subdomain) => (
+        <div className="stack">
+          <button
+            type="button"
+            className="primary"
+            disabled={isPending}
+            onClick={() => onCreate(subdomain)}
+          >
+            Alias for {site.domain}:{" "}
+            <span className="data">{`${site.localPart}@${subdomain}`}</span>
+          </button>
+          {subdomains.length > 1 && (
+            <form.Field name="subdomain">
+              {(field) => (
+                <label className="field">
+                  <span>Username</span>
+                  <select
+                    name={field.name}
+                    value={subdomain}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  >
+                    {subdomains.map((own) => (
+                      <option key={own} value={own}>
+                        {own}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </form.Field>
+          )}
+        </div>
+      ),
+    },
+  );
+};
+
 const SignedInView = ({ status }: { readonly status: Status & { readonly _tag: "SignedIn" } }) => {
   const queryClient = useQueryClient();
   const tab = Option.flatten(Option.fromNullishOr(useQuery(tabQuery).data));
@@ -123,10 +188,11 @@ const SignedInView = ({ status }: { readonly status: Status & { readonly _tag: "
     mutationFn: (address: string) => navigator.clipboard.writeText(address),
   });
   const create = useMutation({
-    mutationFn: (kind: AliasKind) =>
+    mutationFn: ({ kind, subdomain }: { kind: AliasKind; subdomain: Option.Option<string> }) =>
       ask(
         Request.cases.CreateAlias.make({
           kind,
+          subdomain,
           tabId: Option.getOrThrowWith(tab, () => new PopupError({ message: "No open tab." })).id,
         }),
         Answer.cases.Created,
@@ -163,24 +229,22 @@ const SignedInView = ({ status }: { readonly status: Status & { readonly _tag: "
           Sign out
         </button>
       </header>
-      {Option.match(Option.all({ found: site, subdomain: status.subdomain }), {
+      {Option.match(site, {
         onNone: () => null,
-        onSome: ({ found, subdomain }) => (
-          <button
-            type="button"
-            className="primary"
-            disabled={create.isPending}
-            onClick={() => create.mutate("site")}
-          >
-            Alias for {found.domain}:{" "}
-            <span className="data">{`${found.localPart}@${subdomain}`}</span>
-          </button>
+        onSome: (found) => (
+          <SiteAlias
+            site={found}
+            isPending={create.isPending}
+            onCreate={(subdomain) =>
+              create.mutate({ kind: "site", subdomain: Option.some(subdomain) })
+            }
+          />
         ),
       })}
       <button
         type="button"
         disabled={create.isPending || Option.isNone(tab)}
-        onClick={() => create.mutate("random")}
+        onClick={() => create.mutate({ kind: "random", subdomain: Option.none() })}
       >
         New random alias
       </button>

@@ -16,9 +16,18 @@ export const Request = Schema.TaggedUnion({
   /** `server` is an origin the user typed; the popup has asked for its host permission. */
   SignIn: { server: Schema.String },
   SignOut: {},
-  /** Creates an alias for the tab's site (or a random one) and fills it in. */
-  CreateAlias: { kind: AliasKind, tabId: Schema.Int },
+  /**
+   * Creates an alias for the tab's site (or a random one) and fills it in. A site alias goes on
+   * `subdomain` (one of the user's usernames), or on the primary username's without one.
+   */
+  CreateAlias: {
+    kind: AliasKind,
+    tabId: Schema.Int,
+    subdomain: Schema.OptionFromOptionalKey(Schema.String),
+  },
   ListRecent: {},
+  /** Where site aliases may go: one subdomain per username, the primary first. */
+  ListSubdomains: {},
   Fill: { tabId: Schema.Int, address: Schema.String },
 });
 export type Request = typeof Request.Type;
@@ -31,8 +40,6 @@ export const Status = Schema.TaggedUnion({
   SignedIn: {
     server: Schema.String,
     username: Schema.String,
-    /** Where "alias for this site" goes (`ada.alias.example`), if the account has one. */
-    subdomain: Schema.OptionFromOptionalKey(Schema.String),
   },
 });
 export type Status = typeof Status.Type;
@@ -48,6 +55,7 @@ export const Answer = Schema.TaggedUnion({
   Recent: {
     aliases: Schema.Array(Schema.Struct({ address: Schema.String, isActive: Schema.Boolean })),
   },
+  Subdomains: { subdomains: Schema.Array(Schema.String) },
   Filled: { isFilled: Schema.Boolean },
   /** Anything that went wrong, worded for the person. */
   Failed: { message: Schema.String },

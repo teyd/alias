@@ -2,7 +2,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Answer, type Request } from "../Messages.ts";
+import { Answer, Request } from "../Messages.ts";
 
 /**
  * The popup's edge: what it asks the background (`background.ts`) and the browser, as promises
@@ -17,7 +17,7 @@ export class PopupError extends Schema.TaggedError<PopupError>()("PopupError", {
 const noAnswer = () => new PopupError({ message: "The extension didn't answer. Try again." });
 
 /**
- * Asks the background and decodes its answer as `expected`; a `Failed` answer rejects with its
+ * Encodes `request`, asks the background and decodes its answer as `expected`; a `Failed` answer rejects with its
  * message, and so does a missing or malformed one (the background restarted mid-request).
  */
 export const ask = <S extends Schema.Constraint & { readonly DecodingServices: never }>(
@@ -25,7 +25,11 @@ export const ask = <S extends Schema.Constraint & { readonly DecodingServices: n
   expected: S,
 ): Promise<S["Type"]> =>
   Effect.runPromise(
-    Effect.tryPromise({ try: () => chrome.runtime.sendMessage(request), catch: noAnswer }).pipe(
+    Schema.encodeEffect(Request)(request).pipe(
+      Effect.mapError(noAnswer),
+      Effect.flatMap((encoded) =>
+        Effect.tryPromise({ try: () => chrome.runtime.sendMessage(encoded), catch: noAnswer }),
+      ),
       Effect.flatMap((answer) =>
         Answer.guards.Failed(answer)
           ? Effect.fail(new PopupError({ message: answer.message }))

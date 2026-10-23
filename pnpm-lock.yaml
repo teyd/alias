@@ -589,6 +589,9 @@ importers:
       '@alias/core':
         specifier: 'catalog:'
         version: link:../../packages/core
+      '@alias/dns':
+        specifier: workspace:*
+        version: link:../../packages/dns
       '@base-ui/react':
         specifier: 'catalog:'
         version: 1.9.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)

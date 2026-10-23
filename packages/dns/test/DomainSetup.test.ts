@@ -161,3 +161,49 @@ describe("DomainSetup.verdict", () => {
     expect(DomainSetup.verdict(all("unknown"))).toBe("inconclusive");
   });
 });
+
+describe("DomainSetup.zoneFile", () => {
+  it("writes every record as an absolute BIND line, required ones first", () => {
+    const shuffled = [
+      ...Arr.filter(records, (r) => !r.isRequired),
+      ...Arr.filter(records, (r) => r.isRequired),
+    ];
+    expect(DomainSetup.zoneFile("custom.example", shuffled).split("\n")).toEqual([
+      "; DNS records for custom.example, from Alias. Required records first, then recommended ones.",
+      'custom.example.\t3600\tIN\tTXT\t"alias-verification=tok123" ; Alias: proves the domain is yours (required)',
+      "custom.example.\t3600\tIN\tMX\t10 inbound-smtp.eu-west-1.amazonaws.com. ; Alias: delivers the domain's mail to Alias (required)",
+      "aaa._domainkey.custom.example.\t3600\tIN\tCNAME\taaa.dkim.amazonses.com. ; Alias: DKIM, signs mail sent from the domain (required) cf_tags=cf-proxied:false",
+      "bbb._domainkey.custom.example.\t3600\tIN\tCNAME\tbbb.dkim.amazonses.com. ; Alias: DKIM, signs mail sent from the domain (required) cf_tags=cf-proxied:false",
+      "ccc._domainkey.custom.example.\t3600\tIN\tCNAME\tccc.dkim.amazonses.com. ; Alias: DKIM, signs mail sent from the domain (required) cf_tags=cf-proxied:false",
+      "bounce.custom.example.\t3600\tIN\tMX\t10 feedback-smtp.eu-west-1.amazonses.com. ; Alias: MAIL FROM, bounces and SPF alignment (recommended)",
+      'bounce.custom.example.\t3600\tIN\tTXT\t"v=spf1 include:amazonses.com ~all" ; Alias: MAIL FROM, bounces and SPF alignment (recommended)',
+      '_dmarc.custom.example.\t3600\tIN\tTXT\t"v=DMARC1; p=none" ; Alias: DMARC policy (recommended)',
+      "",
+    ]);
+  });
+
+  it("splits long TXT values into quoted strings of at most 255 characters", () => {
+    const long: DomainSetup.DnsRecord = { ...ownership, value: "a".repeat(300) };
+    expect(DomainSetup.zoneFile("custom.example", [long])).toContain(
+      `\tTXT\t"${"a".repeat(255)}" "${"a".repeat(45)}" ;`,
+    );
+  });
+
+  it("escapes quotes and backslashes in TXT values", () => {
+    const odd: DomainSetup.DnsRecord = { ...ownership, value: 'say "hi" \\o/' };
+    expect(DomainSetup.zoneFile("custom.example", [odd])).toContain(
+      '\tTXT\t"say \\"hi\\" \\\\o/" ;',
+    );
+  });
+
+  it("keeps names and targets that are already absolute", () => {
+    const dotted: DomainSetup.DnsRecord = {
+      ...firstDkim,
+      name: "aaa._domainkey.custom.example.",
+      value: "aaa.dkim.amazonses.com.",
+    };
+    expect(DomainSetup.zoneFile("custom.example", [dotted])).toContain(
+      "aaa._domainkey.custom.example.\t3600\tIN\tCNAME\taaa.dkim.amazonses.com. ;",
+    );
+  });
+});

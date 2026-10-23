@@ -69,7 +69,7 @@ export const authRepoSuite = (
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
-              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(yield* user("ada"), passkey(), Option.none());
 
               expect(yield* users.findById("usr_1")).toEqual(
                 Option.some({ id: "usr_1", username: "ada", createdAt: at(1_000) }),
@@ -86,10 +86,14 @@ export const authRepoSuite = (
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
-              yield* users.register(yield* user("john"), passkey());
+              yield* users.register(yield* user("john"), passkey(), Option.none());
 
               const error = yield* Effect.flip(
-                users.register(yield* user("j0hn", "usr_2"), passkey({ id: "cred_2" })),
+                users.register(
+                  yield* user("j0hn", "usr_2"),
+                  passkey({ id: "cred_2" }),
+                  Option.none(),
+                ),
               );
               expect(error).toEqual(new UserRepo.UsernameTaken({ username: "j0hn" }));
               expect(yield* users.isUsernameTaken(yield* Username.parse("jo-hn"))).toBe(true);
@@ -104,10 +108,14 @@ export const authRepoSuite = (
           withRepos(
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
-              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(yield* user("ada"), passkey(), Option.none());
 
               const error = yield* Effect.flip(
-                users.register(yield* user("grace", "usr_2"), passkey({ userId: "usr_2" })),
+                users.register(
+                  yield* user("grace", "usr_2"),
+                  passkey({ userId: "usr_2" }),
+                  Option.none(),
+                ),
               );
               expect(error).toEqual(new UserRepo.CredentialTaken({ credentialId: "cred_1" }));
               expect(yield* users.isUsernameTaken(yield* Username.parse("grace"))).toBe(false);
@@ -128,7 +136,7 @@ export const authRepoSuite = (
           withRepos(
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
-              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(yield* user("ada"), passkey(), Option.none());
               expect(yield* users.settings("usr_1")).toEqual(defaults);
 
               const onTheFly = { ...defaults, isOnTheFlyEnabled: true };
@@ -153,7 +161,7 @@ export const authRepoSuite = (
           withRepos(
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
-              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(yield* user("ada"), passkey(), Option.none());
 
               const changed = yield* users.updateSettings("usr_1", {
                 imageProtection: "off",
@@ -184,7 +192,7 @@ export const authRepoSuite = (
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
-              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(yield* user("ada"), passkey(), Option.none());
 
               yield* passkeys.recordUse("cred_1", 7, at(5_000));
               expect(yield* passkeys.findById("cred_1")).toEqual(
@@ -200,10 +208,11 @@ export const authRepoSuite = (
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
-              yield* users.register(yield* user("ada"), passkey());
+              yield* users.register(yield* user("ada"), passkey(), Option.none());
               yield* users.register(
                 yield* user("grace", "usr_2"),
                 passkey({ id: "cred_2", userId: "usr_2" }),
+                Option.none(),
               );
               yield* passkeys.recordUse("cred_1", 7, at(5_000));
               const refused = new PasskeyRepo.CounterNotIncreased({ credentialId: "cred_1" });
@@ -232,10 +241,15 @@ export const authRepoSuite = (
             Effect.gen(function* () {
               const users = yield* UserRepo.UserRepo;
               const passkeys = yield* PasskeyRepo.PasskeyRepo;
-              yield* users.register(yield* user("ada"), passkey({ createdAt: at(2_000) }));
+              yield* users.register(
+                yield* user("ada"),
+                passkey({ createdAt: at(2_000) }),
+                Option.none(),
+              );
               yield* users.register(
                 yield* user("grace", "usr_2"),
                 passkey({ id: "cred_2", userId: "usr_2" }),
+                Option.none(),
               );
               expect(yield* passkeys.list("usr_1")).toEqual([passkey({ createdAt: at(2_000) })]);
               expect(yield* passkeys.list("usr_3")).toEqual([]);

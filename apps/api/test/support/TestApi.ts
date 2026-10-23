@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import {
+  Invites,
   MailSettings,
   RelyingParty,
   SignupLimits,
@@ -60,6 +61,11 @@ interface Options {
   readonly turnstileSecret?: string;
   /** Who stands before the function URL (`FunctionUrl.Front`); nobody by default. */
   readonly front?: FunctionUrl.Front;
+  /**
+   * Whether sign-up takes invite codes (PLAN.md §20.36). Open by default, so other suites sign
+   * up without one; `invites.test.ts` tests the beta's `invite`.
+   */
+  readonly signupMode?: Invites.SignupMode;
 }
 
 /**
@@ -108,6 +114,7 @@ export const makeWith = (options: Options = {}) =>
             Layer.provide(SharedDomains.layer(`${sharedDomain},alias2.test`)),
           ),
           SignupLimits.layer(options.limits ?? {}),
+          Invites.layer(options.signupMode ?? "open"),
           ReverseKeys.layer(reverseKeys),
         ),
         options.front ?? FunctionUrl.direct,
@@ -126,7 +133,7 @@ export const makeWith = (options: Options = {}) =>
     (handler) => Effect.promise(() => handler.dispose()),
   );
 
-/** {@link makeWith} with the production limits and a passing Turnstile. */
+/** {@link makeWith} with the production limits, a passing Turnstile and open sign-up. */
 export const make = makeWith();
 
 export const RegistrationChallenge = Schema.Struct({

@@ -11,17 +11,25 @@ import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Item from "./Item.ts";
 
 /**
- * What a challenge was issued for. Registration remembers who is signing up; Erasure, whose
- * account the signed-in user confirmed they want erased.
+ * What a challenge was issued for. Registration remembers who is signing up, and the hash of the
+ * invite code they gave (PLAN.md §20.36) when sign-up needs one; Erasure, whose account the
+ * signed-in user confirmed they want erased.
  */
 const Ceremony = Schema.TaggedUnion({
-  Registration: { userId: Schema.String, username: Schema.String },
+  Registration: {
+    userId: Schema.String,
+    username: Schema.String,
+    inviteHash: Schema.optionalKey(Schema.String),
+  },
   Authentication: {},
   Erasure: { userId: Schema.String },
 });
 export type Ceremony = typeof Ceremony.Type;
-export const Registration = (fields: { readonly userId: string; readonly username: string }) =>
-  Ceremony.cases.Registration.make(fields);
+export const Registration = (fields: {
+  readonly userId: string;
+  readonly username: string;
+  readonly inviteHash?: string;
+}) => Ceremony.cases.Registration.make(fields);
 export const Authentication = () => Ceremony.cases.Authentication.make({});
 export const Erasure = (userId: string) => Ceremony.cases.Erasure.make({ userId });
 export const {

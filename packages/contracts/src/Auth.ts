@@ -115,13 +115,29 @@ export class SignupUnavailable extends Schema.TaggedError<SignupUnavailable>()(
   { httpApiStatus: 503 },
 ) {}
 
-/** What the sign-up form needs before it asks for a challenge: the Turnstile widget to render. */
+/**
+ * Sign-up needs an invite code (PLAN.md §20.36) and none came with it (`missing`), or the one that
+ * came is unknown, revoked, expired or used up (`invalid`; also when it was used up by someone
+ * else between the two sign-up calls). Codes that redeem nothing count against the client
+ * address; past a few an hour, {@link TooManyAttempts}.
+ */
+export class InviteRejected extends Schema.TaggedError<InviteRejected>()(
+  "InviteRejected",
+  { reason: Schema.Literals(["missing", "invalid"]) },
+  { httpApiStatus: 403 },
+) {}
+
+/**
+ * What the sign-up form needs before it asks for a challenge: the Turnstile widget to render, and
+ * whether sign-up takes an invite code (the private beta, PLAN.md §20.36).
+ */
 const SignupConfig = Schema.Struct({
   turnstile: Schema.Struct({
     siteKey: Schema.String,
     /** Load it as a `<script>`, then call `turnstile.render` (explicit rendering). */
     scriptUrl: Schema.String,
   }),
+  isInviteRequired: Schema.Boolean,
 });
 
 /** A challenge to answer with `navigator.credentials.create()`; send it back with its ID. */
@@ -140,7 +156,8 @@ const AuthenticationChallenge = Schema.Struct({
  * Passkey sign-up and login. Each ceremony is two calls: `*Options` issues a single-use challenge
  * (valid for 5 minutes), and the second call verifies the authenticator's answer and sets the
  * session cookie. Sign-up first needs a solved Turnstile widget (`signup` names it): its token goes
- * with `registerOptions`. Limits (PLAN.md §20.27): challenges per client address and hour, accounts
+ * with `registerOptions`, and so does an invite code while `signup` says one is required
+ * ({@link InviteRejected} without a usable one; PLAN.md §20.36). Limits (PLAN.md §20.27): challenges per client address and hour, accounts
  * per client address and day, accounts per hour for everyone, and failed logins per account and
  * hour; past one, {@link TooManyAttempts} (429) or {@link SignupUnavailable} (503). Like
  * cookie-authenticated changes, these calls must come from the web app's own origin with a JSON
@@ -150,11 +167,17 @@ export const AuthGroup = HttpApiGroup.make("auth")
   .add(HttpApiEndpoint.get("signup", "/signup", { success: SignupConfig }))
   .add(
     HttpApiEndpoint.post("registerOptions", "/register/options", {
-      payload: Schema.Struct({ username: Schema.String, turnstileToken: Schema.String }),
+      payload: Schema.Struct({
+        username: Schema.String,
+        turnstileToken: Schema.String,
+        /** Ignored unless sign-up requires one; case, dashes and spaces don't matter. */
+        inviteCode: Schema.optionalKey(Schema.String),
+      }),
       success: RegistrationChallenge,
       error: [
         InvalidUsername,
         UsernameTaken,
+        InviteRejected,
         HumanCheckFailed,
         TooManyAttempts,
         SignupUnavailable,
@@ -169,7 +192,14 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.RegistrationCredential,
       }),
       success: Me,
-      error: [PasskeyRejected, UsernameTaken, TooManyAttempts, SignupUnavailable, CrossSiteRequest],
+      error: [
+        PasskeyRejected,
+        UsernameTaken,
+        InviteRejected,
+        TooManyAttempts,
+        SignupUnavailable,
+        CrossSiteRequest,
+      ],
     }),
   )
   .add(

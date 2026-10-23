@@ -173,6 +173,14 @@ if (turnstileSiteKey === "") {
 }
 /** Sign-ups everyone together may make in an hour before sign-up pauses (the circuit breaker). */
 const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
+/**
+ * Who may sign up (PLAN.md §20.36): `invite` (the private beta, the default) or `open`. Mint codes
+ * with `pnpm --filter @alias/api invites mint` against the stage's table.
+ */
+const signupMode = process.env.ALIAS_SIGNUP_MODE ?? "invite";
+if (signupMode !== "invite" && signupMode !== "open") {
+  throw new Error("ALIAS_SIGNUP_MODE must be invite or open (PLAN.md §20.36)");
+}
 
 /**
  * The secret CloudFront adds to every request it forwards to the API (PLAN.md §20.26), so the API
@@ -543,6 +551,7 @@ export default Alchemy.Stack(
         ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
         ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
         ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
+        ALIAS_SIGNUP_MODE: signupMode,
         // Only requests through the distribution are served (PLAN.md §20.26).
         ALIAS_ORIGIN_SECRETS_PARAMETER: originSecretsParameter,
       },

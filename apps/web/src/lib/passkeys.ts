@@ -1,6 +1,7 @@
 import {
   HumanCheckFailed,
   InvalidUsername,
+  InviteRejected,
   type Me,
   PasskeyRejected,
   SignupUnavailable,
@@ -49,6 +50,11 @@ export const describeAuthError = <E>(error: E): string => {
   if (error instanceof InvalidUsername) return usernameProblems[error.reason];
   if (error instanceof UsernameTaken) return "That username is taken.";
   if (error instanceof PasskeyRejected) return passkeyProblems[error.reason];
+  if (error instanceof InviteRejected) {
+    return error.reason === "missing"
+      ? "Sign-up needs an invite code during the beta."
+      : "That invite code isn't valid, or it was used up or expired.";
+  }
   if (error instanceof HumanCheckFailed) return "The human check expired. Please try again.";
   if (error instanceof TooManyAttempts) return "Too many attempts. Please try again in an hour.";
   if (error instanceof SignupUnavailable) {
@@ -67,12 +73,17 @@ const explain = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.mapError(effect, (error) => new AuthFailed({ message: describeAuthError(error) }));
 
 /**
- * Creates an account with a new passkey, once the Turnstile widget handed out `turnstileToken`;
- * the response sets the session cookie.
+ * Creates an account with a new passkey, once the Turnstile widget handed out `turnstileToken`,
+ * with the invite code during the private beta (the API ignores it otherwise); the response sets
+ * the session cookie.
  */
 export const signUp = (
   api: Client,
-  payload: { readonly username: string; readonly turnstileToken: string },
+  payload: {
+    readonly username: string;
+    readonly turnstileToken: string;
+    readonly inviteCode: string;
+  },
 ): Effect.Effect<Me, AuthFailed> =>
   explain(
     Effect.gen(function* () {

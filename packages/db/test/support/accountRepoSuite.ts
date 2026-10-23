@@ -119,6 +119,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       createdAt: at(1_000),
       lastUsedAt: Option.none(),
     },
+    Option.none(),
   );
   yield* Effect.forEach(
     ["now", "phone"],

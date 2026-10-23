@@ -20,3 +20,4 @@ export * as Verification from "./Verification.ts";
 export * as Webhook from "./Webhook.ts";
 export * as WebhookUrl from "./WebhookUrl.ts";
 export * as UserCode from "./UserCode.ts";
+export * as InviteCode from "./InviteCode.ts";

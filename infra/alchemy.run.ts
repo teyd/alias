@@ -1,6 +1,9 @@
 /**
- * Production infrastructure (AWS eu-west-1). Not deployed yet. Development and every test run
- * against emulators (see AGENTS.md), and `pnpm check` typechecks this file.
+ * Production infrastructure (AWS eu-west-1, DNS and Turnstile on Cloudflare). Not deployed yet.
+ * Development and every test run against emulators (see AGENTS.md), and `pnpm check` typechecks
+ * this file. Deploy with `pnpm infra:deploy` (`scripts/deploy.ts`: builds the web app, then runs
+ * `alchemy deploy`). Every setting is in `infra/.env.example`; the steps no tool can do are
+ * PLAN.md §20.37.
  *
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
@@ -12,14 +15,39 @@ import { Table } from "@alias/db";
 import { Inbox } from "@alias/inbox";
 import { securityHeaders } from "@alias/web/security-headers";
 import { WebhookQueue } from "@alias/webhooks";
+import * as ACM from "@distilled.cloud/aws/acm";
+import {
+  Credentials,
+  type CredentialsError,
+  type ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
+import * as Region from "@distilled.cloud/aws/Region";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as PricingPlans from "@distilled.cloud/aws/pricing-plan-manager";
+import * as ServiceQuotas from "@distilled.cloud/aws/service-quotas";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as AWS from "alchemy/AWS";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import { FetchHttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
+import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+
+// The settings (`infra/.env.example`), also when Alchemy runs without `scripts/deploy.ts`: Alchemy
+// reads `.env` into its own configuration only, and everything below reads `process.env`.
+// Variables already set win.
+const envFile = new URL(".env", import.meta.url).pathname;
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
@@ -56,8 +84,8 @@ const asyncFailuresQueueName = `alias-async-failures-${stage}`;
  * never throttled by someone else's traffic. Reserving costs nothing; only use is billed.
  *
  * Together 352. Lambda keeps at least 100 unreserved, so the account's concurrency quota must be
- * at least 452: ask for 1,000 (Service Quotas, Lambda "Concurrent executions", L-B99A9384) before
- * the first deploy, since new accounts may start with as few as 10.
+ * at least 452; new accounts may start with as few as 10, so the stack asks for 1,000
+ * (`lambdaConcurrencyQuota`, below).
  */
 const reservedConcurrency = {
   /** SES mail: ~1 s each, so 100 handle bursts of ~100 messages a second. */
@@ -86,11 +114,9 @@ const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
  * least 32 bytes). They live in an SSM Parameter Store `SecureString` (standard tier, free) that
  * the Lambda reads at cold start. This stack only names the parameter and grants reading it; it
  * never holds the value, so the value stays out of the Alchemy state and the Lambda console.
- * Before the first deploy of a stage, put it once (the default key `aws/ssm` encrypts it):
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/reverse-token-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * The `Keyring` action (`deployActions`, below) creates it with one fresh key if it is missing,
+ * never touches an existing one and keeps the value out of the state; the default key `aws/ssm`
+ * encrypts it.
  *
  * Rotate in two puts with `--overwrite`: first append the new key (`1:<old>,2:<new>`), then, once
  * every warm container has reloaded (or after any function configuration update), put it first
@@ -101,11 +127,7 @@ const reverseTokenKeysParameter = `/alias/${stage}/reverse-token-keys`;
 /**
  * The image proxy's URL keys (PLAN.md §20.19): the inbound Lambda signs proxy URLs with them and
  * the image proxy Lambda verifies them. Same format, storage and two-step rotation as the
- * reverse-token keys; put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/image-proxy-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * reverse-token keys; the `Keyring` action creates it.
  *
  * Removing a key breaks the images of every mail forwarded while it signed, so keep old keys.
  */
@@ -125,11 +147,7 @@ const inboxBucketName = `alias-inbox-${stage}`;
 /**
  * The inbox keys (PLAN.md §20.22.2): they wrap each stored message's data key. Same format,
  * storage and two-step rotation as the reverse-token keys; both the inbound Lambda (wraps) and
- * the API (unwraps) read it. Put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/inbox-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * the API (unwraps) read it. The `Keyring` action creates it.
  *
  * A retired key may be removed 30 days (the longest retention) after it stopped wrapping: no
  * message wrapped with it is left by then. Removing it earlier makes those messages unreadable.
@@ -139,11 +157,7 @@ const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 /**
  * The webhook keys (PLAN.md §20.30): they seal the webhook signing secrets at rest. Same format
  * and storage as the other keyrings; the API (seals on create and rotate) and the delivery Lambda
- * (opens) read it. Put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/webhook-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * (opens) read it. The `Keyring` action creates it.
  *
  * Rotation is the usual two puts (add the new key after the current one, then move it first). A
  * retired key opens every secret sealed with it until each webhook's secret is rotated or the
@@ -153,24 +167,29 @@ const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 const webhookKeysParameter = `/alias/${stage}/webhook-keys`;
 
 /**
- * Cloudflare Turnstile at sign-up (PLAN.md §20.27). The site key is public (the web app renders
- * the widget with it); the secret key is a `SecureString` the API reads at cold start. Create the
- * widget in the Cloudflare dashboard (Turnstile → Add widget, hostname = the app domain, mode
- * "Managed"), set `ALIAS_TURNSTILE_SITE_KEY` for the deploy, and put the secret once:
+ * A deployed stage has its app domain on Cloudflare: its DNS records, the certificate's validation
+ * and the Turnstile widget are made here. The `local` stage (typecheck, a scratch account) has no
+ * Cloudflare at all: the distribution answers on `*.cloudfront.net` and sign-up uses Turnstile's
+ * test keys.
+ */
+const isOnCloudflare = stage !== "local";
+
+/**
+ * Cloudflare Turnstile at sign-up (PLAN.md §20.27). This stack creates the widget (hostname = the
+ * app domain, mode "Managed"); its site key is public and goes into the API's configuration (the
+ * API names it to the web app), its secret key into the `SecureString` the API reads at cold
+ * start. Unlike the keyrings below, the secret is in the Alchemy state: Cloudflare generates it
+ * and hands it to whoever reads the widget, so the state holds nothing Cloudflare doesn't.
  *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/turnstile-secret --value '<secret key>'
- *
- * Rotating it in the dashboard keeps the old secret valid for a grace period; overwrite the
- * parameter and update the function configuration (new containers read it) within that period.
+ * Rotating it in the dashboard keeps the old secret valid for a grace period; deploy again within
+ * that period (the parameter is rewritten and the API's containers read it when they start).
  */
 const turnstileSecretParameter = `/alias/${stage}/turnstile-secret`;
-// The local stage may use Turnstile's always-passing test key; a deployed one needs its own.
-const turnstileSiteKey =
-  process.env.ALIAS_TURNSTILE_SITE_KEY ?? (stage === "local" ? "1x00000000000000000000AA" : "");
-if (turnstileSiteKey === "") {
-  throw new Error("ALIAS_TURNSTILE_SITE_KEY is required to deploy a stage (PLAN.md §20.27)");
-}
+/** Turnstile's documented always-passing test keys, for the `local` stage. */
+const turnstileTestKeys = {
+  siteKey: "1x00000000000000000000AA",
+  secret: "1x0000000000000000000000000000000AA",
+};
 /** Sign-ups everyone together may make in an hour before sign-up pauses (the circuit breaker). */
 const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
 
@@ -180,11 +199,7 @@ const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
  * `CloudFront-Viewer-Address`. A keyring like the others, read by the API at cold start; unlike
  * them, this stack reads it too, at deploy time, because the distribution's origin custom header
  * must carry the current key: the value ends up in the distribution config and the Alchemy state.
- * Put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/origin-secrets \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * The `Keyring` action creates it; `OriginSecretHeader` reads it for the header.
  *
  * Rotate in three steps: append the new key (`1:<old>,2:<new>`) and update the API function (any
  * configuration change starts fresh containers that accept both); put it first (`2:<new>,1:<old>`)
@@ -197,14 +212,158 @@ const originSecretsParameter = `/alias/${stage}/origin-secrets`;
 const webBucketName = `alias-web-${stage}`;
 const webBuild = new URL("../apps/web/dist", import.meta.url).pathname;
 
+/** Where SES receives mail in eu-west-1 (SES endpoints, "Email receiving"); every MX names it. */
+const inboundMx = "inbound-smtp.eu-west-1.amazonaws.com";
+
+/** The monthly cost budget, in USD; mail goes to `ALIAS_ALERT_EMAIL` at 80% and when forecast over. */
+const budgetUsd = process.env.ALIAS_BUDGET_USD?.trim() || "20";
+
 /**
- * The app domain's certificate (ACM, us-east-1, DNS-validated). DNS stays on Cloudflare, so the
- * first deploy requests it and outputs the validation CNAME (`certificateValidation`), which goes
- * into Cloudflare DNS (DNS only, not proxied) and stays there for renewals. Once ACM says
- * `ISSUED`, deploy again with `ALIAS_APP_CERTIFICATE_ISSUED=true`: CloudFront refuses a pending
- * certificate, so until then the distribution answers on its `*.cloudfront.net` name only.
+ * The Lambda concurrency quota (Service Quotas, "Concurrent executions", L-B99A9384) this stack
+ * asks for; `reservedConcurrency` above needs at least 452.
  */
-const isCertificateIssued = process.env.ALIAS_APP_CERTIFICATE_ISSUED === "true";
+const lambdaConcurrencyQuota = 1000;
+
+/** How long a deploy waits for ACM: validation records appear in seconds, issuance in minutes. */
+const certificatePoll = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(90)]);
+
+/** What the certificate actions throw while ACM isn't there yet; retried by `certificatePoll`. */
+class CertificatePending extends Schema.TaggedError<CertificatePending>()("CertificatePending", {
+  status: Schema.String,
+}) {}
+
+/** The keyrings this stack creates (once each, never overwritten) and the functions read. */
+const keyringNames = {
+  reverseTokenKeys: reverseTokenKeysParameter,
+  imageProxyKeys: imageProxyKeysParameter,
+  inboxKeys: inboxKeysParameter,
+  webhookKeys: webhookKeysParameter,
+  originSecrets: originSecretsParameter,
+};
+
+/** What a deploy-time AWS call needs, signed with Alchemy's own credentials (its profile). */
+const awsCalls = (
+  credentials: Effect.Effect<ResolvedCredentials, CredentialsError>,
+  region: RegionName,
+) =>
+  Layer.mergeAll(Layer.succeed(Credentials, credentials), Region.of(region), FetchHttpClient.layer);
+
+/**
+ * The work a deploy does that no Alchemy resource models, as Actions: each runs during apply,
+ * after the Outputs it takes, and again only when its input changes. They call AWS with the
+ * credentials Alchemy deploys with, so a deploy needs no other login.
+ */
+const deployActions = (credentials: Effect.Effect<ResolvedCredentials, CredentialsError>) => {
+  const ssm = awsCalls(credentials, AwsClient.region);
+  // CloudFront takes certificates from us-east-1 only; its pricing plans live there too.
+  const acm = awsCalls(credentials, "us-east-1");
+  return {
+    /**
+     * Puts the distribution on CloudFront's flat-rate Free plan (PLAN.md §20.26, §20.37): $0 a
+     * month for CloudFront and the web ACL, which pay-as-you-go would bill at about $9 a month
+     * from day one. Keeps any plan the distribution already has, e.g. Pro chosen in the console.
+     * A distribution on a plan can't be deleted: cancel the plan before `alchemy destroy`
+     * (`pnpm infra:aws pricing-plan-manager cancel-subscription --region us-east-1 --arn …`;
+     * a Free plan ends at once).
+     */
+    FlatRatePlan: Alchemy.Action(
+      "FlatRatePlan",
+      Effect.fn(function* (input: { distributionArn: string; webAclArn: string }) {
+        const { subscriptionSummaries } = yield* PricingPlans.listSubscriptions({}).pipe(
+          Effect.provide(acm),
+        );
+        const current = subscriptionSummaries.find(({ resourceArns }) =>
+          resourceArns.includes(input.distributionArn),
+        );
+        if (current !== undefined) return { subscriptionArn: current.arn, tier: current.planTier };
+        const { subscription } = yield* PricingPlans.createSubscription({
+          planFamily: "CloudFront",
+          planTier: "FREE",
+          resourceArns: [input.distributionArn, input.webAclArn],
+        }).pipe(Effect.provide(acm));
+        return { subscriptionArn: subscription.arn, tier: "FREE" };
+      }),
+    ),
+    /**
+     * Creates a keyring parameter with one fresh key (`1:<base64url of 32 random bytes>`,
+     * `Keyring.parse` in `@alias/core`) unless it exists. `PutParameter` without `Overwrite`
+     * refuses an existing name, so a key is never replaced, rotated ones included. The value is
+     * made here and returned nowhere: the Alchemy state holds the name only (the owner's decision).
+     * A parameter deleted later comes back only with `--force`.
+     */
+    Keyring: Alchemy.Action(
+      "Keyring",
+      Effect.fn(function* (input: { name: string }) {
+        yield* SSM.putParameter({
+          Name: input.name,
+          Type: "SecureString",
+          Value: Redacted.make(`1:${randomBytes(32).toString("base64url")}`),
+          Description: "Keyring (PLAN.md §20.14), made once by infra/alchemy.run.ts",
+        }).pipe(
+          Effect.catchTag("ParameterAlreadyExists", () => Effect.void),
+          Effect.provide(ssm),
+        );
+        return { name: input.name };
+      }),
+    ),
+    /**
+     * The origin custom header's value: the current origin secret. `version` is the parameter's
+     * version seen when planning, so a rotation's "put it first and deploy" runs this again.
+     */
+    OriginSecretHeader: Alchemy.Action(
+      "OriginSecretHeader",
+      Effect.fn(function* (input: { name: string; version: number }) {
+        const keys = yield* Parameters.keyring(input.name).pipe(Effect.provide(ssm));
+        return { header: Redacted.value(OriginSecret.headerValue(keys)) };
+      }),
+    ),
+    /**
+     * The app certificate's DNS validation record, once ACM has made it (a few seconds after the
+     * request). ACM names it with a trailing dot; Cloudflare wants none.
+     */
+    CertificateValidationRecord: Alchemy.Action(
+      "CertificateValidationRecord",
+      Effect.fn(function* (input: { certificateArn: string }) {
+        const record = yield* ACM.describeCertificate({
+          CertificateArn: input.certificateArn,
+        }).pipe(
+          Effect.flatMap(({ Certificate }) => {
+            const resource = Certificate?.DomainValidationOptions?.[0]?.ResourceRecord;
+            return resource === undefined
+              ? Effect.fail(new CertificatePending({ status: "no validation record yet" }))
+              : Effect.succeed(resource);
+          }),
+          Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
+          Effect.provide(acm),
+        );
+        return { name: record.Name.replace(/\.$/, ""), value: record.Value.replace(/\.$/, "") };
+      }),
+    ),
+    /**
+     * Waits until ACM reports the certificate `ISSUED` (CloudFront refuses a pending one), about
+     * 15 minutes at most; Cloudflare answers the validation record right away, so it usually takes
+     * a few. Later deploys don't wait. Fails on ACM's terminal statuses and when the wait runs
+     * out; deploying again resumes it.
+     */
+    CertificateIssued: Alchemy.Action(
+      "CertificateIssued",
+      Effect.fn(function* (input: { certificateArn: string; validationRecordId: string }) {
+        yield* ACM.describeCertificate({ CertificateArn: input.certificateArn }).pipe(
+          Effect.flatMap(({ Certificate }) => {
+            const status = Certificate?.Status ?? "unknown";
+            if (status === "ISSUED") return Effect.void;
+            return status === "PENDING_VALIDATION"
+              ? Effect.fail(new CertificatePending({ status }))
+              : Effect.die(new Error(`ACM certificate ${input.certificateArn} is ${status}`));
+          }),
+          Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
+          Effect.provide(acm),
+        );
+        return { certificateArn: input.certificateArn };
+      }),
+    ),
+  };
+};
 
 /**
  * The CloudFront Function on the app's viewer requests: paths without a file extension are the
@@ -234,19 +393,6 @@ function handler(event) {
   return event.response;
 }`;
 
-/** Paths whose requests WAF counts separately: sign-up, login, OAuth and device login. */
-const authPaths = ["/v1/auth/", "/v1/oauth/", "/v1/device/"];
-
-/** A WAF statement matching request paths that start with `prefix`. */
-const pathStartsWith = (prefix: string) => ({
-  ByteMatchStatement: {
-    SearchString: new TextEncoder().encode(prefix),
-    FieldToMatch: { UriPath: {} },
-    PositionalConstraint: "STARTS_WITH" as const,
-    TextTransformations: [{ Priority: 0, Type: "NONE" as const }],
-  },
-});
-
 const visibility = (name: string) => ({
   SampledRequestsEnabled: true,
   CloudWatchMetricsEnabled: true,
@@ -263,41 +409,29 @@ const managedRules = (name: string, priority: number) => ({
 });
 
 /**
- * The web ACL's rules (PLAN.md §20.26), five at most so the flat-rate Free plan fits: AWS's IP
- * reputation and known-bad-inputs groups, and two rate rules per viewer IP over 5 minutes as a
- * second layer to the app's own limits. Left out on purpose: the core rule set (it blocks bodies
- * over 8 KB, HTML and URLs in bodies, and long URI paths, so drafts, OpenPGP keys and image proxy
- * URLs would trip it; the API decodes every payload with a schema and renders no HTML), the
- * anonymous IP list (it blocks VPNs and Tor, which privacy users rely on), and a rate rule on
- * `/img/*` (Gmail and Apple Mail fetch images for all their users from a few addresses).
+ * The web ACL's rules (PLAN.md §20.26, §20.37), what the CloudFront flat-rate Free plan accepts:
+ * AWS's IP reputation and known-bad-inputs groups, and one rate rule per viewer IP over 5 minutes
+ * as a second layer to the app's own limits. The Free plan takes rate rules only without a
+ * scope-down statement (`WAFFeatureNotIncludedInPricingPlanException`, tried), so the stricter rule
+ * on sign-up, login and OAuth paths and the exemption of `/img/*` need the Pro plan; the app's own
+ * limits (§20.27) cover those paths. Left out on purpose: the core rule set (it blocks bodies over
+ * 8 KB, HTML and URLs in bodies, and long URI paths, so drafts, OpenPGP keys and image proxy URLs
+ * would trip it; the API decodes every payload with a schema and renders no HTML) and the anonymous
+ * IP list (it blocks VPNs and Tor, which privacy users rely on).
  */
 const wafRules = [
   managedRules("AWSManagedRulesAmazonIpReputationList", 0),
   managedRules("AWSManagedRulesKnownBadInputsRuleSet", 1),
   {
-    Name: "auth-rate",
-    Priority: 2,
-    // Logins take two requests; `alias login` polls the token endpoint every 5 s (60 in 5 min).
-    Statement: {
-      RateBasedStatement: {
-        Limit: 300,
-        EvaluationWindowSec: 300,
-        AggregateKeyType: "IP" as const,
-        ScopeDownStatement: { OrStatement: { Statements: authPaths.map(pathStartsWith) } },
-      },
-    },
-    Action: { Block: {} },
-    VisibilityConfig: visibility("auth-rate"),
-  },
-  {
     Name: "flood-rate",
-    Priority: 3,
+    Priority: 2,
+    // Every path, `/img/*` too: Gmail and Apple Mail fetch images for many users from a few
+    // addresses, so a busy stage may need this higher (or Pro, to exempt `/img/*` again).
     Statement: {
       RateBasedStatement: {
         Limit: 3000,
         EvaluationWindowSec: 300,
         AggregateKeyType: "IP" as const,
-        ScopeDownStatement: { NotStatement: { Statement: pathStartsWith("/img/") } },
       },
     },
     Action: { Block: {} },
@@ -305,15 +439,70 @@ const wafRules = [
   },
 ];
 
-/** @public The stack Alchemy loads. */
+/**
+ * @public The stack Alchemy loads.
+ *
+ * Logical IDs must be unique across resource types: Alchemy keys resources by ID alone and hands
+ * a second registration of an ID the first resource back, whatever its type (`Resource.ts`).
+ */
 export default Alchemy.Stack(
   "alias",
   {
-    providers: AWS.providers(),
+    providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
     state: stage === "local" ? localState() : AWS.state(),
   },
   Effect.gen(function* () {
-    const { accountId } = yield* AWS.AWSEnvironment.current;
+    const { accountId, credentials, region } = yield* AWS.AWSEnvironment.current;
+    // Every ARN, the MX target and SES receiving below are eu-west-1's. An `aws login` profile's
+    // own region wins over AWS_REGION, so a profile set to another region must stop the deploy.
+    if (region !== AwsClient.region) {
+      return yield* Effect.die(
+        new Error(
+          `Alchemy's AWS region is ${region}, not ${AwsClient.region}: set it on the profile (\`pnpm infra:aws configure set region ${AwsClient.region} --profile <name>\`).`,
+        ),
+      );
+    }
+    const {
+      FlatRatePlan,
+      Keyring,
+      OriginSecretHeader,
+      CertificateValidationRecord,
+      CertificateIssued,
+    } = deployActions(credentials);
+    // Reservations need room: Lambda keeps 100 unreserved, so the applied quota must cover the sum
+    // plus 100 (`lambdaConcurrencyQuota`, the request below). Until AWS grants it (a new account
+    // starts at 10, and a request may wait days for a support case), the functions deploy without
+    // reservations, uncapped within the small quota; the first deploy after the grant adds them.
+    const neededConcurrency = Object.values(reservedConcurrency).reduce<number>(
+      (sum, n) => sum + n,
+      100,
+    );
+    const appliedConcurrency = yield* ServiceQuotas.getServiceQuota({
+      ServiceCode: "lambda",
+      QuotaCode: "L-B99A9384",
+    }).pipe(
+      Effect.map(({ Quota }) => Quota?.Value ?? 0),
+      Effect.provide(awsCalls(credentials, AwsClient.region)),
+      Effect.orDie,
+    );
+    const hasConcurrencyRoom = appliedConcurrency >= neededConcurrency;
+    if (!hasConcurrencyRoom) {
+      yield* Effect.logWarning(
+        `Lambda concurrency quota is ${appliedConcurrency}, reservations need ${neededConcurrency}: deploying without reserved concurrency until the increase is granted (PLAN.md §20.29, §20.37).`,
+      );
+    }
+    const reserve = (count: number) =>
+      hasConcurrencyRoom ? { reservedConcurrentExecutions: count } : {};
+
+    // The keyrings (above). The functions take their names from these Outputs, so none starts
+    // before its keys exist.
+    const keyrings = {
+      reverseTokenKeys: yield* Keyring("ReverseTokenKeys", { name: keyringNames.reverseTokenKeys }),
+      imageProxyKeys: yield* Keyring("ImageProxyKeys", { name: keyringNames.imageProxyKeys }),
+      inboxKeys: yield* Keyring("InboxKeys", { name: keyringNames.inboxKeys }),
+      webhookKeys: yield* Keyring("WebhookKeys", { name: keyringNames.webhookKeys }),
+      originSecrets: yield* Keyring("OriginSecrets", { name: keyringNames.originSecrets }),
+    };
     // Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
     const tableArn = `arn:aws:dynamodb:eu-west-1:${accountId}:table/${tableName}`;
     const spoolObjects = `arn:aws:s3:::${spoolBucketName}/${spoolPrefix}*`;
@@ -513,6 +702,40 @@ export default Alchemy.Stack(
       destinationConfig: { OnFailure: { Destination: asyncFailures.queueArn } },
     } as const;
 
+    // The Cloudflare zone of each of the service's domains (the domain itself or a parent), looked
+    // up by name with the token's account (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`).
+    const zoneIds = new Map<string, string>();
+    if (isOnCloudflare) {
+      const { accountId: cloudflareAccount } = yield* yield* Cloudflare.CloudflareEnvironment;
+      yield* Effect.forEach([...sharedDomains, ...tempDomains], (domain) =>
+        Cloudflare.Zone.resolveZoneId({
+          accountId: cloudflareAccount,
+          zone: undefined,
+          hostname: domain,
+        }).pipe(
+          Effect.map((zoneId) => zoneIds.set(domain, zoneId)),
+          // A domain without a zone in this account can't be served: stop before anything changes.
+          Effect.orDie,
+        ),
+      );
+    }
+    const zoneOf = (domain: string) => zoneIds.get(domain) ?? "";
+
+    // Sign-up's human check (PLAN.md §20.27): the widget, and its secret where the API reads it.
+    const turnstile = isOnCloudflare
+      ? yield* Cloudflare.Turnstile.Widget("Signup", {
+          name: `alias-${stage}`,
+          domains: [appDomain],
+          mode: "managed",
+        })
+      : undefined;
+    yield* AWS.SSM.Parameter("TurnstileSecret", {
+      name: turnstileSecretParameter,
+      type: "SecureString",
+      value: turnstile?.secret ?? Redacted.make(turnstileTestKeys.secret),
+      description: "Turnstile secret key for sign-up (PLAN.md §20.27)",
+    });
+
     const api = yield* AWS.Lambda.Function("Api", {
       main: new URL("../apps/api/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -522,7 +745,7 @@ export default Alchemy.Stack(
       // is resumable, but each retry costs the user a passkey prompt.
       timeout: Duration.seconds(30),
       logging,
-      reservedConcurrentExecutions: reservedConcurrency.api,
+      ...reserve(reservedConcurrency.api),
       functionUrl: true,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
@@ -536,15 +759,15 @@ export default Alchemy.Stack(
         ALIAS_DOH_URL: dohUrl,
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
         ALIAS_INBOX_BUCKET: inboxBucketName,
-        ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
-        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        ALIAS_INBOX_KEYS_PARAMETER: keyrings.inboxKeys.name,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: keyrings.webhookKeys.name,
         // Mints the reverse alias of a contact the owner adds (PLAN.md §20.33).
-        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
-        ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: keyrings.reverseTokenKeys.name,
+        ALIAS_TURNSTILE_SITE_KEY: turnstile?.sitekey ?? turnstileTestKeys.siteKey,
         ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
         ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
         // Only requests through the distribution are served (PLAN.md §20.26).
-        ALIAS_ORIGIN_SECRETS_PARAMETER: originSecretsParameter,
+        ALIAS_ORIGIN_SECRETS_PARAMETER: keyrings.originSecrets.name,
       },
     });
     // Sign-up's Turnstile secret, read at cold start.
@@ -666,10 +889,10 @@ export default Alchemy.Stack(
       logging,
       // The fetch has a 5 s deadline (`Proxy.limits`).
       timeout: Duration.seconds(10),
-      reservedConcurrentExecutions: reservedConcurrency.imageProxy,
+      ...reserve(reservedConcurrency.imageProxy),
       functionUrl: { authType: "AWS_IAM" },
       env: {
-        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: keyrings.imageProxyKeys.name,
         ALIAS_TABLE_NAME: table.tableName,
       },
     });
@@ -690,7 +913,7 @@ export default Alchemy.Stack(
         },
       ],
     });
-    const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxy", {
+    const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxyAccess", {
       originType: "lambda",
       signingBehavior: "always",
       signingProtocol: "sigv4",
@@ -705,24 +928,29 @@ export default Alchemy.Stack(
       bucket: web,
       sourcePath: webBuild,
       purge: true,
-      fileOptions: [
-        { files: "assets/**", cacheControl: "public, max-age=31536000, immutable" },
-        { files: "**", cacheControl: "no-cache" },
-      ],
+      // Alchemy's defaults already give hashed assets a year (`max-age=31536000,public,immutable`);
+      // `index.html` is revalidated each time. Exact paths only: Alchemy's glob matching
+      // (beta.83) never escapes `*`, so any pattern with one is an invalid RegExp.
+      fileOptions: [{ files: "index.html", cacheControl: "no-cache" }],
     });
-    const webAccess = yield* AWS.CloudFront.OriginAccessControl("Web", {
+    const webAccess = yield* AWS.CloudFront.OriginAccessControl("WebAccess", {
       originType: "s3",
       signingBehavior: "always",
       signingProtocol: "sigv4",
     });
 
     // What the API's origin custom header carries: the current origin secret, read now.
-    const originSecret = yield* Parameters.keyring(originSecretsParameter).pipe(
-      Effect.map((keys) => Redacted.value(OriginSecret.headerValue(keys))),
-      Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint: Option.none() })),
-      // Without it there's nothing to deploy: put the parameter first (above).
+    // Its version now (0 before the first deploy made it), so a rotation re-reads it.
+    const originSecretsVersion = yield* Parameters.secureString(originSecretsParameter).pipe(
+      Effect.map(({ version }) => version),
+      Effect.catchTag("MissingParameter", () => Effect.succeed(0)),
+      Effect.provide(awsCalls(credentials, AwsClient.region)),
       Effect.orDie,
     );
+    const originSecret = yield* OriginSecretHeader({
+      name: keyrings.originSecrets.name,
+      version: originSecretsVersion,
+    });
 
     const spaRoutes = yield* AWS.CloudFront.Function("SpaRoutes", {
       comment: "SPA routes to index.html (PLAN.md §20.26)",
@@ -736,10 +964,32 @@ export default Alchemy.Stack(
       { functionArn: headers.functionArn, eventType: "viewer-response" as const },
     ];
 
-    const certificate = yield* AWS.ACM.Certificate("App", { domainName: appDomain });
-    const firewall = yield* AWS.WAFv2.WebACL("App", {
+    // The app domain's certificate (ACM, us-east-1), validated through a CNAME in Cloudflare that
+    // stays there for renewals. The distribution takes it once ACM has issued it.
+    const certificate = yield* AWS.ACM.Certificate("AppCertificate", { domainName: appDomain });
+    const issuedCertificate = isOnCloudflare
+      ? yield* Effect.gen(function* () {
+          const validation = yield* CertificateValidationRecord({
+            certificateArn: certificate.certificateArn,
+          });
+          const validationRecord = yield* Cloudflare.DNS.Record("CertificateValidation", {
+            zoneId: zoneOf(appDomain),
+            name: validation.name,
+            type: "CNAME",
+            content: validation.value,
+            comment: "ACM validation of the app certificate (PLAN.md §20.26); keep for renewals",
+          });
+          return yield* CertificateIssued({
+            certificateArn: certificate.certificateArn,
+            // Unused by the wait; naming it makes the wait start once the record exists.
+            validationRecordId: validationRecord.recordId,
+          });
+        })
+      : undefined;
+    const firewall = yield* AWS.WAFv2.WebACL("AppFirewall", {
       scope: "CLOUDFRONT",
-      description: `alias ${stage}: managed rules and rate limits (PLAN.md §20.26)`,
+      // WAF allows letters, digits, whitespace and `+=:#@/-,.` here: no `§`, no parentheses.
+      description: `alias ${stage}: managed rules and rate limits, PLAN.md 20.26`,
       defaultAction: { Allow: {} },
       rules: wafRules,
       visibilityConfig: visibility("acl"),
@@ -761,19 +1011,21 @@ export default Alchemy.Stack(
     // one, and the app, the API (passkeys, the OAuth issuer) and the image proxy share a domain.
     // Five behaviors, the Free plan's maximum. The API stays behind its public function URL
     // because OAC can't sign POST bodies for browsers; the origin secret stands in for it.
-    const app = yield* AWS.CloudFront.Distribution("App", {
+    const app = yield* AWS.CloudFront.Distribution("AppDistribution", {
       comment: `alias (${stage})`,
-      ...(isCertificateIssued
+      ...(issuedCertificate !== undefined
         ? {
             aliases: [appDomain],
             viewerCertificate: {
-              acmCertificateArn: certificate.certificateArn,
+              acmCertificateArn: issuedCertificate.certificateArn,
               sslSupportMethod: "sni-only" as const,
               minimumProtocolVersion: "TLSv1.2_2021" as const,
             },
           }
         : {}),
-      priceClass: "PriceClass_100",
+      // All edge locations: the flat-rate Free plan refuses a distribution limited to a price class
+      // ("not eligible", no reason given; PriceClass_100 was the one setting that made it fail).
+      priceClass: "PriceClass_All",
       httpVersion: "http2and3",
       webAclId: firewall.webAclArn,
       origins: [
@@ -788,7 +1040,7 @@ export default Alchemy.Stack(
           domainName: Output.map(functionUrlHost)(api.functionUrl),
           customOriginConfig: { originProtocolPolicy: "https-only" },
           // What tells the API a request came through here (above).
-          customHeaders: { [CloudFront.ORIGIN_SECRET_HEADER]: originSecret },
+          customHeaders: { [CloudFront.ORIGIN_SECRET_HEADER]: originSecret.header },
           // The API Lambda runs up to 30 s (erasure); CloudFront's default waits 30 s too.
           responseCompletionTimeout: "35 seconds",
         },
@@ -830,6 +1082,7 @@ export default Alchemy.Stack(
         },
       ],
     });
+    yield* FlatRatePlan({ distributionArn: app.distributionArn, webAclArn: firewall.webAclArn });
     // Only this distribution reads the web bucket, and only over TLS. One policy, bound once the
     // distribution exists (the bucket is its origin, so its ARN can't be in the bucket's props).
     yield* web.bind("CloudFrontReads", {
@@ -869,9 +1122,9 @@ export default Alchemy.Stack(
             : { invokedViaFunctionUrl: true }),
         }),
     );
-    // Proxied images point at the app domain once its certificate is live, before that at the
-    // distribution's own name (which keeps working for mail forwarded meanwhile).
-    const appOrigin = isCertificateIssued
+    // Proxied images point at the app domain; on the `local` stage, which has none, at the
+    // distribution's own name.
+    const appOrigin = isOnCloudflare
       ? Output.interpolate`https://${appDomain}`
       : Output.interpolate`https://${app.domainName}`;
 
@@ -885,7 +1138,7 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(60),
       logging,
       functionUrl: false,
-      reservedConcurrentExecutions: reservedConcurrency.inbound,
+      ...reserve(reservedConcurrency.inbound),
       // The pipeline's claims make retries safe (PLAN.md §20.6); what Lambda gives up on is
       // recorded, not dropped (§20.29).
       eventInvokeConfig: asyncInvokes,
@@ -893,14 +1146,14 @@ export default Alchemy.Stack(
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_SPOOL_BUCKET: spool.bucketName,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
-        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: keyrings.reverseTokenKeys.name,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
         ALIAS_IMAGE_PROXY_URL: appOrigin,
-        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: keyrings.imageProxyKeys.name,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
         ALIAS_INBOX_BUCKET: inboxBucketName,
-        ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
+        ALIAS_INBOX_KEYS_PARAMETER: keyrings.inboxKeys.name,
       },
     });
     // Inbox mode and kept failed deliveries (§20.33): put a sealed body, and delete it again when
@@ -976,7 +1229,9 @@ export default Alchemy.Stack(
       sourceArn: receiptRuleArn,
     });
 
-    const ruleSet = yield* AWS.SES.ReceiptRuleSet("Inbound", { ruleSetName: receiptRuleSetName });
+    const ruleSet = yield* AWS.SES.ReceiptRuleSet("InboundRules", {
+      ruleSetName: receiptRuleSetName,
+    });
     // No recipient condition: every verified domain, shared and custom, and their subdomains.
     // SES stores the message first, then invokes the inbound Lambda with the event (no body).
     yield* AWS.SES.ReceiptRule("AllVerified", {
@@ -1017,7 +1272,7 @@ export default Alchemy.Stack(
       timeout: Duration.seconds(30),
       logging,
       functionUrl: false,
-      reservedConcurrentExecutions: reservedConcurrency.feedback,
+      ...reserve(reservedConcurrency.feedback),
       // SNS invokes it asynchronously; marking a recipient twice is harmless.
       eventInvokeConfig: asyncInvokes,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl },
@@ -1058,7 +1313,7 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(120),
-      reservedConcurrentExecutions: reservedConcurrency.verifyDomains,
+      ...reserve(reservedConcurrency.verifyDomains),
       functionUrl: false,
       env: { ALIAS_TABLE_NAME: table.tableName, ALIAS_DOH_URL: dohUrl },
     });
@@ -1082,20 +1337,76 @@ export default Alchemy.Stack(
 
     // Events reach the feedback Lambda, so SES needn't also mail bounces to the sender, which
     // would be a reverse alias (the inbound pipeline drops them as `bounce` anyway).
-    yield* Effect.forEach(sharedDomains, (domain) =>
+    const sharedIdentities = yield* Effect.forEach(sharedDomains, (domain) =>
       AWS.SES.EmailIdentity(`Shared-${domain}`, {
         emailIdentity: domain,
         feedbackForwardingEnabled: false,
-      }),
+      }).pipe(Effect.map((identity) => ({ domain, identity }))),
     );
     // Temp-mail domains only receive (the receipt rule covers every verified domain); nothing
     // is ever sent from them, and the sending policies deny them explicitly.
-    yield* Effect.forEach(tempDomains, (domain) =>
+    const tempIdentities = yield* Effect.forEach(tempDomains, (domain) =>
       AWS.SES.EmailIdentity(`Temp-${domain}`, {
         emailIdentity: domain,
         feedbackForwardingEnabled: false,
-      }),
+      }).pipe(Effect.map((identity) => ({ domain, identity }))),
     );
+
+    // The service's DNS on Cloudflare, all DNS only (never proxied: SES, ACM and CloudFront must
+    // see their own answers). Records a domain already has under the same name and type are not
+    // taken over unless `--adopt` is passed (Alchemy refuses unowned records).
+    if (isOnCloudflare) {
+      // Easy DKIM: SES verifies a domain and signs its mail once these three CNAMEs resolve.
+      yield* Effect.forEach([...sharedIdentities, ...tempIdentities], ({ domain, identity }) =>
+        Effect.forEach([0, 1, 2], (index) => {
+          const token = Output.map((tokens: string[]) => tokens[index] ?? "")(identity.dkimTokens);
+          return Cloudflare.DNS.Record(`Dkim-${domain}-${index}`, {
+            zoneId: zoneOf(domain),
+            name: Output.interpolate`${token}._domainkey.${domain}`,
+            type: "CNAME",
+            content: Output.interpolate`${token}.dkim.amazonses.com`,
+            comment: "SES Easy DKIM (PLAN.md §20.37)",
+          });
+        }),
+      );
+      // Mail for the shared domains, users' subdomains (`*.<domain>`, PLAN.md §20.8) and the
+      // temp-mail domains goes to SES receiving, which the receipt rule above hands on.
+      const mailNames = [
+        ...sharedDomains.flatMap((domain) => [
+          { id: `Mx-${domain}`, domain, name: domain },
+          { id: `MxSubdomains-${domain}`, domain, name: `*.${domain}` },
+        ]),
+        ...tempDomains.map((domain) => ({ id: `Mx-${domain}`, domain, name: domain })),
+      ];
+      yield* Effect.forEach(mailNames, ({ id, domain, name }) =>
+        Cloudflare.DNS.Record(id, {
+          zoneId: zoneOf(domain),
+          name,
+          type: "MX",
+          content: inboundMx,
+          priority: 10,
+          comment: "SES receiving (PLAN.md §20.37)",
+        }),
+      );
+      // The app domain to the distribution; Cloudflare flattens a CNAME at a zone apex.
+      yield* Cloudflare.DNS.Record("AppDomain", {
+        zoneId: zoneOf(appDomain),
+        name: appDomain,
+        type: "CNAME",
+        content: app.domainName,
+        comment: "The app's CloudFront distribution (PLAN.md §20.26)",
+      });
+    }
+
+    // Room for `reservedConcurrency` (PLAN.md §20.29). New accounts may start with as few as 10
+    // concurrent executions; the request is submitted only while the applied quota is lower, and
+    // isn't waited for (`reserve`, above). It belongs to the account, not a stage: any stage takes
+    // over an open request, e.g. one a destroyed stage left behind.
+    yield* AWS.ServiceQuotas.ServiceQuotaIncreaseRequest("LambdaConcurrency", {
+      serviceCode: "lambda",
+      quotaCode: "L-B99A9384",
+      desiredValue: lambdaConcurrencyQuota,
+    }).pipe(adopt(true));
 
     // SES reputation alarms (PLAN.md §20.13). SES reviews the account at a 5% bounce or 0.1%
     // complaint rate and may pause sending at 10% / 0.5%; these warn at half the review level and
@@ -1133,6 +1444,27 @@ export default Alchemy.Stack(
         endpoint: alertEmail,
       });
     }
+    // The account's monthly spend (every stage in it counts): mail when 80% is spent and when the
+    // month is forecast to go over. Budgets mails directly; no SNS confirmation.
+    yield* AWS.Budgets.Budget("Monthly", {
+      budgetName: `alias-${stage}-monthly`,
+      budgetType: "COST",
+      timeUnit: "MONTHLY",
+      budgetLimit: { amount: budgetUsd, unit: "USD" },
+      notifications:
+        alertEmail === undefined
+          ? []
+          : [
+              { notificationType: "ACTUAL" as const, threshold: 80 },
+              { notificationType: "FORECASTED" as const, threshold: 100 },
+            ].map(({ notificationType, threshold }) => ({
+              notificationType,
+              comparisonOperator: "GREATER_THAN" as const,
+              threshold,
+              thresholdType: "PERCENTAGE" as const,
+              subscribers: [{ subscriptionType: "EMAIL" as const, address: alertEmail }],
+            })),
+    });
     const reputationAlarms = [
       { name: "bounce-warning", metric: "Reputation.BounceRate", threshold: 0.025 },
       { name: "bounce-critical", metric: "Reputation.BounceRate", threshold: 0.04 },
@@ -1171,12 +1503,12 @@ export default Alchemy.Stack(
       memorySize: 256,
       logging,
       timeout: Duration.seconds(30),
-      reservedConcurrentExecutions: reservedConcurrency.webhookDelivery,
+      ...reserve(reservedConcurrency.webhookDelivery),
       functionUrl: false,
       env: {
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
-        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: keyrings.webhookKeys.name,
       },
     });
     // The webhook keys open endpoint secrets (read once, at cold start).
@@ -1295,8 +1627,7 @@ export default Alchemy.Stack(
       webhookDeliveryFunction: delivery.functionName,
       appUrl: appOrigin,
       distributionDomain: app.domainName,
-      // The CNAME to put into Cloudflare DNS for ACM (PLAN.md §20.26).
-      certificateValidation: certificate.domainValidationOptions,
+      turnstileSiteKey: turnstile?.sitekey,
       webAclArn: firewall.webAclArn,
       verifyDomainsFunction: verifyDomains.functionName,
       asyncFailuresQueue: asyncFailures.queueUrl,

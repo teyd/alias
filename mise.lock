@@ -71,7 +71,17 @@ checksum = "sha256:02aedf5532d5de2cd40cd118a0f035cb15150b559e92f562a8f2bd9c60947
 url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakecloud-v0.51.0-linux-amd64.tar.gz"
 url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300054"
 
+[tools."github:faiscadev/fakecloud"."platforms.linux-x64-baseline"]
+checksum = "sha256:02aedf5532d5de2cd40cd118a0f035cb15150b559e92f562a8f2bd9c60947b20"
+url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakecloud-v0.51.0-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300054"
+
 [tools."github:faiscadev/fakecloud"."platforms.linux-x64-musl"]
+checksum = "sha256:ca3ab92e3b7eb0d1f62d12252a7b6a3a4804c8b627508ce963557d6b5f3898ac"
+url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakecloud-v0.51.0-linux-amd64-musl.tar.gz"
+url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300056"
+
+[tools."github:faiscadev/fakecloud"."platforms.linux-x64-musl-baseline"]
 checksum = "sha256:ca3ab92e3b7eb0d1f62d12252a7b6a3a4804c8b627508ce963557d6b5f3898ac"
 url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakecloud-v0.51.0-linux-amd64-musl.tar.gz"
 url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300056"
@@ -82,6 +92,11 @@ url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakeclou
 url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300053"
 
 [tools."github:faiscadev/fakecloud"."platforms.macos-x64"]
+checksum = "sha256:8c6501b00bb92a57c68b7eb2061288334bb8862ad94c67c12468b06a03ea0512"
+url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakecloud-v0.51.0-darwin-amd64.tar.gz"
+url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300052"
+
+[tools."github:faiscadev/fakecloud"."platforms.macos-x64-baseline"]
 checksum = "sha256:8c6501b00bb92a57c68b7eb2061288334bb8862ad94c67c12468b06a03ea0512"
 url = "https://github.com/faiscadev/fakecloud/releases/download/v0.51.0/fakecloud-v0.51.0-darwin-amd64.tar.gz"
 url_api = "https://api.github.com/repos/faiscadev/fakecloud/releases/assets/654300052"
@@ -99,7 +114,15 @@ url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0
 checksum = "sha256:3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e"
 url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz"
 
+[tools.java."platforms.linux-x64-baseline"]
+checksum = "sha256:3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e"
+url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz"
+
 [tools.java."platforms.linux-x64-musl"]
+checksum = "sha256:0c4fcdefa2737ccd66e049245fdb9dc431f91796182141204cd5f8192cb288e6"
+url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_alpine-linux_hotspot_17.0.20.1_1.tar.gz"
+
+[tools.java."platforms.linux-x64-musl-baseline"]
 checksum = "sha256:0c4fcdefa2737ccd66e049245fdb9dc431f91796182141204cd5f8192cb288e6"
 url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_alpine-linux_hotspot_17.0.20.1_1.tar.gz"
 
@@ -111,7 +134,15 @@ url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0
 checksum = "sha256:c01975da12ed4235250ff891fe8bba73a9e73037d444b269c9d0922b5dbc8e0a"
 url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_mac_hotspot_17.0.20.1_1.tar.gz"
 
+[tools.java."platforms.macos-x64-baseline"]
+checksum = "sha256:c01975da12ed4235250ff891fe8bba73a9e73037d444b269c9d0922b5dbc8e0a"
+url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_mac_hotspot_17.0.20.1_1.tar.gz"
+
 [tools.java."platforms.windows-x64"]
+checksum = "sha256:e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0"
+url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20.1_1.zip"
+
+[tools.java."platforms.windows-x64-baseline"]
 checksum = "sha256:e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0"
 url = "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20.1_1.zip"
 
@@ -132,7 +163,15 @@ url = "https://unofficial-builds.nodejs.org/download/release/v24.22.0/node-v24.2
 checksum = "sha256:28ea0a438de9a13bd7891fd758eee6c7819ee8af5442dfd8d45bd65e56d4228c"
 url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.gz"
 
+[tools.node."platforms.linux-x64-baseline"]
+checksum = "sha256:28ea0a438de9a13bd7891fd758eee6c7819ee8af5442dfd8d45bd65e56d4228c"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.gz"
+
 [tools.node."platforms.linux-x64-musl"]
+checksum = "sha256:72cd253fbe0c2539d52208ed098d47b78ff2c32ba76295d8e6b5b0ce067dcba5"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.22.0/node-v24.22.0-linux-x64-musl.tar.gz"
+
+[tools.node."platforms.linux-x64-musl-baseline"]
 checksum = "sha256:72cd253fbe0c2539d52208ed098d47b78ff2c32ba76295d8e6b5b0ce067dcba5"
 url = "https://unofficial-builds.nodejs.org/download/release/v24.22.0/node-v24.22.0-linux-x64-musl.tar.gz"
 
@@ -144,7 +183,15 @@ url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-arm64.tar.gz"
 checksum = "sha256:495e3f273c645f3c4677d438304cdfc701729ea5dec5728f5c8e76a2dece4b91"
 url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-x64.tar.gz"
 
+[tools.node."platforms.macos-x64-baseline"]
+checksum = "sha256:495e3f273c645f3c4677d438304cdfc701729ea5dec5728f5c8e76a2dece4b91"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-x64.tar.gz"
+
 [tools.node."platforms.windows-x64"]
+checksum = "sha256:f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3"
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip"
+
+[tools.node."platforms.windows-x64-baseline"]
 checksum = "sha256:f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3"
 url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip"
 
@@ -171,7 +218,19 @@ url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-linux-x64.ta
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957410"
 provenance = "github-attestations"
 
+[tools.pnpm."platforms.linux-x64-baseline"]
+checksum = "sha256:3910c3852136bed5bc1511b9137a45fd4357ed6b3970d9d08893641e9005867e"
+url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957410"
+provenance = "github-attestations"
+
 [tools.pnpm."platforms.linux-x64-musl"]
+checksum = "sha256:d7115e2f2791d79bf9e7e448609537595bb7787de1ef5292ce91ff3d1be2629e"
+url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-linux-x64-musl.tar.gz"
+url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957412"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.linux-x64-musl-baseline"]
 checksum = "sha256:d7115e2f2791d79bf9e7e448609537595bb7787de1ef5292ce91ff3d1be2629e"
 url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-linux-x64-musl.tar.gz"
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957412"
@@ -189,7 +248,19 @@ url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-darwin-x64.t
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957411"
 provenance = "github-attestations"
 
+[tools.pnpm."platforms.macos-x64-baseline"]
+checksum = "sha256:2c412e07382049b4edb04fa6da78f3d4ef7810b75853c80544dcfb7c0ed79880"
+url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-darwin-x64.tar.gz"
+url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957411"
+provenance = "github-attestations"
+
 [tools.pnpm."platforms.windows-x64"]
+checksum = "sha256:6f0f38e917c8ce76ef31db528c357e2bfa354a1bcb16464e3cdec39e6530d784"
+url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-win32-x64.zip"
+url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957404"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.windows-x64-baseline"]
 checksum = "sha256:6f0f38e917c8ce76ef31db528c357e2bfa354a1bcb16464e3cdec39e6530d784"
 url = "https://github.com/pnpm/pnpm/releases/download/v12.14.0/pnpm-win32-x64.zip"
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/643957404"

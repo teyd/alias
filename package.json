@@ -11,6 +11,7 @@
     "openapi": "node scripts/openapi.ts",
     "cli:compile": "mise exec -- node scripts/compile-cli.ts",
     "extension:package": "mise exec -- node scripts/package-extension.ts",
+    "infra:alchemy": "mise trust --yes --quiet mise.deploy.toml && mise -E deploy exec -- pnpm --filter @alias/infra exec alchemy",
     "infra:aws": "mise trust --yes --quiet mise.deploy.toml && mise -E deploy exec -- aws",
     "infra:deploy": "mise trust --yes --quiet mise.deploy.toml && mise -E deploy exec -- node scripts/deploy.ts",
     "test": "mise exec -- vp run --filter '!alias' test",

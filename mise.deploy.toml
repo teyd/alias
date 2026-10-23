@@ -1,4 +1,4 @@
 # Tools only a deploy needs (`pnpm infra:deploy`, PLAN.md §20.37), on top of mise.toml. Loaded only
 # with MISE_ENV=deploy, so `pnpm agent:setup` and CI never download them. Locked in mise.deploy.lock.
 [tools]
-aws-cli = "2.38.4" # `aws sso login`, the session export in scripts/deploy.ts, scripts/bootstrap-stage.ts
+aws-cli = "2.38.4" # `aws configure sso`, and the `aws sso login` Alchemy runs for an SSO profile

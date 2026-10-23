@@ -1,10 +1,9 @@
 /**
  * Production infrastructure (AWS eu-west-1, DNS and Turnstile on Cloudflare). Not deployed yet.
  * Development and every test run against emulators (see AGENTS.md), and `pnpm check` typechecks
- * this file. Deploy with `pnpm infra:deploy` (`scripts/deploy.ts`), never `alchemy deploy` alone:
- * it builds the web app, creates the stage's keyrings (`scripts/bootstrap-stage.ts`) and hands
- * this stack the AWS credentials it reads with. Every setting is in `infra/.env.example`; the steps
- * no tool can do are PLAN.md §20.37.
+ * this file. Deploy with `pnpm infra:deploy` (`scripts/deploy.ts`: builds the web app, then runs
+ * `alchemy deploy`). Every setting is in `infra/.env.example`; the steps no tool can do are
+ * PLAN.md §20.37.
  *
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
@@ -17,15 +16,24 @@ import { Inbox } from "@alias/inbox";
 import { securityHeaders } from "@alias/web/security-headers";
 import { WebhookQueue } from "@alias/webhooks";
 import * as ACM from "@distilled.cloud/aws/acm";
+import {
+  Credentials,
+  type CredentialsError,
+  type ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
+import * as Region from "@distilled.cloud/aws/Region";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
+import { randomBytes } from "node:crypto";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/http";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -96,8 +104,9 @@ const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
  * least 32 bytes). They live in an SSM Parameter Store `SecureString` (standard tier, free) that
  * the Lambda reads at cold start. This stack only names the parameter and grants reading it; it
  * never holds the value, so the value stays out of the Alchemy state and the Lambda console.
- * `scripts/bootstrap-stage.ts` (run by every `pnpm infra:deploy`) creates it with one fresh key
- * if it is missing and never touches an existing one; the default key `aws/ssm` encrypts it.
+ * The `Keyring` action (`deployActions`, below) creates it with one fresh key if it is missing,
+ * never touches an existing one and keeps the value out of the state; the default key `aws/ssm`
+ * encrypts it.
  *
  * Rotate in two puts with `--overwrite`: first append the new key (`1:<old>,2:<new>`), then, once
  * every warm container has reloaded (or after any function configuration update), put it first
@@ -108,7 +117,7 @@ const reverseTokenKeysParameter = `/alias/${stage}/reverse-token-keys`;
 /**
  * The image proxy's URL keys (PLAN.md §20.19): the inbound Lambda signs proxy URLs with them and
  * the image proxy Lambda verifies them. Same format, storage and two-step rotation as the
- * reverse-token keys; `scripts/bootstrap-stage.ts` creates it.
+ * reverse-token keys; the `Keyring` action creates it.
  *
  * Removing a key breaks the images of every mail forwarded while it signed, so keep old keys.
  */
@@ -128,7 +137,7 @@ const inboxBucketName = `alias-inbox-${stage}`;
 /**
  * The inbox keys (PLAN.md §20.22.2): they wrap each stored message's data key. Same format,
  * storage and two-step rotation as the reverse-token keys; both the inbound Lambda (wraps) and
- * the API (unwraps) read it. `scripts/bootstrap-stage.ts` creates it.
+ * the API (unwraps) read it. The `Keyring` action creates it.
  *
  * A retired key may be removed 30 days (the longest retention) after it stopped wrapping: no
  * message wrapped with it is left by then. Removing it earlier makes those messages unreadable.
@@ -138,7 +147,7 @@ const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 /**
  * The webhook keys (PLAN.md §20.30): they seal the webhook signing secrets at rest. Same format
  * and storage as the other keyrings; the API (seals on create and rotate) and the delivery Lambda
- * (opens) read it. `scripts/bootstrap-stage.ts` creates it.
+ * (opens) read it. The `Keyring` action creates it.
  *
  * Rotation is the usual two puts (add the new key after the current one, then move it first). A
  * retired key opens every secret sealed with it until each webhook's secret is rotated or the
@@ -180,7 +189,7 @@ const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
  * `CloudFront-Viewer-Address`. A keyring like the others, read by the API at cold start; unlike
  * them, this stack reads it too, at deploy time, because the distribution's origin custom header
  * must carry the current key: the value ends up in the distribution config and the Alchemy state.
- * `scripts/bootstrap-stage.ts` creates it before Alchemy runs.
+ * The `Keyring` action creates it; `OriginSecretHeader` reads it for the header.
  *
  * Rotate in three steps: append the new key (`1:<old>,2:<new>`) and update the API function (any
  * configuration change starts fresh containers that accept both); put it first (`2:<new>,1:<old>`)
@@ -213,53 +222,112 @@ class CertificatePending extends Schema.TaggedError<CertificatePending>()("Certi
   status: Schema.String,
 }) {}
 
-/** ACM in us-east-1 (CloudFront's certificates), with the credentials `scripts/deploy.ts` set. */
-const acmClient = AwsClient.layer({ region: "us-east-1", endpoint: Option.none() });
+/** The keyrings this stack creates (once each, never overwritten) and the functions read. */
+const keyringNames = {
+  reverseTokenKeys: reverseTokenKeysParameter,
+  imageProxyKeys: imageProxyKeysParameter,
+  inboxKeys: inboxKeysParameter,
+  webhookKeys: webhookKeysParameter,
+  originSecrets: originSecretsParameter,
+};
+
+/** What a deploy-time AWS call needs, signed with Alchemy's own credentials (its profile). */
+const awsCalls = (
+  credentials: Effect.Effect<ResolvedCredentials, CredentialsError>,
+  region: RegionName,
+) =>
+  Layer.mergeAll(Layer.succeed(Credentials, credentials), Region.of(region), FetchHttpClient.layer);
 
 /**
- * The app certificate's DNS validation record, once ACM has made it (a few seconds after the
- * request). ACM names it with a trailing dot; Cloudflare wants none.
+ * The work a deploy does that no Alchemy resource models, as Actions: each runs during apply,
+ * after the Outputs it takes, and again only when its input changes. They call AWS with the
+ * credentials Alchemy deploys with, so a deploy needs no other login.
  */
-const CertificateValidationRecord = Alchemy.Action(
-  "CertificateValidationRecord",
-  Effect.fn(function* (input: { certificateArn: string }) {
-    const record = yield* ACM.describeCertificate({ CertificateArn: input.certificateArn }).pipe(
-      Effect.flatMap(({ Certificate }) => {
-        const resource = Certificate?.DomainValidationOptions?.[0]?.ResourceRecord;
-        return resource === undefined
-          ? Effect.fail(new CertificatePending({ status: "no validation record yet" }))
-          : Effect.succeed(resource);
+const deployActions = (credentials: Effect.Effect<ResolvedCredentials, CredentialsError>) => {
+  const ssm = awsCalls(credentials, AwsClient.region);
+  // CloudFront takes certificates from us-east-1 only.
+  const acm = awsCalls(credentials, "us-east-1");
+  return {
+    /**
+     * Creates a keyring parameter with one fresh key (`1:<base64url of 32 random bytes>`,
+     * `Keyring.parse` in `@alias/core`) unless it exists. `PutParameter` without `Overwrite`
+     * refuses an existing name, so a key is never replaced, rotated ones included. The value is
+     * made here and returned nowhere: the Alchemy state holds the name only (the owner's decision).
+     * A parameter deleted later comes back only with `--force`.
+     */
+    Keyring: Alchemy.Action(
+      "Keyring",
+      Effect.fn(function* (input: { name: string }) {
+        yield* SSM.putParameter({
+          Name: input.name,
+          Type: "SecureString",
+          Value: Redacted.make(`1:${randomBytes(32).toString("base64url")}`),
+          Description: "Keyring (PLAN.md §20.14), made once by infra/alchemy.run.ts",
+        }).pipe(
+          Effect.catchTag("ParameterAlreadyExists", () => Effect.void),
+          Effect.provide(ssm),
+        );
+        return { name: input.name };
       }),
-      Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
-      Effect.provide(acmClient),
-    );
-    return { name: record.Name.replace(/\.$/, ""), value: record.Value.replace(/\.$/, "") };
-  }),
-);
-
-/**
- * Waits until ACM reports the certificate `ISSUED` (CloudFront refuses a pending one), about 15
- * minutes at most; Cloudflare answers the validation record right away, so it usually takes a
- * few. Runs again only when its input changes, so later deploys don't wait. Fails on ACM's
- * terminal statuses and when the wait runs out; deploying again resumes it.
- */
-const CertificateIssued = Alchemy.Action(
-  "CertificateIssued",
-  Effect.fn(function* (input: { certificateArn: string; validationRecordId: string }) {
-    yield* ACM.describeCertificate({ CertificateArn: input.certificateArn }).pipe(
-      Effect.flatMap(({ Certificate }) => {
-        const status = Certificate?.Status ?? "unknown";
-        if (status === "ISSUED") return Effect.void;
-        return status === "PENDING_VALIDATION"
-          ? Effect.fail(new CertificatePending({ status }))
-          : Effect.die(new Error(`ACM certificate ${input.certificateArn} is ${status}`));
+    ),
+    /**
+     * The origin custom header's value: the current origin secret. `version` is the parameter's
+     * version seen when planning, so a rotation's "put it first and deploy" runs this again.
+     */
+    OriginSecretHeader: Alchemy.Action(
+      "OriginSecretHeader",
+      Effect.fn(function* (input: { name: string; version: number }) {
+        const keys = yield* Parameters.keyring(input.name).pipe(Effect.provide(ssm));
+        return { header: Redacted.value(OriginSecret.headerValue(keys)) };
       }),
-      Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
-      Effect.provide(acmClient),
-    );
-    return { certificateArn: input.certificateArn };
-  }),
-);
+    ),
+    /**
+     * The app certificate's DNS validation record, once ACM has made it (a few seconds after the
+     * request). ACM names it with a trailing dot; Cloudflare wants none.
+     */
+    CertificateValidationRecord: Alchemy.Action(
+      "CertificateValidationRecord",
+      Effect.fn(function* (input: { certificateArn: string }) {
+        const record = yield* ACM.describeCertificate({
+          CertificateArn: input.certificateArn,
+        }).pipe(
+          Effect.flatMap(({ Certificate }) => {
+            const resource = Certificate?.DomainValidationOptions?.[0]?.ResourceRecord;
+            return resource === undefined
+              ? Effect.fail(new CertificatePending({ status: "no validation record yet" }))
+              : Effect.succeed(resource);
+          }),
+          Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
+          Effect.provide(acm),
+        );
+        return { name: record.Name.replace(/\.$/, ""), value: record.Value.replace(/\.$/, "") };
+      }),
+    ),
+    /**
+     * Waits until ACM reports the certificate `ISSUED` (CloudFront refuses a pending one), about
+     * 15 minutes at most; Cloudflare answers the validation record right away, so it usually takes
+     * a few. Later deploys don't wait. Fails on ACM's terminal statuses and when the wait runs
+     * out; deploying again resumes it.
+     */
+    CertificateIssued: Alchemy.Action(
+      "CertificateIssued",
+      Effect.fn(function* (input: { certificateArn: string; validationRecordId: string }) {
+        yield* ACM.describeCertificate({ CertificateArn: input.certificateArn }).pipe(
+          Effect.flatMap(({ Certificate }) => {
+            const status = Certificate?.Status ?? "unknown";
+            if (status === "ISSUED") return Effect.void;
+            return status === "PENDING_VALIDATION"
+              ? Effect.fail(new CertificatePending({ status }))
+              : Effect.die(new Error(`ACM certificate ${input.certificateArn} is ${status}`));
+          }),
+          Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
+          Effect.provide(acm),
+        );
+        return { certificateArn: input.certificateArn };
+      }),
+    ),
+  };
+};
 
 /**
  * The CloudFront Function on the app's viewer requests: paths without a file extension are the
@@ -368,7 +436,18 @@ export default Alchemy.Stack(
     state: stage === "local" ? localState() : AWS.state(),
   },
   Effect.gen(function* () {
-    const { accountId } = yield* AWS.AWSEnvironment.current;
+    const { accountId, credentials } = yield* AWS.AWSEnvironment.current;
+    const { Keyring, OriginSecretHeader, CertificateValidationRecord, CertificateIssued } =
+      deployActions(credentials);
+    // The keyrings (above). The functions take their names from these Outputs, so none starts
+    // before its keys exist.
+    const keyrings = {
+      reverseTokenKeys: yield* Keyring("ReverseTokenKeys", { name: keyringNames.reverseTokenKeys }),
+      imageProxyKeys: yield* Keyring("ImageProxyKeys", { name: keyringNames.imageProxyKeys }),
+      inboxKeys: yield* Keyring("InboxKeys", { name: keyringNames.inboxKeys }),
+      webhookKeys: yield* Keyring("WebhookKeys", { name: keyringNames.webhookKeys }),
+      originSecrets: yield* Keyring("OriginSecrets", { name: keyringNames.originSecrets }),
+    };
     // Built from the fixed name so the policy is a plain string (Outputs can't be templated here).
     const tableArn = `arn:aws:dynamodb:eu-west-1:${accountId}:table/${tableName}`;
     const spoolObjects = `arn:aws:s3:::${spoolBucketName}/${spoolPrefix}*`;
@@ -625,15 +704,15 @@ export default Alchemy.Stack(
         ALIAS_DOH_URL: dohUrl,
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
         ALIAS_INBOX_BUCKET: inboxBucketName,
-        ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
-        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        ALIAS_INBOX_KEYS_PARAMETER: keyrings.inboxKeys.name,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: keyrings.webhookKeys.name,
         // Mints the reverse alias of a contact the owner adds (PLAN.md §20.33).
-        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: keyrings.reverseTokenKeys.name,
         ALIAS_TURNSTILE_SITE_KEY: turnstile?.sitekey ?? turnstileTestKeys.siteKey,
         ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
         ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
         // Only requests through the distribution are served (PLAN.md §20.26).
-        ALIAS_ORIGIN_SECRETS_PARAMETER: originSecretsParameter,
+        ALIAS_ORIGIN_SECRETS_PARAMETER: keyrings.originSecrets.name,
       },
     });
     // Sign-up's Turnstile secret, read at cold start.
@@ -758,7 +837,7 @@ export default Alchemy.Stack(
       reservedConcurrentExecutions: reservedConcurrency.imageProxy,
       functionUrl: { authType: "AWS_IAM" },
       env: {
-        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: keyrings.imageProxyKeys.name,
         ALIAS_TABLE_NAME: table.tableName,
       },
     });
@@ -806,12 +885,17 @@ export default Alchemy.Stack(
     });
 
     // What the API's origin custom header carries: the current origin secret, read now.
-    const originSecret = yield* Parameters.keyring(originSecretsParameter).pipe(
-      Effect.map((keys) => Redacted.value(OriginSecret.headerValue(keys))),
-      Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint: Option.none() })),
-      // Without it there's nothing to deploy: put the parameter first (above).
+    // Its version now (0 before the first deploy made it), so a rotation re-reads it.
+    const originSecretsVersion = yield* Parameters.secureString(originSecretsParameter).pipe(
+      Effect.map(({ version }) => version),
+      Effect.catchTag("MissingParameter", () => Effect.succeed(0)),
+      Effect.provide(awsCalls(credentials, AwsClient.region)),
       Effect.orDie,
     );
+    const originSecret = yield* OriginSecretHeader({
+      name: keyrings.originSecrets.name,
+      version: originSecretsVersion,
+    });
 
     const spaRoutes = yield* AWS.CloudFront.Function("SpaRoutes", {
       comment: "SPA routes to index.html (PLAN.md §20.26)",
@@ -898,7 +982,7 @@ export default Alchemy.Stack(
           domainName: Output.map(functionUrlHost)(api.functionUrl),
           customOriginConfig: { originProtocolPolicy: "https-only" },
           // What tells the API a request came through here (above).
-          customHeaders: { [CloudFront.ORIGIN_SECRET_HEADER]: originSecret },
+          customHeaders: { [CloudFront.ORIGIN_SECRET_HEADER]: originSecret.header },
           // The API Lambda runs up to 30 s (erasure); CloudFront's default waits 30 s too.
           responseCompletionTimeout: "35 seconds",
         },
@@ -1003,14 +1087,14 @@ export default Alchemy.Stack(
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_SPOOL_BUCKET: spool.bucketName,
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
-        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: keyrings.reverseTokenKeys.name,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
         ALIAS_IMAGE_PROXY_URL: appOrigin,
-        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
+        ALIAS_IMAGE_PROXY_KEYS_PARAMETER: keyrings.imageProxyKeys.name,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
         ALIAS_INBOX_BUCKET: inboxBucketName,
-        ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
+        ALIAS_INBOX_KEYS_PARAMETER: keyrings.inboxKeys.name,
       },
     });
     // Inbox mode and kept failed deliveries (§20.33): put a sealed body, and delete it again when
@@ -1363,7 +1447,7 @@ export default Alchemy.Stack(
       env: {
         ALIAS_TABLE_NAME: table.tableName,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
-        ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        ALIAS_WEBHOOK_KEYS_PARAMETER: keyrings.webhookKeys.name,
       },
     });
     // The webhook keys open endpoint secrets (read once, at cold start).

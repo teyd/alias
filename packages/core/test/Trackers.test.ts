@@ -23,6 +23,7 @@ const forward = (raw: Uint8Array, protection: Mail.Protection) =>
     token: "t0k3n",
     protection,
     imageProxy: signer,
+    edits: Mail.noEdits,
   }).pipe(Effect.provide(NodeCrypto.layer));
 
 const message = (type: string, body: string, ...fields: ReadonlyArray<string>) =>
@@ -309,6 +310,7 @@ describe("Mail.forward on the golden corpus", () => {
       token: "ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc",
       protection,
       imageProxy: signer,
+      edits: Mail.noEdits,
     }).pipe(Effect.provide(NodeCrypto.layer));
 
   /** The input file; a case may reuse another case's message with other settings. */

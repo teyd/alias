@@ -8,10 +8,12 @@ import {
   GlobeIcon,
   InboxIcon,
   LayoutDashboardIcon,
+  ListFilterIcon,
   LogOutIcon,
   MailIcon,
   MenuIcon,
   SettingsIcon,
+  ShieldBanIcon,
 } from "lucide-react";
 import type * as React from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -36,7 +38,15 @@ import { inboxesQuery } from "@/lib/inboxes";
 import { recipientsQuery } from "@/lib/recipients";
 import { forgetSession, meQuery } from "@/lib/session";
 
-type Destination = "/" | "/aliases" | "/inbox" | "/destinations" | "/domains" | "/settings";
+type Destination =
+  | "/"
+  | "/aliases"
+  | "/inbox"
+  | "/destinations"
+  | "/domains"
+  | "/blocklist"
+  | "/rules"
+  | "/settings";
 
 /** How many rows a list holds, once it has loaded. */
 const countOf = <A,>(rows: Option.Option<ReadonlyArray<A>>) => Option.map(rows, Arr.length);
@@ -175,6 +185,20 @@ const NavContent = ({ isClosing }: { readonly isClosing: boolean }) => {
                   icon={<GlobeIcon />}
                   label="Domains"
                   count={domainCount}
+                  isClosing={isClosing}
+                />
+                <NavItem
+                  to="/blocklist"
+                  icon={<ShieldBanIcon />}
+                  label="Blocklist"
+                  count={Option.none()}
+                  isClosing={isClosing}
+                />
+                <NavItem
+                  to="/rules"
+                  icon={<ListFilterIcon />}
+                  label="Rules"
+                  count={Option.none()}
                   isClosing={isClosing}
                 />
               </SidebarMenu>

@@ -113,6 +113,7 @@ const forward = (raw: Uint8Array) =>
     token: "t0k3n",
     protection: { images: "proxy-images", isLinkCleaningEnabled: true },
     imageProxy: signer,
+    edits: Mail.noEdits,
   }).pipe(Effect.provide(NodeCrypto.layer));
 
 const reply = (raw: Uint8Array) =>

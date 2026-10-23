@@ -6,6 +6,7 @@ import {
   ContactRepo,
   DeviceRepo,
   DomainRepo,
+  FilterRepo,
   type Dynamo,
   OAuthRepo,
   OutboxRepo,
@@ -44,6 +45,7 @@ import { OutboxLive } from "./outbox.ts";
 import * as OAuthEndpoints from "./oauth/Endpoints.ts";
 import * as Issuer from "./oauth/Issuer.ts";
 import { RecipientsLive } from "./recipients.ts";
+import { BlocklistLive, RulesLive } from "./rules.ts";
 import type { RelyingParty } from "./RelyingParty.ts";
 import { authenticationLayer } from "./Authentication.ts";
 import { SettingsLive } from "./settings.ts";
@@ -81,6 +83,7 @@ const Repositories = Layer.mergeAll(
   TokenRepo.layer,
   WebhookRepo.layer,
   DomainRepo.layer,
+  FilterRepo.layer,
 );
 
 /**
@@ -125,6 +128,8 @@ const ApiLive = Layer.mergeAll(
     RecipientsLive,
     SettingsLive,
     UsernamesLive,
+    BlocklistLive,
+    RulesLive,
     SecurityLive,
     TokensLive,
     OAuthLive,

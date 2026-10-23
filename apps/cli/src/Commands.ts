@@ -43,6 +43,8 @@ export const CLI_SCOPES = [
   "contacts:read",
   "contacts:write",
   "recipients:read",
+  "rules:read",
+  "rules:write",
   "inboxes:read",
   "inboxes:write",
 ] as const satisfies Arr.NonEmptyReadonlyArray<Scope>;
@@ -503,6 +505,102 @@ const recipients = Command.make("recipients").pipe(
   Command.withSubcommands([listRecipients]),
 );
 
+// --- blocklist and rules ---------------------------------------------------------------------
+
+const senderArgument = Argument.String("sender").pipe(
+  Argument.withDescription(
+    "An address (news@shop.example) or a domain (shop.example, *.shop.example)",
+  ),
+);
+
+/** What the user typed, as the API's entry: an address, or a domain (`*.` for subdomains). */
+const wantedEntry = (sender: string, isSubdomainIncluded: boolean) => ({
+  kind: sender.includes("@") ? ("address" as const) : ("domain" as const),
+  value: sender,
+  isSubdomainIncluded,
+});
+
+const listBlocked = Command.make(
+  "list",
+  { json },
+  Effect.fn("alias.blocklist.list")(function* ({ json: isJson }) {
+    const client = yield* Session.client();
+    const entries = yield* client.blocklist.list();
+    yield* Output.rows(
+      isJson,
+      ["entry", "kind"],
+      Arr.map(entries, (entry) => ({ entry: entry.id, kind: entry.kind })),
+      "Nobody is blocked.",
+    );
+  }, forUser),
+).pipe(Command.withDescription("List the senders blocked on every alias"), Command.withAlias("ls"));
+
+const addBlocked = Command.make(
+  "add",
+  {
+    sender: senderArgument,
+    isSubdomainIncluded: Flag.Boolean("subdomains").pipe(
+      Flag.withDescription("For a domain: block its subdomains too"),
+      Flag.withDefault(false),
+    ),
+  },
+  Effect.fn("alias.blocklist.add")(function* ({ sender, isSubdomainIncluded }) {
+    const client = yield* Session.client();
+    const entry = yield* client.blocklist.add({
+      payload: wantedEntry(sender, isSubdomainIncluded),
+    });
+    yield* Console.log(`Blocked ${entry.id}: its mail to any of your aliases is dropped.`);
+  }, forUser),
+).pipe(Command.withDescription("Block a sender address or domain on every alias"));
+
+const removeBlocked = Command.make(
+  "remove",
+  { sender: senderArgument },
+  Effect.fn("alias.blocklist.remove")(function* ({ sender }) {
+    const client = yield* Session.client();
+    const entryId = Str.toLowerCase(Str.trim(sender));
+    yield* client.blocklist.remove({ params: { entryId } });
+    yield* Console.log(`Unblocked ${entryId}.`);
+  }, forUser),
+).pipe(Command.withDescription("Let a blocked sender through again"), Command.withAlias("rm"));
+
+const blocklist = Command.make("blocklist").pipe(
+  Command.withDescription("Senders blocked on every alias"),
+  Command.withSubcommands([listBlocked, addBlocked, removeBlocked]),
+);
+
+const listRules = Command.make(
+  "list",
+  { json },
+  Effect.fn("alias.rules.list")(function* ({ json: isJson }) {
+    const client = yield* Session.client();
+    const rules = yield* client.rules.list();
+    yield* Output.rows(
+      isJson,
+      ["name", "enabled", "conditions", "actions"],
+      Arr.map(rules, (rule) => ({
+        id: rule.id,
+        name: rule.name,
+        enabled: rule.isEnabled,
+        conditions: rule.conditions.length,
+        actions: Arr.join(
+          Arr.map(rule.actions, (action) => action.type),
+          ", ",
+        ),
+      })),
+      "No rules yet: write them in the web app.",
+    );
+  }, forUser),
+).pipe(
+  Command.withDescription("List your rules, in the order they apply"),
+  Command.withAlias("ls"),
+);
+
+const rules = Command.make("rules").pipe(
+  Command.withDescription("Your rules"),
+  Command.withSubcommands([listRules]),
+);
+
 // --- temp ---------------------------------------------------------------------------------------
 
 /** The API's longest long poll (`MAX_WAIT_SECONDS`); the CLI waits longer by asking again. */
@@ -586,5 +684,15 @@ const temp = Command.make(
 /** `alias`: the whole command line. */
 export const alias = Command.make("alias").pipe(
   Command.withDescription("Email aliases from the terminal"),
-  Command.withSubcommands([login, logout, whoami, aliases, contacts, recipients, temp]),
+  Command.withSubcommands([
+    login,
+    logout,
+    whoami,
+    aliases,
+    contacts,
+    blocklist,
+    rules,
+    recipients,
+    temp,
+  ]),
 );

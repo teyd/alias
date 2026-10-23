@@ -1,6 +1,9 @@
 import {
   AliasNotFound,
   AliasTaken,
+  BlocklistEntryNotFound,
+  BlocklistFull,
+  InvalidBlocklistEntry,
   ContactNotFound,
   DeviceLogin,
   Forbidden,
@@ -90,6 +93,13 @@ const describe = <E>(error: E): string => {
       "unterminated-quote": "The file has a quote that never closes.",
     }[error.reason];
   }
+  if (error instanceof InvalidBlocklistEntry) {
+    return error.reason === "invalid-address"
+      ? "That isn't an address like name@domain."
+      : "That isn't a domain like shop.example.";
+  }
+  if (error instanceof BlocklistFull) return `You can block up to ${error.limit} senders.`;
+  if (error instanceof BlocklistEntryNotFound) return `${error.entryId} isn't blocked.`;
   if (error instanceof InvalidAddress) return `${error.input} isn't an address like name@domain.`;
   if (error instanceof NotConfirmed) {
     return "Not deleted. Pass --yes to delete the alias and its contacts for good.";

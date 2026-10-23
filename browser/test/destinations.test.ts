@@ -95,7 +95,7 @@ describe("destinations and contacts in the web app", () => {
               .getByRole("row", { name: address })
               .getByRole("button", { name: "Contacts" })
               .click();
-            await contact.getByRole("button", { name: "Block" }).click();
+            await contact.getByRole("button", { name: "Block", exact: true }).click();
             await contact.getByRole("button", { name: "Unblock" }).waitFor();
           });
           expect(yield* api(page, contactsPath, Contacts)).toEqual([
@@ -107,7 +107,7 @@ describe("destinations and contacts in the web app", () => {
           yield* ui(async () => {
             await page.reload();
             await contact.getByRole("button", { name: "Unblock" }).click();
-            await contact.getByRole("button", { name: "Block" }).waitFor();
+            await contact.getByRole("button", { name: "Block", exact: true }).waitFor();
           });
           expect(yield* api(page, contactsPath, Contacts)).toEqual([
             { address: "orders@store.example", isBlocked: false },

@@ -9,6 +9,7 @@ import { AliasLabel, LabelsGroup } from "./Labels.ts";
 import { requires } from "./Scopes.ts";
 import { DomainsGroup } from "./Domains.ts";
 import { RecipientsGroup } from "./Recipients.ts";
+import { BlocklistGroup, RulesGroup } from "./Rules.ts";
 import { SecurityGroup } from "./Security.ts";
 import { SettingsGroup } from "./Settings.ts";
 import { TokensGroup } from "./Tokens.ts";
@@ -364,6 +365,8 @@ export const Api = HttpApi.make("alias")
   .add(DomainsGroup)
   .add(SettingsGroup)
   .add(UsernamesGroup)
+  .add(BlocklistGroup)
+  .add(RulesGroup)
   .add(SecurityGroup)
   .add(TokensGroup)
   .add(WebhooksGroup)

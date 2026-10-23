@@ -9,6 +9,7 @@ import * as Ref from "effect/Ref";
 import * as Str from "effect/String";
 import * as Address from "./Address.ts";
 import * as ImageProxy from "./ImageProxy.ts";
+import * as Rules from "./Rules.ts";
 import { decode as decodeWords } from "./internal/encodedWords.ts";
 import * as Headers from "./internal/headers.ts";
 import * as Mime from "./internal/mime.ts";
@@ -152,6 +153,32 @@ const protectPart = Effect.fn("Mail.protectPart")(function* (
 
 export type Protection = Trackers.Protection;
 
+/** What the owner's rules change in a forwarded message (PLAN.md §20.32). */
+export interface Edits {
+  readonly subject: Option.Option<Rules.SubjectChange>;
+  /** Shown in `From` instead of the sender's name and address. */
+  readonly displayName: Option.Option<string>;
+}
+
+export const noEdits: Edits = { subject: Option.none(), displayName: Option.none() };
+
+/** A real subject is shorter; RFC 5322 §2.1.1 lets a line run to 998 octets. */
+const MAX_SUBJECT_CODE_POINTS = 500;
+
+/** The `Subject` field `change` makes of the message's first one (decoded for the reader). */
+const subjectField = (message: Headers.Message, change: Rules.SubjectChange) => {
+  const original = Arr.findFirst(message.fields, (field) => field.name === "subject").pipe(
+    Option.map((field) => decodeWords(Headers.text(field))),
+    Option.getOrElse(() => ""),
+  );
+  return textField(
+    "Subject",
+    Rules.changeSubject(change, original),
+    message.lineEnding,
+    MAX_SUBJECT_CODE_POINTS,
+  );
+};
+
 /** The first token of a structured value, without `;` parameters or `(comments)`, lowercased. */
 const token = (value: string) =>
   value
@@ -198,6 +225,9 @@ const isReplyRemoved = (field: Headers.Field) =>
  * by `imageProxy` (PLAN.md §20.19). Only parts that change are re-encoded (in their own transfer
  * encoding), and `X-Alias-Trackers-Removed`, `X-Alias-Links-Cleaned` and
  * `X-Alias-Images-Proxied: <n>` say what changed.
+ *
+ * `edits` come from the owner's rules: a new or prefixed `Subject` (every incoming `Subject`
+ * field gives way to one), and a display name for `From` and `Reply-To` instead of the sender's.
  */
 export const forward = Effect.fn("Mail.forward")(function* (
   raw: Uint8Array,
@@ -208,6 +238,7 @@ export const forward = Effect.fn("Mail.forward")(function* (
     readonly protection: Protection;
     /** Signs for the alias's mail, so proxied images spend its owner's budget. */
     readonly imageProxy: ImageProxy.AliasSigner;
+    readonly edits: Edits;
   },
 ) {
   const changes = yield* Ref.make(Trackers.noChanges);
@@ -226,26 +257,39 @@ export const forward = Effect.fn("Mail.forward")(function* (
   );
   const { trackers, links, proxied } = yield* Ref.get(changes);
   const senderAddress = sanitize(options.sender.address);
-  const display = options.sender.name.pipe(
-    Option.map(sanitize),
+  const display = Option.match(
     Option.filter(
-      (name) => Str.isNonEmpty(name) && name.toLowerCase() !== senderAddress.toLowerCase(),
+      Option.map(options.edits.displayName, (name) => sanitize(name)),
+      Str.isNonEmpty,
     ),
-    Option.match({
-      onNone: () => senderAddress,
-      onSome: (name) => `${name} (${senderAddress})`,
-    }),
+    {
+      onSome: (name) => name,
+      onNone: () =>
+        options.sender.name.pipe(
+          Option.map((name) => sanitize(name)),
+          Option.filter(
+            (name) => Str.isNonEmpty(name) && name.toLowerCase() !== senderAddress.toLowerCase(),
+          ),
+          Option.match({
+            onNone: () => senderAddress,
+            onSome: (name) => `${name} (${senderAddress})`,
+          }),
+        ),
+    },
   );
+  const subject = Option.map(options.edits.subject, (change) => subjectField(message, change));
   const reverse = Address.format(Address.reverseAddress(options.alias, options.token));
   const alias = Address.format(options.alias);
   // The alias's own earlier marker is replaced, so forwarding a forwarded copy changes nothing.
   const isRemoved = (field: Headers.Field) =>
     isAlwaysRemoved(field) ||
     HashSet.has(PROTECTION_FIELDS, field.name) ||
+    (field.name === "subject" && Option.isSome(subject)) ||
     (field.name === FORWARD_MARKER.toLowerCase() && token(Headers.value(field)) === alias);
   return Headers.rewrite(message, isRemoved, [
     mailboxField("From", display, reverse, message.lineEnding),
     mailboxField("Reply-To", display, reverse, message.lineEnding),
+    ...Option.toArray(subject),
     `${FORWARD_MARKER}: ${alias}`,
     ...(trackers > 0 ? [`${TRACKERS_REMOVED}: ${trackers}`] : []),
     ...(links > 0 ? [`${LINKS_CLEANED}: ${links}`] : []),

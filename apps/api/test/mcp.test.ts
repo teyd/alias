@@ -18,6 +18,8 @@ const allScopes = [
   "aliases:write",
   "contacts:read",
   "contacts:write",
+  "rules:read",
+  "rules:write",
   "mail:send",
   "inboxes:write",
   "inboxes:read",
@@ -144,6 +146,8 @@ describe("MCP endpoint (API handler on fakecloud)", () => {
         "set_alias_details",
         "list_contacts",
         "block_contact",
+        "list_blocklist",
+        "block_sender",
         "send_mail",
         "get_send_status",
         "create_temp_inbox",
@@ -346,6 +350,36 @@ describe("MCP endpoint (API handler on fakecloud)", () => {
         isBlocked: false,
       });
       expect(unblocked.body).toMatchObject({ result: { structuredContent: { isBlocked: false } } });
+    }),
+  );
+
+  it.effect("blocks a sender on every alias and unblocks it", () =>
+    Effect.gen(function* () {
+      const { api, token } = yield* connected(["rules:read", "rules:write"]);
+      const blocked = yield* Mcp.callTool(api, token, "block_sender", {
+        sender: "Shop.example",
+        isSubdomainIncluded: true,
+      });
+      expect(blocked.body).toMatchObject({
+        result: { structuredContent: { entry: "*.shop.example", isBlocked: true } },
+      });
+      yield* Mcp.callTool(api, token, "block_sender", { sender: "spam@x.example" });
+      const listed = yield* Mcp.callTool(api, token, "list_blocklist");
+      expect(listed.body).toMatchObject({
+        result: { structuredContent: { entries: ["*.shop.example", "spam@x.example"] } },
+      });
+      const unblocked = yield* Mcp.callTool(api, token, "block_sender", {
+        sender: "*.shop.example",
+        isBlocked: false,
+      });
+      expect(unblocked.body).toMatchObject({
+        result: { structuredContent: { entry: "*.shop.example", isBlocked: false } },
+      });
+      const missing = yield* Mcp.callTool(api, token, "block_sender", {
+        sender: "*.shop.example",
+        isBlocked: false,
+      });
+      expect(textOf(missing.body).content[0].text).toContain("BlocklistEntryNotFound");
     }),
   );
 

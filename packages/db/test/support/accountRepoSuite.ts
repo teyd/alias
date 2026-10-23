@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as R from "effect/Record";
+import * as Result from "effect/Result";
 import * as Str from "effect/String";
 import {
   AccountRepo,
@@ -20,6 +21,7 @@ import {
   ContactRepo,
   DomainRepo,
   Dynamo,
+  FilterRepo,
   OAuthRepo,
   OutboxRepo,
   MessageRepo,
@@ -39,6 +41,7 @@ const repos = Layer.mergeAll(
   AliasRepo.layer,
   ContactRepo.layer,
   DomainRepo.layer,
+  FilterRepo.layer,
   OAuthRepo.layer,
   OutboxRepo.layer,
   MessageRepo.layer,
@@ -55,6 +58,7 @@ type Repos =
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
   | DomainRepo.DomainRepo
+  | FilterRepo.FilterRepo
   | OAuthRepo.OAuthRepo
   | OutboxRepo.OutboxRepo
   | MessageRepo.MessageRepo
@@ -87,7 +91,7 @@ const scan = Effect.fn("scan")(function* () {
 /**
  * One user with one of everything the service stores about a user: sessions, tokens, a connected
  * app (its grant, a used and a current refresh token, two access tokens, the redeemed code and
- * one waiting), a drafted email and a day's send count, settings, a recipient, a creation quota, a custom domain, an
+ * one waiting), a drafted email and a day's send count, settings, a blocklist and rules, a recipient, a creation quota, a custom domain, an
  * additional username with its settings, live and deleted aliases on a shared domain, on their
  * subdomains and on their custom domain (with descriptions, labels and chosen recipients), a
  * label colour, contacts, counters, a deletion that stopped halfway, and
@@ -228,6 +232,25 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
       sealedSecret: new TextEncoder().encode("sealed"),
       createdAt: at(1_000),
     }),
+  );
+  // Their blocklist and rules (PLAN.md §20.32): one item, naming a third party.
+  yield* FilterRepo.FilterRepo.use((filters) =>
+    Effect.andThen(filters.block(userId, `spam@${name}-sender.example`, 10), () =>
+      filters.updateRules(userId, () =>
+        Result.succeed([
+          {
+            id: `rl_${name}`,
+            name: "Shop",
+            isEnabled: true,
+            match: "all",
+            conditions: [
+              { field: "sender", match: "equals", value: "x@shop.example", isNegated: false },
+            ],
+            actions: [{ type: "block" }],
+          },
+        ]),
+      ),
+    ),
   );
   yield* users.updateSettings(userId, {
     isOnTheFlyEnabled: true,
@@ -432,6 +455,11 @@ export const accountRepoSuite = (
             expect(yield* usernames.findOwner("ada-work")).toEqual(Option.none());
             expect(yield* usernames.listByUser("usr_ada")).toEqual([]);
             expect(yield* users.findById("usr_ada")).toEqual(Option.none());
+            // So are her blocklist and rules.
+            expect(yield* (yield* FilterRepo.FilterRepo).find("usr_ada")).toEqual({
+              blocklist: [],
+              rules: [],
+            });
             // Settings (on the fly, tracker protection) are gone too: only defaults are left.
             expect(yield* users.settings("usr_ada")).toEqual({
               isOnTheFlyEnabled: false,

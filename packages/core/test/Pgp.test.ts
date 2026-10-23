@@ -94,6 +94,7 @@ const forwarded = (eol: string) =>
     token: "ceaqyyzlmfuwyqdcfzswqylnobwgkc5o6ccdy2xqc",
     protection: { images: "block-trackers", isLinkCleaningEnabled: true },
     imageProxy: signer,
+    edits: Mail.noEdits,
   }).pipe(Effect.provide(NodeCrypto.layer));
 
 const headerNames = (data: Uint8Array) => split(data).fields.map((field) => field.name);

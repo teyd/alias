@@ -40,6 +40,10 @@ export const DropReason = Schema.Literals([
   "unencodable-sender",
   // Mail from a contact the owner blocked, or a reply to one.
   "blocked-contact",
+  // A sender on the owner's blocklist, for every alias of theirs, or a reply to one (§20.32).
+  "blocked-sender",
+  // One of the owner's rules blocks it (PLAN.md §20.32).
+  "rule-blocked",
   // A reverse alias whose token we didn't sign for this alias.
   "bad-token",
   // A reverse alias whose contact was deleted.
@@ -126,6 +130,25 @@ export const forwardTargets = (
     Arr.of,
   );
 };
+
+/**
+ * The destination a rule's `forward-to` chose (PLAN.md §20.32), while it is one of the owner's
+ * recipients, verified and not bouncing. It replaces the alias's own recipients
+ * ({@link forwardTargets}) for that message; otherwise those apply, so a stale rule loses no mail.
+ */
+export const ruleTarget = (
+  recipients: ReadonlyArray<RecipientRepo.Recipient>,
+  chosen: Option.Option<string>,
+): Option.Option<RecipientRepo.Recipient> =>
+  Option.flatMap(chosen, (recipientId) =>
+    Arr.findFirst(
+      recipients,
+      (recipient) =>
+        recipient.id === recipientId &&
+        Option.isSome(recipient.verifiedAt) &&
+        Option.isNone(recipient.bouncedAt),
+    ),
+  );
 
 /** RFC 5321 §4.5.3.1.3: a path holds at most 256 octets, so an address at most 254. */
 const MAX_ADDRESS_BYTES = 254;

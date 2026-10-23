@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { contactsQuery, removeContact, setBlocked } from "@/lib/contacts";
+import { blockSender, blocklistQuery } from "@/lib/rules";
 
 const ContactRow = ({
   aliasAddress,
@@ -35,7 +36,12 @@ const ContactRow = ({
     mutationFn: () => removeContact(aliasAddress, contact.id),
     onSettled: refresh,
   });
-  const isBusy = block.isPending || remove.isPending;
+  // The blocklist (PLAN.md §20.32): this sender, on every alias.
+  const blockEverywhere = useMutation({
+    mutationFn: () => blockSender(contact.address, false),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: blocklistQuery.queryKey }),
+  });
+  const isBusy = block.isPending || remove.isPending || blockEverywhere.isPending;
 
   return (
     <li className="flex flex-col gap-2 bg-card p-3">
@@ -68,11 +74,19 @@ const ContactRow = ({
         >
           {contact.isBlocked ? "Unblock" : "Block"}
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isBusy || blockEverywhere.isSuccess}
+          onClick={() => blockEverywhere.mutate()}
+        >
+          {blockEverywhere.isSuccess ? "Blocked everywhere" : "Block everywhere"}
+        </Button>
         <Button variant="ghost" size="sm" disabled={isBusy} onClick={() => remove.mutate()}>
           Remove
         </Button>
       </div>
-      <Problem error={block.error ?? remove.error} />
+      <Problem error={block.error ?? remove.error ?? blockEverywhere.error} />
     </li>
   );
 };

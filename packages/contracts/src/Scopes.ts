@@ -10,6 +10,9 @@ import * as Schema from "effect/Schema";
  * by itself: every draft waits for the signed-in owner to send it from the web app (PLAN.md
  * §20.24), and no HTTP endpoint takes it.
  *
+ * `rules:read` and `rules:write` cover the blocklist and the rules (PLAN.md §20.32), which name
+ * third parties' addresses like contacts do.
+ *
  * `inboxes:read` and `inboxes:write` reach stored mail and temporary inboxes alone (PLAN.md
  * §20.22), so an assistant or a CI job can hold a "temp-only" token.
  */
@@ -24,6 +27,8 @@ export const Scope = Schema.Literals([
   "inboxes:write",
   "recipients:read",
   "recipients:write",
+  "rules:read",
+  "rules:write",
   "settings:read",
   "settings:write",
   "usernames:read",

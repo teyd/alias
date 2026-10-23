@@ -6,6 +6,7 @@ export * from "./OAuth.ts";
 export * from "./Outbox.ts";
 export * from "./Inboxes.ts";
 export * from "./Recipients.ts";
+export * from "./Rules.ts";
 export * from "./Scopes.ts";
 export * from "./Security.ts";
 export * from "./Settings.ts";

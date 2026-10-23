@@ -12,6 +12,8 @@ export const SCOPE_LABELS: Record<Scope, string> = {
   "inboxes:write": "Create temporary inboxes and delete kept mail",
   "recipients:read": "See your forwarding addresses",
   "recipients:write": "Add and remove forwarding addresses",
+  "rules:read": "See your blocklist and rules (they may name senders' addresses)",
+  "rules:write": "Block senders everywhere, and create, change and delete rules",
   "settings:read": "See your account settings",
   "settings:write": "Change your account settings",
   "usernames:read": "See your usernames and their settings",

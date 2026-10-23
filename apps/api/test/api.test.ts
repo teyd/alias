@@ -162,7 +162,8 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
     Effect.gen(function* () {
       const { browser: open } = yield* api;
       const browser = open();
-      const options = (username: string) => browser.post("/v1/auth/register/options", { username });
+      const options = (username: string) =>
+        browser.post("/v1/auth/register/options", { ...TestApi.human, username });
 
       expect(yield* options("admin")).toMatchObject({
         status: 400,
@@ -188,7 +189,7 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
       const [first, second] = [open(), open()];
       const start = (browser: Browser.Client) =>
         browser
-          .post("/v1/auth/register/options", { username: "linus" })
+          .post("/v1/auth/register/options", { ...TestApi.human, username: "linus" })
           .pipe(
             Effect.map((response) =>
               Schema.decodeUnknownSync(RegistrationChallenge)(response.body),
@@ -215,7 +216,10 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
       const { browser: open } = yield* api;
       const browser = open();
       const authenticator = TestAuthenticator.make(Browser.origin);
-      const started = yield* browser.post("/v1/auth/register/options", { username: "edsger" });
+      const started = yield* browser.post("/v1/auth/register/options", {
+        ...TestApi.human,
+        username: "edsger",
+      });
       const { challengeId, options } = Schema.decodeUnknownSync(RegistrationChallenge)(
         started.body,
       );
@@ -230,6 +234,7 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
 
       // A login answer sent against a registration challenge is refused.
       const registration = yield* browser.post("/v1/auth/register/options", {
+        ...TestApi.human,
         username: "barbara",
       });
       const wrongCeremony = Schema.decodeUnknownSync(RegistrationChallenge)(registration.body);
@@ -261,7 +266,10 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
 
       // A phishing page on another origin relaying our challenge.
       const phished = TestAuthenticator.make("https://alias-login.example");
-      const started = yield* browser.post("/v1/auth/register/options", { username: "mallory" });
+      const started = yield* browser.post("/v1/auth/register/options", {
+        ...TestApi.human,
+        username: "mallory",
+      });
       const { challengeId, options } = Schema.decodeUnknownSync(RegistrationChallenge)(
         started.body,
       );
@@ -322,6 +330,8 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
         ["me@example.org", "unknown-domain"],
         ["a@x.ada.alias.test", "unknown-domain"],
         ["shop+r.abc@ada.alias.test", "reserved-local-part"],
+        ["abuse@ada.alias.test", "role-address"],
+        ["Postmaster@ada.alias2.test", "role-address"],
       ] as const;
       const responses = yield* Effect.forEach(
         cases,

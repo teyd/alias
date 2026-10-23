@@ -1,0 +1,18 @@
+{
+  "request": {
+    "form": {
+      "secret": "1x0000000000000000000000000000000AA",
+      "response": "notadummytoken"
+    }
+  },
+  "status": 200,
+  "body": {
+    "challenge_ts": "2026-10-22T23:06:42.334Z",
+    "error-codes": [],
+    "hostname": "example.com",
+    "metadata": {
+      "result_with_testing_key": true
+    },
+    "success": true
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "request": {
+    "raw-json": "{nope"
+  },
+  "status": 400,
+  "body": {
+    "error-codes": ["bad-request"],
+    "success": false,
+    "messages": ["The request body could not be parsed as JSON."]
+  }
+}

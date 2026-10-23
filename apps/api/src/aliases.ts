@@ -115,8 +115,12 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
   }
   return yield* Address.Destination.$match(Address.classify(address, shared), {
     SharedRandom: () => invalid(requested, "random-only-on-shared-domain"),
-    UserSubdomain: ({ username }) =>
-      username === user.username ? insert(address, mode) : invalid(requested, "not-your-subdomain"),
+    UserSubdomain: ({ username }) => {
+      if (username !== user.username) return invalid(requested, "not-your-subdomain");
+      // The subdomain is the user's, but abuse@ and postmaster@ on it are about our domain.
+      if (Address.isRoleLocal(address.local)) return invalid(requested, "role-address");
+      return insert(address, mode);
+    },
     Custom: () => createOnCustom(address, requested, mode),
   });
 });

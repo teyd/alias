@@ -755,6 +755,24 @@ describe("inbound pipeline (fakecloud)", () => {
     ),
   );
 
+  it.effect("never creates an alias for a role mailbox on the subdomain (RFC 2142)", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* subdomainOwner(true);
+        const { event } = yield* receive({
+          recipients: ["abuse@user1.alias.test", "Postmaster@user1.alias.test"],
+        });
+
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* AliasRepo.AliasRepo.use((repo) => repo.listByUser("usr_1"))).toEqual([]);
+        expect(yield* sent).toEqual([]);
+      }),
+    ),
+  );
+
   it.effect("never creates an alias for spam, a virus or a reverse alias", () =>
     withPipeline(
       Effect.gen(function* () {

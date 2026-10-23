@@ -1,0 +1,9 @@
+import { defineConfig } from "vite-plus";
+
+export default defineConfig({
+  test: {
+    name: "turnstile:unit",
+    include: ["test/**/*.test.ts"],
+    environment: "node",
+  },
+});

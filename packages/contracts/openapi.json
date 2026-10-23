@@ -45,6 +45,50 @@
         "summary": "Health check"
       }
     },
+    "/v1/auth/signup": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth.signup",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "turnstile": {
+                      "type": "object",
+                      "properties": {
+                        "siteKey": {
+                          "type": "string"
+                        },
+                        "scriptUrl": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "siteKey",
+                        "scriptUrl"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "turnstile"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/register/options": {
       "post": {
         "tags": [
@@ -240,11 +284,28 @@
             }
           },
           "400": {
-            "description": "InvalidUsername",
+            "description": "InvalidUsername | HumanCheckFailed",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidUsernameEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidUsernameEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HumanCheckFailedEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossSiteRequestEncoded"
                 }
               }
             }
@@ -258,6 +319,26 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SignupUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupUnavailableEncoded"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -268,10 +349,14 @@
                 "properties": {
                   "username": {
                     "type": "string"
+                  },
+                  "turnstileToken": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "username"
+                  "username",
+                  "turnstileToken"
                 ],
                 "additionalProperties": false
               }
@@ -324,12 +409,42 @@
               }
             }
           },
+          "403": {
+            "description": "CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                }
+              }
+            }
+          },
           "409": {
             "description": "UsernameTaken",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UsernameTakenEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SignupUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupUnavailableEncoded"
                 }
               }
             }
@@ -529,6 +644,26 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
           }
         },
         "summary": "Start a passkey login"
@@ -572,6 +707,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PasskeyRejectedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
                 }
               }
             }
@@ -9345,7 +9500,8 @@
               "not-your-subdomain",
               "domain-not-verified",
               "random-only-on-shared-domain",
-              "reserved-local-part"
+              "reserved-local-part",
+              "role-address"
             ]
           }
         },
@@ -9381,6 +9537,29 @@
         ],
         "additionalProperties": false
       },
+      "SignupUnavailableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "SignupUnavailable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "paused",
+              "human-check-unavailable"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
       "UsernameTakenEncoded": {
         "type": "object",
         "properties": {
@@ -9397,6 +9576,21 @@
         "required": [
           "_tag",
           "username"
+        ],
+        "additionalProperties": false
+      },
+      "HumanCheckFailedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "HumanCheckFailed"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
         ],
         "additionalProperties": false
       },

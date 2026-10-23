@@ -68,7 +68,11 @@ export class Forbidden extends Schema.TaggedError<Forbidden>()(
   { httpApiStatus: 403 },
 ) {}
 
-/** Too many failed token attempts from this client lately; wait and try again. */
+/**
+ * Too many attempts lately: failed tokens or device codes from this client, sign-up or login
+ * challenges from this client, accounts created from this client, or failed logins to this
+ * account. Wait and try again (the windows are an hour, a day for accounts).
+ */
 export class TooManyAttempts extends Schema.TaggedError<TooManyAttempts>()(
   "TooManyAttempts",
   {},

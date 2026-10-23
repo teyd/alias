@@ -62,6 +62,47 @@ export const parse = Effect.fn("Address.parse")(function* (input: string) {
   return address;
 });
 
+/**
+ * Role mailboxes no alias may take on a domain the service runs (a user's subdomain of a shared
+ * domain): RFC 2142's (business: `info`, `marketing`, `sales`, `support`; network operations:
+ * `abuse`, `noc`, `security`; services: `postmaster`, `hostmaster`, `usenet`, `news`,
+ * `webmaster`, `www`, `uucp`, `ftp`), the mailer daemon, and the addresses certificate
+ * authorities mail to prove control of a domain (CA/Browser Forum Baseline Requirements
+ * §3.2.2.4.4: `admin`, `administrator`, `webmaster`, `hostmaster`, `postmaster`). Mail to them is
+ * about the domain, which we answer for, not the user. Custom domains are their owner's, and
+ * their owner may give these addresses to aliases.
+ */
+const ROLE_LOCAL_PARTS: ReadonlyArray<string> = [
+  "info",
+  "marketing",
+  "sales",
+  "support",
+  "abuse",
+  "noc",
+  "security",
+  "postmaster",
+  "hostmaster",
+  "usenet",
+  "news",
+  "webmaster",
+  "www",
+  "uucp",
+  "ftp",
+  "mailer-daemon",
+  "admin",
+  "administrator",
+  "root",
+];
+
+/**
+ * True for a {@link ROLE_LOCAL_PARTS role mailbox}, with or without a `+detail` (`abuse+x`) and
+ * in any letter case.
+ */
+export const isRoleLocal = (local: string): boolean => {
+  const plus = local.indexOf("+");
+  return Arr.contains(ROLE_LOCAL_PARTS, Str.toLowerCase(plus < 0 ? local : local.slice(0, plus)));
+};
+
 /** Lowercase letters and digits without the lookalikes `0`, `1`, `i`, `l` and `o`: 31 symbols. */
 const RANDOM_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 const RANDOM_LENGTH = 10;

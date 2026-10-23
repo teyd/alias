@@ -50,10 +50,17 @@ describe("Username.parse", () => {
   it.effect("reserves infrastructure, role and brand names, and their lookalikes", () =>
     Effect.gen(function* () {
       const names = ["www", "mail", "admin", "api", "postmaster", "paypal", "alias"];
+      // Every RFC 2142 mailbox name long enough to be a username, and the mailer daemon.
+      const roles = ["info", "marketing", "sales", "support", "abuse", "noc", "security"];
+      const services = ["hostmaster", "usenet", "news", "webmaster", "uucp", "ftp"];
       const lookalikes = ["adm1n", "paypa1", "rnail", "g00gle", "no-reply", "pay-pal"];
-      const reasons = yield* Effect.forEach([...names, ...lookalikes], reason, {
-        concurrency: "unbounded",
-      });
+      const reasons = yield* Effect.forEach(
+        [...names, ...roles, ...services, "mailer-daemon", ...lookalikes],
+        reason,
+        {
+          concurrency: "unbounded",
+        },
+      );
       expect(Arr.dedupe(reasons)).toEqual(["reserved"]);
     }),
   );

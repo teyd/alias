@@ -13,6 +13,7 @@
     "@alias/e2e": "workspace:*",
     "@alias/inbound": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
+    "@alias/turnstile-emulator": "workspace:*",
     "@alias/web": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",

@@ -393,6 +393,8 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   address: Address.MailAddress,
   username: string,
 ) {
+  // Role mailboxes on a user's subdomain are never aliases (PLAN.md §20.27).
+  if (Address.isRoleLocal(address.local)) return Result.fail<Policy.DropReason>("unknown-alias");
   const users = yield* UserRepo.UserRepo;
   const owner = yield* users.findByUsername(username);
   if (Option.isNone(owner)) return Result.fail<Policy.DropReason>("unknown-alias");

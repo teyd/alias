@@ -6,6 +6,7 @@ import { DohServer } from "@alias/doh-emulator";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Feedback, Pipeline } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
+import { TestKeys } from "@alias/turnstile-emulator";
 import { Receiver } from "@alias/webhooks/testing";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as SESV2 from "@distilled.cloud/aws/sesv2";
@@ -101,7 +102,9 @@ const postForm = (path: string, fields: Readonly<Record<string, string>>) =>
 const signUp = (username: string) =>
   Effect.gen(function* () {
     const authenticator = TestAuthenticator.make(origin);
-    const started = yield* call("/v1/auth/register/options", { body: { username } });
+    const started = yield* call("/v1/auth/register/options", {
+      body: { username, turnstileToken: TestKeys.DUMMY_TOKEN },
+    });
     const registered = yield* call("/v1/auth/register", {
       body: {
         challengeId: started.body.challengeId,
@@ -1247,7 +1250,9 @@ describe("emulated stack", () => {
 
         expect((yield* call("/v1/me", { cookie: moe.cookie })).status).toBe(401);
         expect(
-          yield* call("/v1/auth/register/options", { body: { username: "moe" } }),
+          yield* call("/v1/auth/register/options", {
+            body: { username: "moe", turnstileToken: TestKeys.DUMMY_TOKEN },
+          }),
         ).toMatchObject({ status: 409, body: { _tag: "UsernameTaken" } });
         expect(yield* invoke(yield* write())).toEqual([
           { _tag: "Dropped", reason: "unknown-alias" },

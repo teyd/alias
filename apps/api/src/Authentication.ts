@@ -53,9 +53,11 @@ const isJson = (contentType: string) =>
  * origin where it says anything, and say at least one of them. A body must be JSON: HttpApi
  * decodes a body without `Content-Type` as JSON, which would let a cross-site
  * `fetch(…, { mode: "no-cors", body: blob })`, a "simple" request, reach a JSON endpoint. The body
- * text is cached by the request, so the payload decoder reads the same text afterwards.
+ * text is cached by the request, so the payload decoder reads the same text afterwards. Sign-up
+ * and login, which have no session yet, run it too (`auth.ts`): their challenges count against
+ * the caller's address, so another site must not spend that budget for its visitors.
  */
-const requireSameOrigin = Effect.fn("Authentication.requireSameOrigin")(function* (
+export const requireSameOrigin = Effect.fn("Authentication.requireSameOrigin")(function* (
   appOrigin: string,
 ) {
   const request = yield* HttpServerRequest.HttpServerRequest;

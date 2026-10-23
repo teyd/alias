@@ -106,6 +106,35 @@ describe("sign-up and login abuse protection (PLAN.md §20.27)", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("serves sign-up and login only to the web app's own origin", () =>
+    Effect.gen(function* () {
+      const api = yield* TestApi.makeWith({ limits: { challengesPerHour: 1 } });
+      const elsewhere = [{ origin: "https://evil.example" }, { "sec-fetch-site": "cross-site" }];
+      const refused = yield* Effect.forEach(
+        elsewhere,
+        (headers) =>
+          Effect.all(
+            [
+              Browser.make(api.handle, { headers, sourceIp: "203.0.113.1" }).post(
+                "/v1/auth/login/options",
+              ),
+              Browser.make(api.handle, { headers, sourceIp: "203.0.113.1" }).post(
+                "/v1/auth/register/options",
+                { ...human, username: "ada" },
+              ),
+            ],
+            { concurrency: 1 },
+          ),
+        { concurrency: 1 },
+      );
+      expect(refused.flat()).toMatchObject(
+        Array.from({ length: 4 }, () => ({ status: 403, body: { _tag: "CrossSiteRequest" } })),
+      );
+      // Refused before counting: the address's one challenge is still there.
+      expect((yield* api.browser("203.0.113.1").post("/v1/auth/login/options")).status).toBe(200);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("limits accounts per client address and day", () =>
     Effect.gen(function* () {
       const api = yield* TestApi.makeWith({ limits: { signupsPerDay: 2 } });

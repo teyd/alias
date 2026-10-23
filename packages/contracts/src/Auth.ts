@@ -139,7 +139,9 @@ const AuthenticationChallenge = Schema.Struct({
  * session cookie. Sign-up first needs a solved Turnstile widget (`signup` names it): its token goes
  * with `registerOptions`. Limits (PLAN.md §20.27): challenges per client address and hour, accounts
  * per client address and day, accounts per hour for everyone, and failed logins per account and
- * hour; past one, {@link TooManyAttempts} (429) or {@link SignupUnavailable} (503).
+ * hour; past one, {@link TooManyAttempts} (429) or {@link SignupUnavailable} (503). Like
+ * cookie-authenticated changes, these calls must come from the web app's own origin with a JSON
+ * body, or get {@link CrossSiteRequest} (403).
  */
 export const AuthGroup = HttpApiGroup.make("auth")
   .add(HttpApiEndpoint.get("signup", "/signup", { success: SignupConfig }))
@@ -147,7 +149,14 @@ export const AuthGroup = HttpApiGroup.make("auth")
     HttpApiEndpoint.post("registerOptions", "/register/options", {
       payload: Schema.Struct({ username: Schema.String, turnstileToken: Schema.String }),
       success: RegistrationChallenge,
-      error: [InvalidUsername, UsernameTaken, HumanCheckFailed, TooManyAttempts, SignupUnavailable],
+      error: [
+        InvalidUsername,
+        UsernameTaken,
+        HumanCheckFailed,
+        TooManyAttempts,
+        SignupUnavailable,
+        CrossSiteRequest,
+      ],
     }),
   )
   .add(
@@ -157,13 +166,13 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.RegistrationCredential,
       }),
       success: Me,
-      error: [PasskeyRejected, UsernameTaken, TooManyAttempts, SignupUnavailable],
+      error: [PasskeyRejected, UsernameTaken, TooManyAttempts, SignupUnavailable, CrossSiteRequest],
     }),
   )
   .add(
     HttpApiEndpoint.post("loginOptions", "/login/options", {
       success: AuthenticationChallenge,
-      error: TooManyAttempts,
+      error: [TooManyAttempts, CrossSiteRequest],
     }),
   )
   .add(
@@ -173,7 +182,7 @@ export const AuthGroup = HttpApiGroup.make("auth")
         credential: WebAuthn.AuthenticationCredential,
       }),
       success: Me,
-      error: [PasskeyRejected, TooManyAttempts],
+      error: [PasskeyRejected, TooManyAttempts, CrossSiteRequest],
     }),
   )
   .add(

@@ -33,11 +33,21 @@ import { Base64Url } from "effect/encoding";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import { requireSameOrigin } from "./Authentication.ts";
 import { clientSource } from "./ClientSource.ts";
 import * as Passkeys from "./Passkeys.ts";
-import type { RelyingParty } from "./RelyingParty.ts";
+import { RelyingParty } from "./RelyingParty.ts";
 import * as Sessions from "./Sessions.ts";
 import { SignupLimits } from "./SignupLimits.ts";
+
+/**
+ * Sign-up and login calls must come from the web app itself (`Sec-Fetch-Site`, `Origin`, a JSON
+ * body), as cookie-authenticated changes must (SR-14): otherwise any page could make its
+ * visitors' browsers use up their address's challenge budget (PLAN.md §20.27).
+ */
+const fromWebApp = Effect.fn("auth.fromWebApp")(function* () {
+  yield* requireSameOrigin((yield* RelyingParty).origin);
+});
 
 /**
  * Counts a sign-up or login challenge against the calling client, before anything else is read
@@ -142,6 +152,7 @@ const registerOptions = Effect.fn("auth.registerOptions")(function* (payload: {
   readonly username: string;
   readonly turnstileToken: string;
 }) {
+  yield* fromWebApp();
   yield* reserveChallenge();
   const requested = payload.username;
   const username = yield* Username.parse(requested).pipe(
@@ -163,6 +174,7 @@ const register = Effect.fn("auth.register")(function* (payload: {
   readonly challengeId: string;
   readonly credential: RegistrationResponseJSON;
 }) {
+  yield* fromWebApp();
   const { challenge, ceremony } = yield* takeChallenge(
     payload.challengeId,
     Option.liftPredicate(ChallengeRepo.isRegistration),
@@ -195,6 +207,7 @@ const register = Effect.fn("auth.register")(function* (payload: {
 });
 
 const loginOptions = Effect.fn("auth.loginOptions")(function* () {
+  yield* fromWebApp();
   yield* reserveChallenge();
   return yield* issueChallenge(ChallengeRepo.Authentication(), Passkeys.authenticationOptions).pipe(
     Effect.orDie,
@@ -268,6 +281,7 @@ const login = Effect.fn("auth.login")(function* (payload: {
   readonly challengeId: string;
   readonly credential: AuthenticationResponseJSON;
 }) {
+  yield* fromWebApp();
   const passkey = yield* assertPasskey(
     payload,
     Option.liftPredicate(ChallengeRepo.isAuthentication),

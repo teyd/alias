@@ -45,6 +45,8 @@ export default defineConfig({
           "**/vite.config.ts",
           "infra/**/*.ts",
           "tools/*/bin/install-*.ts",
+          // The extension's build script: Node tooling around Vite.
+          "apps/extension/build.ts",
         ],
         rules: effectRulesOff,
       },
@@ -56,6 +58,9 @@ export default defineConfig({
           "apps/*/src/feedbackHandler.ts",
           "apps/*/src/verifyHandler.ts",
           "apps/web/src/lib/api.ts",
+          // The browser extension's two edges: its background and what its popup asks of it.
+          "apps/extension/src/background.ts",
+          "apps/extension/src/popup/send.ts",
         ],
         rules: {
           "effect/effect-run-in-body": "off",

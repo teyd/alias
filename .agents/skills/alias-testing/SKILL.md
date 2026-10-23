@@ -51,9 +51,10 @@ Clients point at emulators through `AwsClient.emulator(url)` from `@alias/aws`. 
 
 `browser/test/support/browser.ts` gives each file the whole stack from `@alias/e2e/stack` (shared with `e2e`, add helpers there) plus:
 
-- the production bundle of `apps/web`, built into a temp dir and served by `vite preview` on `http://localhost:<port 0>`, which forwards `/v1` and `/health` to the API's function URL emulator. Browsers treat `localhost` as a secure context, so the `Secure` session cookie and WebAuthn work without TLS; the relying party is `localhost` with the preview server's origin;
+- the production bundle of `apps/web`, built into a temp dir and served by `vite preview` on `http://localhost:<port 0>`, which forwards `/v1`, `/health` and `/.well-known` to the API's function URL emulator. Browsers treat `localhost` as a secure context, so the `Secure` session cookie and WebAuthn work without TLS; the relying party is `localhost` with the preview server's origin;
 - headless Chromium (Playwright, the version pinned in the catalog);
 - `openPage()`: a fresh browser profile per test with a virtual WebAuthn authenticator over CDP (CTAP2, internal transport, discoverable credentials, user verification that always succeeds). `passkeys()` lists what it holds.
+- the browser extension: `openExtension()` (`support/extension.ts`, used with the `stack` layer instead of `layer`) builds `apps/extension` for Chromium and loads it unpacked into a persistent profile in Chromium's new headless mode (`channel: "chromium"`; the headless shell can't load extensions), with a sign-up page on `shop.example.co.uk` mapped to a port-0 server. Open the popup as a tab (`popupUrl`); `attachAuthenticator(context, page)` adds a passkey authenticator to any page. Tests can't click the toolbar button or a context menu, so the sign-up site is granted at install instead of through `activeTab`.
 
 Drive the page inside `ui(async () => …)` and mix it with Effect steps (`smtp`, `sentTo`, `Pipeline.handle`). Rules:
 

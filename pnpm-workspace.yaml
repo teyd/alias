@@ -21,6 +21,7 @@ catalog:
   effect: 4.0.5
   "@effect/vitest": 4.0.5
   "@effect/platform-node": 4.0.5
+  "@effect/platform-browser": 4.0.5
   alchemy: 2.0.0-beta.83
   # aws (Effect-native SDK, the same one Alchemy uses)
   "@distilled.cloud/aws": 1.0.0-rc.15
@@ -62,6 +63,10 @@ catalog:
   lucide-react: ^1.61.0
   "@fontsource-variable/geist": ^5.3.0
   "@fontsource-variable/geist-mono": ^5.3.0
+  # browser extension (PLAN.md §20.35): the WebExtension API's types (Chromium's, which Firefox
+  # also implements as `chrome.*`) and the Public Suffix List, for a site's registrable domain
+  "@types/chrome": 0.3.6
+  tldts: 7.4.19
   "@alias/core": workspace:*
 
 overrides:

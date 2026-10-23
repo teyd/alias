@@ -48,6 +48,7 @@ jobs:
           - "@alias/turnstile-emulator"
           - "@alias/sdk"
           - "@alias/cli"
+          - "@alias/extension"
           - "@alias/e2e"
           - "@alias/browser"
     steps:
@@ -60,7 +61,8 @@ jobs:
           key: dynamodb-local-${{ hashFiles('tools/aws-emulators/src/DynamoDbLocal.ts') }}
       - run: pnpm install --frozen-lockfile
       - run: node tools/aws-emulators/bin/install-dynamodb-local.ts
-      # Browser tests: headless Chromium at the build the catalog's Playwright pins, cached by that
+      # Browser tests: Chromium at the build the catalog's Playwright pins (the full browser, which
+      # loads the extension in its new headless mode, and the headless shell), cached by that
       # version. `--with-deps` adds the system libraries it needs even on a cache hit.
       - if: matrix.package == '@alias/browser'
         id: playwright
@@ -101,4 +103,20 @@ jobs:
         with:
           name: alias-cli
           path: apps/cli/dist/alias-*
+          if-no-files-found: error
+
+  # The browser extension (PLAN.md §20.35), zipped for the Chrome Web Store and addons.mozilla.org.
+  # Artifacts only: publishing needs the maintainers' store accounts. The zips are reproducible.
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Installs Node and pnpm from mise.toml and verifies them against mise.lock.
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm extension:package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: alias-extension
+          path: apps/extension/dist/alias-*.zip
           if-no-files-found: error

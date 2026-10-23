@@ -32,6 +32,9 @@
     },
     "apps/cli": {
       "entry": ["bin/*.ts"]
+    },
+    "apps/extension": {
+      "entry": ["build.ts", "src/background.ts!", "src/popup/main.tsx!"]
     }
   },
   "includeEntryExports": true

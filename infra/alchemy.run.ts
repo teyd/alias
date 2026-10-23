@@ -30,6 +30,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/http";
@@ -38,6 +39,12 @@ import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+
+// The settings (`infra/.env.example`), also when Alchemy runs without `scripts/deploy.ts`: Alchemy
+// reads `.env` into its own configuration only, and everything below reads `process.env`.
+// Variables already set win.
+const envFile = new URL(".env", import.meta.url).pathname;
+if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
@@ -428,7 +435,12 @@ const wafRules = [
   },
 ];
 
-/** @public The stack Alchemy loads. */
+/**
+ * @public The stack Alchemy loads.
+ *
+ * Logical IDs must be unique across resource types: Alchemy keys resources by ID alone and hands
+ * a second registration of an ID the first resource back, whatever its type (`Resource.ts`).
+ */
 export default Alchemy.Stack(
   "alias",
   {
@@ -867,7 +879,7 @@ export default Alchemy.Stack(
         },
       ],
     });
-    const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxy", {
+    const imageProxyAccess = yield* AWS.CloudFront.OriginAccessControl("ImageProxyAccess", {
       originType: "lambda",
       signingBehavior: "always",
       signingProtocol: "sigv4",
@@ -887,7 +899,7 @@ export default Alchemy.Stack(
         { files: "**", cacheControl: "no-cache" },
       ],
     });
-    const webAccess = yield* AWS.CloudFront.OriginAccessControl("Web", {
+    const webAccess = yield* AWS.CloudFront.OriginAccessControl("WebAccess", {
       originType: "s3",
       signingBehavior: "always",
       signingProtocol: "sigv4",
@@ -920,7 +932,7 @@ export default Alchemy.Stack(
 
     // The app domain's certificate (ACM, us-east-1), validated through a CNAME in Cloudflare that
     // stays there for renewals. The distribution takes it once ACM has issued it.
-    const certificate = yield* AWS.ACM.Certificate("App", { domainName: appDomain });
+    const certificate = yield* AWS.ACM.Certificate("AppCertificate", { domainName: appDomain });
     const issuedCertificate = isOnCloudflare
       ? yield* Effect.gen(function* () {
           const validation = yield* CertificateValidationRecord({
@@ -940,7 +952,7 @@ export default Alchemy.Stack(
           });
         })
       : undefined;
-    const firewall = yield* AWS.WAFv2.WebACL("App", {
+    const firewall = yield* AWS.WAFv2.WebACL("AppFirewall", {
       scope: "CLOUDFRONT",
       description: `alias ${stage}: managed rules and rate limits (PLAN.md §20.26)`,
       defaultAction: { Allow: {} },
@@ -964,7 +976,7 @@ export default Alchemy.Stack(
     // one, and the app, the API (passkeys, the OAuth issuer) and the image proxy share a domain.
     // Five behaviors, the Free plan's maximum. The API stays behind its public function URL
     // because OAC can't sign POST bodies for browsers; the origin secret stands in for it.
-    const app = yield* AWS.CloudFront.Distribution("App", {
+    const app = yield* AWS.CloudFront.Distribution("AppDistribution", {
       comment: `alias (${stage})`,
       ...(issuedCertificate !== undefined
         ? {
@@ -1179,7 +1191,9 @@ export default Alchemy.Stack(
       sourceArn: receiptRuleArn,
     });
 
-    const ruleSet = yield* AWS.SES.ReceiptRuleSet("Inbound", { ruleSetName: receiptRuleSetName });
+    const ruleSet = yield* AWS.SES.ReceiptRuleSet("InboundRules", {
+      ruleSetName: receiptRuleSetName,
+    });
     // No recipient condition: every verified domain, shared and custom, and their subdomains.
     // SES stores the message first, then invokes the inbound Lambda with the event (no body).
     yield* AWS.SES.ReceiptRule("AllVerified", {
@@ -1337,7 +1351,7 @@ export default Alchemy.Stack(
         }),
       );
       // The app domain to the distribution; Cloudflare flattens a CNAME at a zone apex.
-      yield* Cloudflare.DNS.Record("App", {
+      yield* Cloudflare.DNS.Record("AppDomain", {
         zoneId: zoneOf(appDomain),
         name: appDomain,
         type: "CNAME",

@@ -5723,6 +5723,542 @@
         "description": "API tokens need the `settings:write` scope."
       }
     },
+    "/v1/usernames": {
+      "get": {
+        "tags": [
+          "usernames"
+        ],
+        "operationId": "usernames.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "usernames:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "usernames": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "username": {
+                            "type": "string"
+                          },
+                          "isPrimary": {
+                            "type": "boolean"
+                          },
+                          "subdomains": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "isOnTheFlyEnabled": {
+                            "type": "boolean"
+                          },
+                          "defaultRecipientId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "username",
+                          "isPrimary",
+                          "subdomains",
+                          "isOnTheFlyEnabled",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "usernames",
+                    "limit"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `usernames:read` scope."
+      },
+      "post": {
+        "tags": [
+          "usernames"
+        ],
+        "operationId": "usernames.add",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "isPrimary": {
+                      "type": "boolean"
+                    },
+                    "subdomains": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "isOnTheFlyEnabled": {
+                      "type": "boolean"
+                    },
+                    "defaultRecipientId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "username",
+                    "isPrimary",
+                    "subdomains",
+                    "isOnTheFlyEnabled",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidUsername | HumanCheckFailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidUsernameEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HumanCheckFailedEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "UsernameTaken | TooManyUsernames",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UsernameTakenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TooManyUsernamesEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SignupUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupUnavailableEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "turnstileToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "username",
+                  "turnstileToken"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/usernames/{username}": {
+      "patch": {
+        "tags": [
+          "usernames"
+        ],
+        "operationId": "usernames.update",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "usernames:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "isPrimary": {
+                      "type": "boolean"
+                    },
+                    "subdomains": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "isOnTheFlyEnabled": {
+                      "type": "boolean"
+                    },
+                    "defaultRecipientId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "username",
+                    "isPrimary",
+                    "subdomains",
+                    "isOnTheFlyEnabled",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "UsernameNotFound | RecipientNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UsernameNotFoundEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RecipientNotFoundEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PrimaryUsername | RecipientNotVerified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PrimaryUsernameEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RecipientNotVerifiedEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isOnTheFlyEnabled": {
+                    "type": "boolean"
+                  },
+                  "defaultRecipientId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `usernames:write` scope."
+      },
+      "delete": {
+        "tags": [
+          "usernames"
+        ],
+        "operationId": "usernames.remove",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "usernames:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "UsernameNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsernameNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PrimaryUsername",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrimaryUsernameEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `usernames:write` scope."
+      }
+    },
     "/v1/sessions": {
       "get": {
         "tags": [
@@ -6095,6 +6631,8 @@
                             "recipients:write",
                             "settings:read",
                             "settings:write",
+                            "usernames:read",
+                            "usernames:write",
                             "mail:send"
                           ]
                         }
@@ -6208,6 +6746,8 @@
                           "recipients:write",
                           "settings:read",
                           "settings:write",
+                          "usernames:read",
+                          "usernames:write",
                           "mail:send"
                         ]
                       }
@@ -6306,6 +6846,8 @@
                           "recipients:write",
                           "settings:read",
                           "settings:write",
+                          "usernames:read",
+                          "usernames:write",
                           "mail:send"
                         ]
                       }
@@ -6326,6 +6868,8 @@
                         "recipients:write",
                         "settings:read",
                         "settings:write",
+                        "usernames:read",
+                        "usernames:write",
                         "mail:send"
                       ]
                     }
@@ -7359,6 +7903,8 @@
                           "recipients:write",
                           "settings:read",
                           "settings:write",
+                          "usernames:read",
+                          "usernames:write",
                           "mail:send"
                         ]
                       }
@@ -7703,6 +8249,8 @@
                           "recipients:write",
                           "settings:read",
                           "settings:write",
+                          "usernames:read",
+                          "usernames:write",
                           "mail:send"
                         ]
                       }
@@ -7972,6 +8520,8 @@
                         "recipients:write",
                         "settings:read",
                         "settings:write",
+                        "usernames:read",
+                        "usernames:write",
                         "mail:send"
                       ]
                     }
@@ -8040,6 +8590,8 @@
                             "recipients:write",
                             "settings:read",
                             "settings:write",
+                            "usernames:read",
+                            "usernames:write",
                             "mail:send"
                           ]
                         }
@@ -8669,6 +9221,8 @@
               "recipients:write",
               "settings:read",
               "settings:write",
+              "usernames:read",
+              "usernames:write",
               "mail:send"
             ]
           }
@@ -8990,6 +9544,191 @@
         ],
         "additionalProperties": false
       },
+      "PrimaryUsernameEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "PrimaryUsername"
+            ]
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "username"
+        ],
+        "additionalProperties": false
+      },
+      "UsernameNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "UsernameNotFound"
+            ]
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "username"
+        ],
+        "additionalProperties": false
+      },
+      "RecipientNotVerifiedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RecipientNotVerified"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "RecipientNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RecipientNotFound"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "SignupUnavailableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "SignupUnavailable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "paused",
+              "human-check-unavailable"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "TooManyUsernamesEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyUsernames"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "UsernameTakenEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "UsernameTaken"
+            ]
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "username"
+        ],
+        "additionalProperties": false
+      },
+      "HumanCheckFailedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "HumanCheckFailed"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidUsernameEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidUsername"
+            ]
+          },
+          "username": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "too-short",
+              "too-long",
+              "invalid-characters",
+              "must-start-with-letter",
+              "hyphen-placement",
+              "reserved"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "username",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
       "DomainUnavailableEncoded": {
         "type": "object",
         "properties": {
@@ -9101,25 +9840,6 @@
         ],
         "additionalProperties": false
       },
-      "RecipientNotFoundEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "RecipientNotFound"
-            ]
-          },
-          "recipientId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "_tag",
-          "recipientId"
-        ],
-        "additionalProperties": false
-      },
       "InvalidPublicKeyEncoded": {
         "type": "object",
         "properties": {
@@ -9145,25 +9865,6 @@
         "required": [
           "_tag",
           "reason"
-        ],
-        "additionalProperties": false
-      },
-      "RecipientNotVerifiedEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "RecipientNotVerified"
-            ]
-          },
-          "recipientId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "_tag",
-          "recipientId"
         ],
         "additionalProperties": false
       },
@@ -9536,94 +10237,6 @@
           "reason"
         ],
         "additionalProperties": false
-      },
-      "SignupUnavailableEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "SignupUnavailable"
-            ]
-          },
-          "reason": {
-            "type": "string",
-            "enum": [
-              "paused",
-              "human-check-unavailable"
-            ]
-          }
-        },
-        "required": [
-          "_tag",
-          "reason"
-        ],
-        "additionalProperties": false
-      },
-      "UsernameTakenEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "UsernameTaken"
-            ]
-          },
-          "username": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "_tag",
-          "username"
-        ],
-        "additionalProperties": false
-      },
-      "HumanCheckFailedEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "HumanCheckFailed"
-            ]
-          }
-        },
-        "required": [
-          "_tag"
-        ],
-        "additionalProperties": false
-      },
-      "InvalidUsernameEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "InvalidUsername"
-            ]
-          },
-          "username": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string",
-            "enum": [
-              "too-short",
-              "too-long",
-              "invalid-characters",
-              "must-start-with-letter",
-              "hyphen-placement",
-              "reserved"
-            ]
-          }
-        },
-        "required": [
-          "_tag",
-          "username",
-          "reason"
-        ],
-        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -9675,6 +10288,9 @@
     {
       "name": "settings",
       "description": "Account settings."
+    },
+    {
+      "name": "usernames"
     },
     {
       "name": "security"

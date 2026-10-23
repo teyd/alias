@@ -27,9 +27,12 @@ import { userKey, usernameKey } from "./UserRepo.ts";
 export interface Account {
   readonly userId: string;
   readonly username: string;
+  /** The user's additional usernames (PLAN.md §20.34). They become tombstones like the primary. */
+  readonly additionalUsernames: ReadonlyArray<string>;
   /**
-   * The user's own subdomains (`<username>.<shared domain>`). Their aliases leave no tombstone:
-   * the username's tombstone already keeps the whole subdomain from anyone else.
+   * The user's own subdomains (`<username>.<shared domain>`, for every username of theirs). Their
+   * aliases leave no tombstone: the usernames' tombstones already keep the whole subdomains from
+   * anyone else.
    */
   readonly subdomains: ReadonlyArray<string>;
   /**
@@ -47,7 +50,7 @@ export class AccountRepo extends Context.Service<
   {
     /**
      * Erases everything stored about the account (GDPR Art. 17), custom-domain claims included,
-     * except two kinds of tombstone: the username's, and one per alias on a shared domain, each holding only the key and
+     * except two kinds of tombstone: the usernames', and one per alias on a shared domain, each holding only the key and
      * `deletedAt`. A resumable sweep, since a user's items don't fit one transaction (100 items):
      * every step is idempotent, and the user item, passkeys and the asking session go last, in
      * one transaction, so a failure anywhere before leaves the account able to sign in and retry.
@@ -180,22 +183,31 @@ const make = Effect.fn("AccountRepo.make")(function* () {
       ...oauth,
     ]);
 
-    // 2. The username becomes a tombstone: no new aliases on the fly, and nobody gets it again.
+    // 2. The usernames become tombstones: no new aliases on the fly, and nobody gets them again.
     const deletedAt = yield* Schema.encodeEffect(Attribute.EpochMillis)(yield* DateTime.now).pipe(
       Effect.mapError(databaseError("EncodeTombstone")),
     );
-    yield* ignoreConditionFailure(
-      DynamoDB.updateItem({
-        TableName,
-        Key: usernameKey(account.username),
-        UpdateExpression:
-          "SET deletedAt = if_not_exists(deletedAt, :deletedAt) REMOVE #userId, #username",
-        // Never someone else's claim (a lookalike sharing the skeleton can't exist, but still).
-        ConditionExpression: "attribute_not_exists(#userId) OR #userId = :userId",
-        ExpressionAttributeNames: { "#userId": "userId", "#username": "username" },
-        ExpressionAttributeValues: { ":userId": { S: account.userId }, ":deletedAt": deletedAt },
-      }),
-    ).pipe(Effect.mapError(databaseError("UpdateItem")));
+    yield* Effect.forEach(
+      [account.username, ...account.additionalUsernames],
+      (username) =>
+        ignoreConditionFailure(
+          DynamoDB.updateItem({
+            TableName,
+            Key: usernameKey(username),
+            UpdateExpression:
+              "SET deletedAt = if_not_exists(deletedAt, :deletedAt) " +
+              "REMOVE #userId, #username, isAdditional",
+            // Never someone else's claim (a lookalike sharing the skeleton can't exist, but still).
+            ConditionExpression: "attribute_not_exists(#userId) OR #userId = :userId",
+            ExpressionAttributeNames: { "#userId": "userId", "#username": "username" },
+            ExpressionAttributeValues: {
+              ":userId": { S: account.userId },
+              ":deletedAt": deletedAt,
+            },
+          }),
+        ).pipe(Effect.mapError(databaseError("UpdateItem"))),
+      { concurrency: 4, discard: true },
+    );
 
     // 3. Aliases, their contacts and counters.
     yield* sweepAliases(account);
@@ -216,7 +228,8 @@ const make = Effect.fn("AccountRepo.make")(function* () {
       { concurrency: 4, discard: true },
     );
 
-    // 4. The rest of the user's partition: recipients, settings, quotas, domain pointers.
+    // 4. The rest of the user's partition: recipients, settings, quotas, domain pointers, the
+    //    additional usernames' entries.
     const user = userKey(account.userId);
     const owned = yield* Purge.partitionKeys(table, user.pk.S, Option.none());
     yield* Purge.deleteAll(

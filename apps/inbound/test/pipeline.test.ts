@@ -8,6 +8,7 @@ import {
   RecipientRepo,
   SentRepo,
   UserRepo,
+  UsernameRepo,
   WebhookRepo,
 } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
@@ -751,6 +752,75 @@ describe("inbound pipeline (fakecloud)", () => {
         ]);
         expect(yield* aliasAt("user1.alias.test", "new")).toEqual(Option.none());
         expect(yield* sent).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("follows an additional username's own on-the-fly setting and default recipient", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        // The primary username's on-the-fly setting stays off throughout.
+        yield* subdomainOwner(false);
+        yield* recipient("ada.work@office.example");
+        // The account's default stays the first destination.
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          Effect.flatMap(
+            Effect.flatMap(repo.find("usr_1", "rcp_ada@mail.example"), Effect.fromOption),
+            repo.setDefault,
+          ),
+        );
+        yield* Transport.ensureIdentity("user1-work.alias.test");
+        const usernames = yield* UsernameRepo.UsernameRepo;
+        yield* usernames.add(
+          {
+            userId: "usr_1",
+            username: yield* Username.parse("user1-work"),
+            createdAt: DateTime.makeUnsafe(0),
+          },
+          3,
+        );
+        const deliver = Effect.fn("deliver")(function* (to: string) {
+          const { event } = yield* receive({ recipients: [to] });
+          return yield* Pipeline.handle(event);
+        });
+        const lastTo = Effect.map(sent, (emails) =>
+          Arr.last(emails).pipe(Option.map((email) => email.to)),
+        );
+
+        expect(yield* deliver("new@user1-work.alias.test")).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        yield* usernames.update("usr_1", "user1-work", {
+          isOnTheFlyEnabled: Option.some(true),
+          defaultRecipientId: Option.none(),
+        });
+        expect(yield* deliver("new@user1-work.alias.test")).toEqual([{ _tag: "Forwarded" }]);
+        // Without its own default recipient, the account's default.
+        expect(yield* lastTo).toEqual(Option.some(["ada@mail.example"]));
+        expect(Arr.last(yield* sent).pipe(Option.map((email) => email.from))).toEqual(
+          Option.some(expect.stringMatching(/^new\+r\.[a-z2-7]+@user1-work\.alias\.test$/)),
+        );
+
+        yield* usernames.update("usr_1", "user1-work", {
+          isOnTheFlyEnabled: Option.none(),
+          defaultRecipientId: Option.some(Option.some("rcp_ada.work@office.example")),
+        });
+        expect(yield* deliver("new@user1-work.alias.test")).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* lastTo).toEqual(Option.some(["ada.work@office.example"]));
+        // Aliases on the primary username's subdomain keep the account's default.
+        yield* alias({ id: "al_primary", domain: "user1.alias.test", localPart: "shop" });
+        expect(yield* deliver("shop@user1.alias.test")).toEqual([{ _tag: "Forwarded" }]);
+        expect(yield* lastTo).toEqual(Option.some(["ada@mail.example"]));
+        expect(yield* deliver("other@user1.alias.test")).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+
+        // Once the username is being deleted, its subdomain takes nothing new.
+        yield* usernames.retire("usr_1", "user1-work");
+        expect(yield* deliver("another@user1-work.alias.test")).toEqual([
+          { _tag: "Dropped", reason: "unknown-alias" },
+        ]);
+        expect(yield* aliasAt("user1-work.alias.test", "another")).toEqual(Option.none());
       }),
     ),
   );

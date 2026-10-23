@@ -16,6 +16,7 @@ import {
   SignupLimitRepo,
   TokenRepo,
   UserRepo,
+  UsernameRepo,
   WebhookRepo,
 } from "@alias/db";
 import { Egress, Publisher, type Secrets, type UrlPolicy } from "@alias/webhooks";
@@ -47,6 +48,7 @@ import { authenticationLayer } from "./Authentication.ts";
 import { SettingsLive } from "./settings.ts";
 import { SecurityLive } from "./security.ts";
 import { TokensLive } from "./tokens.ts";
+import { UsernamesLive } from "./usernames.ts";
 import { WebhooksLive } from "./webhooks.ts";
 
 const SystemLive = HttpApiBuilder.group(Api, "system", (handlers) =>
@@ -68,6 +70,7 @@ const Repositories = Layer.mergeAll(
   OAuthRepo.layer,
   OutboxRepo.layer,
   UserRepo.layer,
+  UsernameRepo.layer,
   PasskeyRepo.layer,
   SessionRepo.layer,
   ChallengeRepo.layer,
@@ -119,6 +122,7 @@ const ApiLive = Layer.mergeAll(
     InboxesLive,
     RecipientsLive,
     SettingsLive,
+    UsernamesLive,
     SecurityLive,
     TokensLive,
     OAuthLive,

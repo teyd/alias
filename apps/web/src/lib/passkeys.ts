@@ -44,7 +44,8 @@ const passkeyProblems = {
   "verification-failed": "The passkey couldn't be verified.",
 } as const;
 
-const describe = <E>(error: E): string => {
+/** Sign-up's failures, also those of adding a username (the same rules, PLAN.md §20.34). */
+export const describeAuthError = <E>(error: E): string => {
   if (error instanceof InvalidUsername) return usernameProblems[error.reason];
   if (error instanceof UsernameTaken) return "That username is taken.";
   if (error instanceof PasskeyRejected) return passkeyProblems[error.reason];
@@ -63,7 +64,7 @@ const describe = <E>(error: E): string => {
 
 /** Replaces every failure with an `AuthFailed` carrying a readable message. */
 const explain = <A, E>(effect: Effect.Effect<A, E>) =>
-  Effect.mapError(effect, (error) => new AuthFailed({ message: describe(error) }));
+  Effect.mapError(effect, (error) => new AuthFailed({ message: describeAuthError(error) }));
 
 /**
  * Creates an account with a new passkey, once the Turnstile widget handed out `turnstileToken`;

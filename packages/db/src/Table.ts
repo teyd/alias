@@ -30,6 +30,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Sent              | `USER#<userId>`              | `SENT#<sesMessageId>`  |                            |                           | `expiresAt` |
  * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
 
+ * | UsernameEntry     | `USER#<userId>`              | `USERNAME#<username>`  |                            |                           |             |
+ * | UsernameCount     | `USER#<userId>`              | `USERNAMES`            |                            |                           |             |
  * | DomainPointer     | `USER#<userId>`              | `DOMAIN#<domain>`      |                            |                           |             |
  * | DomainCount       | `USER#<userId>`              | `DOMAINS`              |                            |                           |             |
  * | Domain            | `DOMAIN#<domain>`            | `DOMAIN`               | `DOMAIN-CHECKS`            | `<nextCheckAt>#<domain>`  |             |
@@ -116,6 +118,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * UserSettings holds the user's account choices; a user without one has the defaults. The inbound
  * Lambda finds a subdomain's owner through the Username item (exact username, not just the same
  * skeleton) and reads their settings with a second GetItem.
+ *
+ * Additional usernames (PLAN.md §20.34) claim their skeleton with a Username item like the
+ * sign-up's, marked `isAdditional`, written in one transaction with the user's UsernameEntry
+ * (the username's own settings: on the fly, default recipient; listing them is one strongly
+ * consistent Query on `begins_with(sk, "USERNAME#")`) and UsernameCount (the per-user cap, atomic).
+ * For an additional username, the inbound Lambda's second GetItem reads its UsernameEntry instead
+ * of the user's settings. Deleting one turns its Username item into a tombstone first, like
+ * erasure does, and removes the entry last, so a deletion that failed halfway is retried from it.
  *
  * A Domain is a custom domain (PLAN.md §20.18), keyed by its lowercased name, so one claim exists
  * per domain across all users and the inbound Lambda resolves it with one GetItem. It is written

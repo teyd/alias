@@ -1,6 +1,12 @@
 import { CurrentUser, type NewAlias, type Scope } from "@alias/contracts";
 import type { SharedDomains, TempDomains } from "@alias/core";
-import { type AliasRepo, type ContactRepo, type DomainRepo, OutboxRepo } from "@alias/db";
+import {
+  type AliasRepo,
+  type ContactRepo,
+  type DomainRepo,
+  OutboxRepo,
+  type UsernameRepo,
+} from "@alias/db";
 import type { Inbox } from "@alias/inbox";
 import type { Publisher } from "@alias/webhooks";
 import * as Arr from "effect/Array";
@@ -35,6 +41,7 @@ export type ToolServices =
   | AliasRepo.AliasRepo
   | ContactRepo.ContactRepo
   | DomainRepo.DomainRepo
+  | UsernameRepo.UsernameRepo
   | SharedDomains.SharedDomains
   | Publisher.Publisher
   | OutboxRepo.OutboxRepo
@@ -359,7 +366,7 @@ export const tools: ReadonlyArray<Tool> = [
     name: "create_alias",
     title: "Create an alias",
     description:
-      "Creates an email alias that forwards to the user's mailbox. Give `domain` (one of the shared domains from list_aliases) for a random address, or `address` for a chosen one on the user's own subdomain or a verified custom domain.",
+      "Creates an email alias that forwards to the user's mailbox. Give `domain` (one of the shared domains from list_aliases) for a random address, or `address` for a chosen one on one of the user's own subdomains or a verified custom domain.",
     scope: "aliases:write",
     input: Schema.Struct({
       domain: Schema.optionalKey(
@@ -367,7 +374,7 @@ export const tools: ReadonlyArray<Tool> = [
       ),
       address: Schema.optionalKey(
         Schema.String.annotate({
-          description: "A full address on the user's subdomain or custom domain",
+          description: "A full address on one of the user's subdomains or custom domain",
         }),
       ),
     }),

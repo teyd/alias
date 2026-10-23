@@ -11,6 +11,9 @@ import { AddDomainDialog } from "@/components/domains/AddDomainDialog";
 import { CustomDomainCard } from "@/components/domains/CustomDomainCard";
 import { RemoveDomainDialog } from "@/components/domains/RemoveDomainDialog";
 import { Page } from "@/components/Page";
+import { AddUsernameDialog } from "@/components/usernames/AddUsernameDialog";
+import { DeleteUsernameDialog } from "@/components/usernames/DeleteUsernameDialog";
+import { UsernamesCard } from "@/components/usernames/UsernamesCard";
 import { EmptyState, LoadFailed, SkeletonRows } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,10 +29,14 @@ import { Button } from "@/components/ui/button";
 import { aliasesQuery, domainsQuery } from "@/lib/aliases";
 import { customDomainsQuery } from "@/lib/domains";
 
-/** `?dialog=add-domain` holds the add dialog open, `?remove=<domain>` the removal one. */
+/**
+ * `?dialog=add-domain` and `?dialog=add-username` hold the add dialogs open, `?remove=<domain>`
+ * and `?deleteUsername=<username>` the removal ones.
+ */
 const Search = Schema.Struct({
-  dialog: Schema.optionalKey(Schema.Literal("add-domain")),
+  dialog: Schema.optionalKey(Schema.Literals(["add-domain", "add-username"])),
   remove: Schema.optionalKey(Schema.String),
+  deleteUsername: Schema.optionalKey(Schema.String),
 });
 
 /** A domain the user can create aliases on: shared, their subdomain, or a custom domain. */
@@ -147,7 +154,7 @@ const Domains = () => {
           </CardTitle>
           <CardDescription>
             Shared domains give out random addresses, so they can't be guessed. On your own
-            subdomain and your verified custom domains you pick the address.
+            subdomains and your verified custom domains you pick the address.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -173,6 +180,10 @@ const Domains = () => {
           )}
         </CardContent>
       </Card>
+      <UsernamesCard
+        onAdd={() => change((current) => ({ ...current, dialog: "add-username" }))}
+        onDelete={(username) => change((current) => ({ ...current, deleteUsername: username }))}
+      />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <ServerIcon className="size-4 text-muted-foreground" aria-hidden />
@@ -192,6 +203,18 @@ const Domains = () => {
         onOpenChange={(isOpen) =>
           isOpen ? openAdd() : change((current) => Struct.omit(current, ["dialog"]))
         }
+      />
+      <AddUsernameDialog
+        isOpen={search.dialog === "add-username"}
+        onOpenChange={(isOpen) =>
+          isOpen
+            ? change((current) => ({ ...current, dialog: "add-username" }))
+            : change((current) => Struct.omit(current, ["dialog"]))
+        }
+      />
+      <DeleteUsernameDialog
+        username={Option.fromUndefinedOr(search.deleteUsername)}
+        onClose={() => change((current) => Struct.omit(current, ["deleteUsername"]))}
       />
       <RemoveDomainDialog
         domain={Option.fromUndefinedOr(search.remove)}

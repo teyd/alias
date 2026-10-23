@@ -18,6 +18,7 @@ import {
   RecipientRepo,
   SentRepo,
   UserRepo,
+  UsernameRepo,
 } from "@alias/db";
 import { Inbox } from "@alias/inbox";
 import { Publisher } from "@alias/webhooks";
@@ -175,12 +176,26 @@ const replyTarget = Effect.fn("Pipeline.replyTarget")(function* (
   return Result.succeed(contact.value.address);
 });
 
+/**
+ * The default recipient of the additional username (PLAN.md §20.34) whose subdomain the alias is
+ * on, if it has one. One GetItem in the owner's partition; none on their primary username's
+ * subdomain (it has no entry) and on other domains (no read).
+ */
+const usernameRecipient = Effect.fn("Pipeline.usernameRecipient")(function* (
+  alias: AliasRepo.Alias,
+) {
+  const destination = Address.classify(aliasAddress(alias), yield* SharedDomains.SharedDomains);
+  if (!Address.Destination.$is("UserSubdomain")(destination)) return Option.none<string>();
+  const entry = yield* (yield* UsernameRepo.UsernameRepo).find(alias.userId, destination.username);
+  return Option.flatMap(entry, (found) => found.defaultRecipientId);
+});
+
 const planForward = Effect.fn("Pipeline.planForward")(function* (
   record: Record,
   alias: AliasRepo.Alias,
 ) {
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
-  const target = Policy.forwardTarget(recipients);
+  const target = Policy.forwardTarget(recipients, yield* usernameRecipient(alias));
   if (Option.isNone(target)) return Plan.Drop({ reason: "no-recipient" });
   if (Option.isSome(target.value.bouncedAt)) return Plan.Drop({ reason: "recipient-bounced" });
   const sender = Policy.sender(record.ses.mail);
@@ -387,7 +402,11 @@ const createFor = Effect.fn("Pipeline.createFor")(function* (
   );
 });
 
-/** On a user subdomain: the subdomain's owner must have turned on-the-fly aliases on. */
+/**
+ * On a user subdomain: the subdomain's owner must have turned on-the-fly aliases on, for their
+ * primary username in the account's settings, for an additional one on that username (PLAN.md
+ * §20.34).
+ */
 const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
   record: Record,
   address: Address.MailAddress,
@@ -395,13 +414,18 @@ const createOnTheFly = Effect.fn("Pipeline.createOnTheFly")(function* (
 ) {
   // Role mailboxes on a user's subdomain are never aliases (PLAN.md §20.27).
   if (Address.isRoleLocal(address.local)) return Result.fail<Policy.DropReason>("unknown-alias");
-  const users = yield* UserRepo.UserRepo;
-  const owner = yield* users.findByUsername(username);
+  const owner = yield* (yield* UsernameRepo.UsernameRepo).findOwner(username);
   if (Option.isNone(owner)) return Result.fail<Policy.DropReason>("unknown-alias");
-  if (!(yield* users.settings(owner.value.id)).isOnTheFlyEnabled) {
-    return Result.fail<Policy.DropReason>("unknown-alias");
-  }
-  return yield* createFor(record, address, owner.value.id);
+  const { userId, additional } = owner.value;
+  const isEnabled = yield* Option.match(additional, {
+    onNone: () =>
+      UserRepo.UserRepo.use((users) =>
+        Effect.map(users.settings(userId), (settings) => settings.isOnTheFlyEnabled),
+      ),
+    onSome: (entry) => Effect.succeed(entry.isOnTheFlyEnabled),
+  });
+  if (!isEnabled) return Result.fail<Policy.DropReason>("unknown-alias");
+  return yield* createFor(record, address, userId);
 });
 
 /**
@@ -710,6 +734,7 @@ export const layer = <E, R>(
     DomainRepo.layer,
     MessageRepo.layer,
     UserRepo.layer,
+    UsernameRepo.layer,
     NodeCrypto.layer,
     Publisher.layer.pipe(Layer.provide(NodeCrypto.layer)),
     Layer.succeed(Limits.Limits, limits),

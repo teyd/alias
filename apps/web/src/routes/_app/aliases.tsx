@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { aliasesQuery, domainsQuery } from "@/lib/aliases";
+import { usernamesQuery } from "@/lib/usernames";
 
 /**
  * Everything on this screen that should survive a reload or be linkable lives in the URL: the
@@ -43,6 +44,7 @@ const Search = Schema.Struct({
   q: Schema.optionalKey(Schema.String),
   status: Schema.optionalKey(Schema.Literals(["active", "inactive"])),
   domain: Schema.optionalKey(Schema.String),
+  username: Schema.optionalKey(Schema.String),
   dialog: Schema.optionalKey(Schema.Literal("create")),
   contacts: Schema.optionalKey(Schema.String),
   delete: Schema.optionalKey(Schema.String),
@@ -51,10 +53,18 @@ type Search = typeof Search.Type;
 
 const ALL = "all";
 
-const isShown = (search: Search) => (alias: AliasView) =>
+/** The domain part of an address. */
+const domainOf = (address: string) => address.slice(address.lastIndexOf("@") + 1);
+
+/**
+ * `subdomains` are those of the username the filter names (PLAN.md §20.34); an alias matches when
+ * it lives on one of them.
+ */
+const isShown = (search: Search, subdomains: ReadonlyArray<string>) => (alias: AliasView) =>
   Str.includes(Str.toLowerCase(Str.trim(search.q ?? "")))(alias.address) &&
   (search.status === undefined || alias.isActive === (search.status === "active")) &&
-  (search.domain === undefined || Str.endsWith(`@${search.domain}`)(alias.address));
+  (search.domain === undefined || domainOf(alias.address) === search.domain) &&
+  (search.username === undefined || Arr.contains(subdomains, domainOf(alias.address)));
 
 const Aliases = () => {
   const search = Route.useSearch();
@@ -66,7 +76,18 @@ const Aliases = () => {
   const without = (key: keyof Search) => change((current) => Struct.omit(current, [key]));
   const openCreate = () => change((current) => ({ ...current, dialog: "create" }));
   const allDomains = Arr.appendAll(domains.data?.shared ?? [], domains.data?.subdomains ?? []);
-  const rows = Arr.filter(aliases.data ?? [], isShown(search));
+  const usernames = useQuery(usernamesQuery);
+  const filtered = Option.flatMap(Option.fromUndefinedOr(search.username), (name) =>
+    Arr.findFirst(usernames.data?.usernames ?? [], (entry) => entry.username === name),
+  );
+  const rows = Arr.filter(
+    aliases.data ?? [],
+    isShown(
+      search,
+      Option.match(filtered, { onNone: () => [], onSome: (entry) => entry.subdomains }),
+    ),
+  );
+  const hasUsernames = Arr.length(usernames.data?.usernames ?? []) > 1;
   const inactive = Arr.length(Arr.filter(aliases.data ?? [], (alias) => !alias.isActive));
   const hasAliases = Arr.isReadonlyArrayNonEmpty(aliases.data ?? []);
 
@@ -117,6 +138,33 @@ const Aliases = () => {
               ))}
             </SelectContent>
           </Select>
+          {hasUsernames && (
+            <Select
+              value={search.username ?? ALL}
+              disabled={!hasAliases}
+              onValueChange={(value) =>
+                value === null || value === ALL
+                  ? without("username")
+                  : change((current) => ({ ...current, username: value }))
+              }
+            >
+              <SelectTrigger aria-label="Filter by username">
+                <AtSignIcon />
+                <SelectValue>
+                  {(value: string) => (value === ALL ? "All usernames" : value)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectItem value={ALL}>All usernames</SelectItem>
+                <SelectSeparator />
+                {Arr.map(usernames.data?.usernames ?? [], (entry) => (
+                  <SelectItem key={entry.username} value={entry.username} className="data">
+                    {entry.username}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select
             value={search.status ?? ALL}
             disabled={!hasAliases}

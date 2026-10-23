@@ -94,13 +94,27 @@ export const screen = (
     : Option.none();
 };
 
-/** Where forwarded mail goes: the owner's default recipient, which is always a verified one. */
+/**
+ * Where forwarded mail goes: the default recipient of the additional username the alias lives
+ * under (`preferred`, PLAN.md §20.34) while it is one of the owner's verified recipients, else the
+ * owner's default recipient, which is always a verified one.
+ */
 export const forwardTarget = (
   recipients: ReadonlyArray<RecipientRepo.Recipient>,
+  preferred: Option.Option<string>,
 ): Option.Option<RecipientRepo.Recipient> =>
-  Arr.findFirst(
-    recipients,
-    (recipient) => recipient.isDefault && Option.isSome(recipient.verifiedAt),
+  Option.orElse(
+    Option.flatMap(preferred, (id) =>
+      Arr.findFirst(
+        recipients,
+        (recipient) => recipient.id === id && Option.isSome(recipient.verifiedAt),
+      ),
+    ),
+    () =>
+      Arr.findFirst(
+        recipients,
+        (recipient) => recipient.isDefault && Option.isSome(recipient.verifiedAt),
+      ),
   );
 
 /** RFC 5321 §4.5.3.1.3: a path holds at most 256 octets, so an address at most 254. */

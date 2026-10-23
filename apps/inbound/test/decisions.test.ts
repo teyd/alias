@@ -165,16 +165,33 @@ describe("Policy.screen", () => {
 describe("Policy.forwardTarget", () => {
   it("picks the default recipient", () => {
     const target = recipient("b@mail.example", { isDefault: true });
-    expect(Policy.forwardTarget([recipient("a@mail.example"), target])).toEqual(
+    expect(Policy.forwardTarget([recipient("a@mail.example"), target], Option.none())).toEqual(
       Option.some(target),
     );
   });
 
   it("finds none without a verified default", () => {
-    expect(Policy.forwardTarget([])).toEqual(Option.none());
+    expect(Policy.forwardTarget([], Option.none())).toEqual(Option.none());
     expect(
-      Policy.forwardTarget([recipient("a@mail.example", { isVerified: false, isDefault: true })]),
+      Policy.forwardTarget(
+        [recipient("a@mail.example", { isVerified: false, isDefault: true })],
+        Option.none(),
+      ),
     ).toEqual(Option.none());
+  });
+
+  it("prefers the username's own default recipient while it is verified", () => {
+    const fallback = recipient("b@mail.example", { isDefault: true });
+    const work = recipient("work@mail.example");
+    const pending = recipient("new@mail.example", { isVerified: false });
+    expect(Policy.forwardTarget([fallback, work], Option.some(work.id))).toEqual(Option.some(work));
+    // Unverified or removed since: the account's default again.
+    expect(Policy.forwardTarget([fallback, pending], Option.some(pending.id))).toEqual(
+      Option.some(fallback),
+    );
+    expect(Policy.forwardTarget([fallback], Option.some("rcp_gone"))).toEqual(
+      Option.some(fallback),
+    );
   });
 });
 

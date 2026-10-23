@@ -70,7 +70,7 @@ const TokenRequest = Schema.Struct({
   code_verifier: Schema.optionalKey(Schema.String),
   refresh_token: Schema.optionalKey(Schema.String),
   scope: Schema.optionalKey(Schema.String),
-  /** RFC 8707: the MCP resource the token is for. */
+  /** RFC 8707: the resource the token is for, the MCP endpoint or the HTTP API (`<origin>/v1`). */
   resource: Schema.optionalKey(Schema.String),
 }).pipe(HttpApiSchema.asFormUrlEncoded());
 

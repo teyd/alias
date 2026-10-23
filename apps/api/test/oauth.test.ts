@@ -17,6 +17,7 @@ const pkce = {
 };
 const issuer = Browser.origin;
 const resource = `${issuer}/mcp`;
+const apiResource = `${issuer}/v1`;
 const redirectUri = "http://127.0.0.1:5555/callback";
 
 const Registered = Schema.Struct({ client_id: Schema.String });
@@ -78,12 +79,15 @@ const request = (clientId: string, overrides: Record<string, string> = {}) => ({
 const query = (url: string) => R.fromEntries(Array.from(new URL(url).searchParams));
 
 /** Ada signed in, a registered client, and the code she approved for `scopes`. */
-const approved = Effect.fn("approved")(function* (scopes = ["aliases:read"]) {
+const approved = Effect.fn("approved")(function* (
+  scopes = ["aliases:read"],
+  overrides: Record<string, string> = {},
+) {
   const api = yield* TestApi.make;
   const ada = yield* TestApi.signedIn(api.browser, "ada");
   const clientId = yield* register(api);
   const decided = yield* ada.browser.post("/v1/oauth/authorization/decision", {
-    request: request(clientId),
+    request: request(clientId, overrides),
     isApproved: true,
     scopes,
   });
@@ -237,6 +241,75 @@ describe("OAuth authorization server (API handler on fakecloud)", () => {
       ]);
       // None of that used the code up.
       expect((yield* redeem(api, clientId, code)).status).toBe(200);
+    }),
+  );
+
+  // The browser extension's tokens (PLAN.md §20.35): the same flow, bound to the HTTP API.
+  it.effect("issues tokens for the HTTP API that the API takes and the MCP endpoint refuses", () =>
+    Effect.gen(function* () {
+      const asked = { scope: "aliases:read aliases:write", resource: apiResource };
+      const { api, ada, clientId, code } = yield* approved(
+        ["aliases:read", "aliases:write"],
+        asked,
+      );
+      const consent = yield* ada.browser.post("/v1/oauth/authorization", request(clientId, asked));
+      expect(consent.body).toMatchObject({ resource: apiResource });
+      expect(errorOf((yield* redeem(api, clientId, code, { resource })).body)).toBe(
+        "invalid_target",
+      );
+      const tokens = Schema.decodeUnknownSync(Tokens)(
+        (yield* redeem(api, clientId, code, { resource: apiResource })).body,
+      );
+      const extension = api.withToken(tokens.access_token);
+      expect((yield* extension.get("/v1/aliases")).status).toBe(200);
+      expect(
+        (yield* extension.post("/v1/aliases", {
+          _tag: "Random",
+          domain: "alias.test",
+          mode: "forward",
+        })).status,
+      ).toBe(201);
+      // Only what was granted, and never what only a session may do.
+      expect(yield* extension.get("/v1/recipients")).toMatchObject({
+        status: 403,
+        body: { _tag: "Forbidden", scope: "recipients:read" },
+      });
+      expect(yield* extension.get("/v1/tokens")).toMatchObject({
+        status: 403,
+        body: { _tag: "Forbidden" },
+      });
+      expect((yield* extension.post("/mcp", {})).status).toBe(401);
+
+      // A refreshed token is for the same resource.
+      const next = Schema.decodeUnknownSync(Tokens)(
+        (yield* refresh(api, clientId, tokens.refresh_token)).body,
+      );
+      expect((yield* api.withToken(next.access_token).get("/v1/aliases")).status).toBe(200);
+      expect(
+        errorOf(
+          (yield* exchange(api, {
+            grant_type: "refresh_token",
+            refresh_token: next.refresh_token,
+            client_id: clientId,
+            resource,
+          })).body,
+        ),
+      ).toBe("invalid_target");
+
+      // Disconnecting the app ends its access at once.
+      const [grant] = Schema.decodeUnknownSync(Grants)(
+        (yield* ada.browser.get("/v1/oauth/grants")).body,
+      );
+      expect((yield* ada.browser.delete(`/v1/oauth/grants/${grant?.id}`)).status).toBe(204);
+      expect((yield* api.withToken(next.access_token).get("/v1/aliases")).status).toBe(401);
+    }),
+  );
+
+  it.effect("keeps the API closed to tokens issued for the MCP server", () =>
+    Effect.gen(function* () {
+      const { api, clientId, code } = yield* approved(["aliases:read"], { resource });
+      const tokens = Schema.decodeUnknownSync(Tokens)((yield* redeem(api, clientId, code)).body);
+      expect((yield* api.withToken(tokens.access_token).get("/v1/aliases")).status).toBe(401);
     }),
   );
 

@@ -24,8 +24,8 @@ class Chromium extends Context.Service<Chromium, Browser>()("@alias/browser/Chro
 
 /**
  * The production bundle of `apps/web`, built into a temp dir and served by `vite preview` with
- * production's security headers (`@alias/web/security-headers`), which forwards `/v1` and
- * `/health` to the API's function URL, as the CloudFront distribution does with `/v1/*`.
+ * production's security headers (`@alias/web/security-headers`), which forwards `/v1`, `/health`
+ * and `/.well-known` to the API's function URL, as the CloudFront distribution does.
  *
  * Browsers treat `http://localhost` as a secure context, so the API's `Secure` session cookie and
  * WebAuthn work there without TLS. The passkey's relying party is `localhost` and its origin the
@@ -67,7 +67,8 @@ const webApp = Layer.effectContext(
             host: "127.0.0.1",
             port: 0,
             strictPort: true,
-            proxy: { "/v1": api.url, "/health": api.url },
+            // As CloudFront routes them; `/.well-known` has the OAuth metadata (§20.24).
+            proxy: { "/v1": api.url, "/health": api.url, "/.well-known": api.url },
             // Production's headers, with the Turnstile emulator where Cloudflare would be.
             headers: securityHeaders(turnstile.url),
           },
@@ -101,14 +102,47 @@ const chromiumLayer = Layer.effect(
   ),
 );
 
-/** The emulated stack (`@alias/e2e/stack`) with the web app in front and a browser to drive it. */
-export const layer = Layer.merge(stackLayer(webApp), chromiumLayer);
+/** The emulated stack (`@alias/e2e/stack`) with the web app in front. */
+export const stack = stackLayer(webApp);
+
+/** {@link stack} and a browser to drive it. */
+export const layer = Layer.merge(stack, chromiumLayer);
 
 /**
- * A fresh browser profile on the web app, with a virtual WebAuthn authenticator attached over CDP:
- * a platform authenticator (CTAP2, internal transport) that stores discoverable credentials and
- * verifies the user without a prompt, like Touch ID that always says yes.
+ * A virtual WebAuthn authenticator on `page`, attached over CDP: a platform authenticator
+ * (CTAP2, internal transport) that stores discoverable credentials and verifies the user without
+ * a prompt, like Touch ID that always says yes.
  */
+export const attachAuthenticator = Effect.fn("browser.attachAuthenticator")(function* (
+  context: BrowserContext,
+  page: Page,
+) {
+  const cdp = yield* Effect.promise(() => context.newCDPSession(page));
+  yield* Effect.promise(() => cdp.send("WebAuthn.enable"));
+  const { authenticatorId } = yield* Effect.promise(() =>
+    cdp.send("WebAuthn.addVirtualAuthenticator", {
+      options: {
+        protocol: "ctap2",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    }),
+  );
+  /** The passkeys the authenticator holds. */
+  const passkeys = () =>
+    Effect.promise(() => cdp.send("WebAuthn.getCredentials", { authenticatorId })).pipe(
+      Effect.map(({ credentials }) => credentials),
+    );
+  /** Gives this authenticator a copy of another one's passkey, as a synced passkey would arrive. */
+  const addPasskey = (credential: Effect.Success<ReturnType<typeof passkeys>>[number]) =>
+    Effect.promise(() => cdp.send("WebAuthn.addCredential", { authenticatorId, credential }));
+  return { passkeys, addPasskey };
+});
+
+/** A fresh browser profile on the web app, with a virtual WebAuthn authenticator attached. */
 export const openPage = Effect.fn("browser.openPage")(function* (
   options: {
     /**
@@ -142,28 +176,7 @@ export const openPage = Effect.fn("browser.openPage")(function* (
       violations.push(message.text());
     }
   });
-  const cdp = yield* Effect.promise(() => context.newCDPSession(page));
-  yield* Effect.promise(() => cdp.send("WebAuthn.enable"));
-  const { authenticatorId } = yield* Effect.promise(() =>
-    cdp.send("WebAuthn.addVirtualAuthenticator", {
-      options: {
-        protocol: "ctap2",
-        transport: "internal",
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        automaticPresenceSimulation: true,
-      },
-    }),
-  );
-  /** The passkeys the authenticator holds. */
-  const passkeys = () =>
-    Effect.promise(() => cdp.send("WebAuthn.getCredentials", { authenticatorId })).pipe(
-      Effect.map(({ credentials }) => credentials),
-    );
-  /** Gives this authenticator a copy of another one's passkey, as a synced passkey would arrive. */
-  const addPasskey = (credential: Effect.Success<ReturnType<typeof passkeys>>[number]) =>
-    Effect.promise(() => cdp.send("WebAuthn.addCredential", { authenticatorId, credential }));
+  const { passkeys, addPasskey } = yield* attachAuthenticator(context, page);
   return { page, context, passkeys, addPasskey };
 });
 

@@ -24,7 +24,8 @@ const REASONS: Record<InvalidAuthorizationRequest["reason"], string> = {
   "unsupported-response-type": "The app made a request this server doesn't support.",
   "pkce-required": "The app didn't protect its request with PKCE, so it can't be approved.",
   "invalid-scope": "The app asked for a permission that doesn't exist.",
-  "invalid-resource": "The app asked for access to something other than this account's MCP server.",
+  "invalid-resource":
+    "The app asked for access to something other than this account's MCP server or API.",
   "no-scope-granted": "Pick at least one permission, or deny the request.",
 };
 

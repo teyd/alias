@@ -7,10 +7,11 @@
   "scripts": {
     "test": "vp test",
     "test:browser": "vp test",
-    "install-browser": "playwright install --only-shell chromium"
+    "install-browser": "playwright install chromium"
   },
   "devDependencies": {
     "@alias/e2e": "workspace:*",
+    "@alias/extension": "workspace:*",
     "@alias/inbound": "workspace:*",
     "@alias/lambda-emulator": "workspace:*",
     "@alias/turnstile-emulator": "workspace:*",

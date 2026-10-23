@@ -97,8 +97,10 @@ const validate = Effect.fn("Authorize.validate")(function* (request: Authorizati
   }
   const asked = OAuth.scopeTokens(request.scope ?? "");
   if (!Arr.every(asked, isScope)) return yield* refuseHere("invalid-scope");
-  const { resource } = yield* Issuer;
-  if (request.resource !== undefined && request.resource !== resource) {
+  const issuer = yield* Issuer;
+  // No resource named: the MCP server, which is what MCP clients come for.
+  const resource = request.resource ?? issuer.resource;
+  if (resource !== issuer.resource && resource !== issuer.apiResource) {
     return yield* refuseHere("invalid-resource");
   }
   return {

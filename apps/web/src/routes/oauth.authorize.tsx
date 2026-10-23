@@ -73,7 +73,9 @@ const ConsentForm = ({ request }: { readonly request: AuthorizationRequest }) =>
   });
   if (consent.isPending) return null;
   if (consent.isError) return <Refused error={consent.error} />;
-  const { client, scopes } = consent.data;
+  const { client, scopes, resource } = consent.data;
+  // The token is for the MCP server or for the HTTP API (the browser extension, PLAN.md §20.35).
+  const through = resource === `${window.location.origin}/v1` ? "the Alias API" : "MCP";
   // Only the document's host and the redirect are verified; the name is the client's own claim,
   // whatever its kind (PLAN.md §20.30).
   return (
@@ -84,7 +86,7 @@ const ConsentForm = ({ request }: { readonly request: AuthorizationRequest }) =>
       })}
       description={
         <>
-          It wants to use your Alias account through MCP. Afterwards it is sent to{" "}
+          It wants to use your Alias account through {through}. Afterwards it is sent to{" "}
           <span className="data text-foreground">{client.redirectHost}</span>.
         </>
       }

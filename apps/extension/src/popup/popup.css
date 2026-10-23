@@ -1,0 +1,139 @@
+/* The popup: a few controls in a neutral palette, light and dark. */
+:root {
+  color-scheme: light dark;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --muted: #737373;
+  --border: #e5e5e5;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --muted: #a3a3a3;
+    --border: #262626;
+    --primary: #fafafa;
+    --primary-foreground: #171717;
+  }
+}
+
+body {
+  margin: 0;
+  width: 340px;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+#root {
+  padding: 12px;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0;
+  flex: 1;
+}
+
+h2 {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0;
+}
+
+p {
+  margin: 0;
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row > .data {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.data {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.result > .data {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: transparent;
+}
+
+button {
+  cursor: pointer;
+  text-align: left;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+button.link {
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

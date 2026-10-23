@@ -110,6 +110,63 @@ export const records = (setup: Setup): ReadonlyArray<DnsRecord> => {
   ];
 };
 
+/** What each record is for, as the comment Cloudflare keeps on the imported record. */
+const zoneComment: Record<Purpose, string> = {
+  ownership: "Alias: proves the domain is yours (required)",
+  receiving: "Alias: delivers the domain's mail to Alias (required)",
+  dkim: "Alias: DKIM, signs mail sent from the domain (required)",
+  "mail-from": "Alias: MAIL FROM, bounces and SPF alignment (recommended)",
+  dmarc: "Alias: DMARC policy (recommended)",
+};
+
+const absolute = (name: string) => (name.endsWith(".") ? name : `${name}.`);
+
+/** A TXT value as quoted strings of at most 255 characters each (RFC 1035 §3.3.14). */
+const quoted = (value: string) =>
+  Arr.join(
+    Arr.map(
+      Arr.chunksOf(Arr.fromIterable(value), 255),
+      (chunk) => `"${Arr.join(chunk, "").replace(/[\\"]/g, "\\$&")}"`,
+    ),
+    " ",
+  );
+
+const zoneLine = (record: DnsRecord): string => {
+  const data =
+    record.type === "TXT"
+      ? quoted(record.value)
+      : record.type === "MX"
+        ? `${record.priority ?? 10} ${absolute(record.value)}`
+        : absolute(record.value);
+  // Cloudflare would proxy an imported CNAME if asked to, and a proxied DKIM CNAME doesn't verify.
+  const tags = record.type === "CNAME" ? " cf_tags=cf-proxied:false" : "";
+  return `${absolute(record.name)}\t3600\tIN\t${record.type}\t${data} ; ${zoneComment[record.purpose]}${tags}`;
+};
+
+/**
+ * The records as a BIND zone file, for Cloudflare's import (DNS Records → Import and Export) and
+ * other providers': required records first, every name absolute (no `$ORIGIN`), TTL 3600, one
+ * comment per record on its line (Cloudflare keeps those as the record's comment and drops the
+ * rest).
+ * https://developers.cloudflare.com/dns/manage-dns-records/how-to/import-and-export/
+ */
+export const zoneFile = (domain: string, all: ReadonlyArray<DnsRecord>): string =>
+  Arr.join(
+    [
+      `; DNS records for ${domain}, from Alias. Required records first, then recommended ones.`,
+      ...Arr.map(
+        Arr.filter(all, (record) => record.isRequired),
+        zoneLine,
+      ),
+      ...Arr.map(
+        Arr.filter(all, (record) => !record.isRequired),
+        zoneLine,
+      ),
+      "",
+    ],
+    "\n",
+  );
+
 const isSpf = (text: string) => Str.toLowerCase(text).startsWith("v=spf1 ") || text === "v=spf1";
 
 const present = (isOk: boolean, found: ReadonlyArray<unknown>): CheckState =>

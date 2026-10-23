@@ -1,10 +1,11 @@
 import type { Domain } from "@alias/contracts";
+import { DomainSetup } from "@alias/dns";
 import { useMutation } from "@tanstack/react-query";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 import * as P from "effect/Predicate";
-import { RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { ChevronRightIcon, DownloadIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { CopyButton } from "@/components/CopyButton";
 import { Problem } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -105,9 +107,54 @@ const RecordRow = ({ record }: { readonly record: DomainRecord }) => (
   </TableRow>
 );
 
+/** The records as DNS providers' forms ask for them, with what the last check found. */
+const RecordTable = ({
+  label,
+  records,
+}: {
+  readonly label: string;
+  readonly records: ReadonlyArray<DomainRecord>;
+}) => (
+  <div className="overflow-x-auto rounded-lg border bg-muted">
+    <Table aria-label={label}>
+      <TableHeader>
+        <TableRow>
+          <TableHead>
+            <span className="pl-1">Record</span>
+          </TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Name</TableHead>
+          <TableHead>Value</TableHead>
+          <TableHead className="text-right">
+            <span className="pr-1">Status</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {Arr.map(records, (record) => (
+          <RecordRow key={`${record.type} ${record.name} ${record.value}`} record={record} />
+        ))}
+      </TableBody>
+    </Table>
+  </div>
+);
+
+/** Hands every record to the browser as a BIND zone file, for the DNS provider's import. */
+const download = (domain: Domain) => {
+  const url = URL.createObjectURL(
+    new Blob([DomainSetup.zoneFile(domain.domain, domain.records)], { type: "text/plain" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${domain.domain}.zone`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 /**
- * A custom domain: its status, the DNS records to publish with what the last check found, a
- * check on demand, the catch-all switch and removal.
+ * A custom domain: its status, the DNS records to publish with what the last check found (the
+ * required ones up front, the recommended ones folded away), the zone file, a check on demand, the
+ * catch-all switch and removal.
  */
 export const CustomDomainCard = ({
   domain,
@@ -126,6 +173,11 @@ export const CustomDomainCard = ({
     onSuccess: () => refresh(),
   });
   const catchAllId = `catch-all-${domain.domain}`;
+  const required = Arr.filter(domain.records, (record) => record.isRequired);
+  const recommended = Arr.filter(domain.records, (record) => !record.isRequired);
+  // A recommended record that is there but wrong needs fixing, so it isn't left folded away; the
+  // key opens the section again when a check finds one.
+  const isRecommendedWrong = Arr.some(recommended, (record) => record.state === "wrong");
 
   return (
     <Card aria-label={domain.domain}>
@@ -139,7 +191,7 @@ export const CustomDomainCard = ({
             ? "Aliases on it receive mail, and replies go out from it."
             : domain.status === "failed"
               ? "A required record is missing or changed, so its aliases are paused. They resume by themselves once it's back."
-              : "Publish these records at your DNS provider, then check. We also check every ten minutes; DNS changes can take a while to show."}{" "}
+              : `Publish these ${required.length} records at your DNS provider. We check every ten minutes; DNS changes can take a while to show.`}{" "}
           {Option.match(domain.checkedAt, {
             onNone: () => "Not checked yet.",
             onSome: (at) => `Last checked ${when(at)}.`,
@@ -170,27 +222,40 @@ export const CustomDomainCard = ({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="overflow-x-auto rounded-lg border bg-muted">
-          <Table aria-label={`DNS records for ${domain.domain}`}>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <span className="pl-1">Record</span>
-                </TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead className="text-right">
-                  <span className="pr-1">Status</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Arr.map(domain.records, (record) => (
-                <RecordRow key={`${record.type} ${record.name} ${record.value}`} record={record} />
-              ))}
-            </TableBody>
-          </Table>
+        <RecordTable label={`Required DNS records for ${domain.domain}`} records={required} />
+        <Collapsible
+          key={isRecommendedWrong ? "wrong" : "fine"}
+          defaultOpen={isRecommendedWrong}
+          className="flex flex-col gap-2"
+        >
+          <CollapsibleTrigger
+            render={
+              <Button variant="ghost" size="sm" className="group self-start">
+                <ChevronRightIcon className="transition-transform group-aria-expanded:rotate-90" />
+                Optional: better deliverability ({recommended.length} records)
+              </Button>
+            }
+          />
+          <CollapsibleContent className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              MAIL FROM and SPF let bounces come back to your domain and make SPF pass for it; DMARC
+              tells receivers what to do with mail that fails those checks. Mail works without them,
+              but lands in spam more often.
+            </p>
+            <RecordTable
+              label={`Recommended DNS records for ${domain.domain}`}
+              records={recommended}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Button variant="outline" size="sm" onClick={() => download(domain)}>
+            <DownloadIcon />
+            Download zone file
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Cloudflare: DNS → Records → Import and Export → Import
+          </span>
         </div>
         <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
           <div className="flex flex-col gap-0.5">

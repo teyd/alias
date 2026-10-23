@@ -1,6 +1,10 @@
 /**
- * Production infrastructure (AWS eu-west-1). Not deployed yet. Development and every test run
- * against emulators (see AGENTS.md), and `pnpm check` typechecks this file.
+ * Production infrastructure (AWS eu-west-1, DNS and Turnstile on Cloudflare). Not deployed yet.
+ * Development and every test run against emulators (see AGENTS.md), and `pnpm check` typechecks
+ * this file. Deploy with `pnpm infra:deploy` (`scripts/deploy.ts`), never `alchemy deploy` alone:
+ * it builds the web app, creates the stage's keyrings (`scripts/bootstrap-stage.ts`) and hands
+ * this stack the AWS credentials it reads with. Every setting is in `infra/.env.example`; the steps
+ * no tool can do are PLAN.md §20.37.
  *
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
@@ -12,14 +16,20 @@ import { Table } from "@alias/db";
 import { Inbox } from "@alias/inbox";
 import { securityHeaders } from "@alias/web/security-headers";
 import { WebhookQueue } from "@alias/webhooks";
+import * as ACM from "@distilled.cloud/aws/acm";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as P from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 
 const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
@@ -56,8 +66,8 @@ const asyncFailuresQueueName = `alias-async-failures-${stage}`;
  * never throttled by someone else's traffic. Reserving costs nothing; only use is billed.
  *
  * Together 352. Lambda keeps at least 100 unreserved, so the account's concurrency quota must be
- * at least 452: ask for 1,000 (Service Quotas, Lambda "Concurrent executions", L-B99A9384) before
- * the first deploy, since new accounts may start with as few as 10.
+ * at least 452; new accounts may start with as few as 10, so the stack asks for 1,000
+ * (`lambdaConcurrencyQuota`, below).
  */
 const reservedConcurrency = {
   /** SES mail: ~1 s each, so 100 handle bursts of ~100 messages a second. */
@@ -86,11 +96,8 @@ const alertEmail = process.env.ALIAS_ALERT_EMAIL?.trim() || undefined;
  * least 32 bytes). They live in an SSM Parameter Store `SecureString` (standard tier, free) that
  * the Lambda reads at cold start. This stack only names the parameter and grants reading it; it
  * never holds the value, so the value stays out of the Alchemy state and the Lambda console.
- * Before the first deploy of a stage, put it once (the default key `aws/ssm` encrypts it):
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/reverse-token-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * `scripts/bootstrap-stage.ts` (run by every `pnpm infra:deploy`) creates it with one fresh key
+ * if it is missing and never touches an existing one; the default key `aws/ssm` encrypts it.
  *
  * Rotate in two puts with `--overwrite`: first append the new key (`1:<old>,2:<new>`), then, once
  * every warm container has reloaded (or after any function configuration update), put it first
@@ -101,11 +108,7 @@ const reverseTokenKeysParameter = `/alias/${stage}/reverse-token-keys`;
 /**
  * The image proxy's URL keys (PLAN.md §20.19): the inbound Lambda signs proxy URLs with them and
  * the image proxy Lambda verifies them. Same format, storage and two-step rotation as the
- * reverse-token keys; put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/image-proxy-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * reverse-token keys; `scripts/bootstrap-stage.ts` creates it.
  *
  * Removing a key breaks the images of every mail forwarded while it signed, so keep old keys.
  */
@@ -125,11 +128,7 @@ const inboxBucketName = `alias-inbox-${stage}`;
 /**
  * The inbox keys (PLAN.md §20.22.2): they wrap each stored message's data key. Same format,
  * storage and two-step rotation as the reverse-token keys; both the inbound Lambda (wraps) and
- * the API (unwraps) read it. Put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/inbox-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * the API (unwraps) read it. `scripts/bootstrap-stage.ts` creates it.
  *
  * A retired key may be removed 30 days (the longest retention) after it stopped wrapping: no
  * message wrapped with it is left by then. Removing it earlier makes those messages unreadable.
@@ -139,11 +138,7 @@ const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 /**
  * The webhook keys (PLAN.md §20.30): they seal the webhook signing secrets at rest. Same format
  * and storage as the other keyrings; the API (seals on create and rotate) and the delivery Lambda
- * (opens) read it. Put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/webhook-keys \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * (opens) read it. `scripts/bootstrap-stage.ts` creates it.
  *
  * Rotation is the usual two puts (add the new key after the current one, then move it first). A
  * retired key opens every secret sealed with it until each webhook's secret is rotated or the
@@ -153,24 +148,29 @@ const inboxKeysParameter = `/alias/${stage}/inbox-keys`;
 const webhookKeysParameter = `/alias/${stage}/webhook-keys`;
 
 /**
- * Cloudflare Turnstile at sign-up (PLAN.md §20.27). The site key is public (the web app renders
- * the widget with it); the secret key is a `SecureString` the API reads at cold start. Create the
- * widget in the Cloudflare dashboard (Turnstile → Add widget, hostname = the app domain, mode
- * "Managed"), set `ALIAS_TURNSTILE_SITE_KEY` for the deploy, and put the secret once:
+ * A deployed stage has its app domain on Cloudflare: its DNS records, the certificate's validation
+ * and the Turnstile widget are made here. The `local` stage (typecheck, a scratch account) has no
+ * Cloudflare at all: the distribution answers on `*.cloudfront.net` and sign-up uses Turnstile's
+ * test keys.
+ */
+const isOnCloudflare = stage !== "local";
+
+/**
+ * Cloudflare Turnstile at sign-up (PLAN.md §20.27). This stack creates the widget (hostname = the
+ * app domain, mode "Managed"); its site key is public and goes into the API's configuration (the
+ * API names it to the web app), its secret key into the `SecureString` the API reads at cold
+ * start. Unlike the keyrings below, the secret is in the Alchemy state: Cloudflare generates it
+ * and hands it to whoever reads the widget, so the state holds nothing Cloudflare doesn't.
  *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/turnstile-secret --value '<secret key>'
- *
- * Rotating it in the dashboard keeps the old secret valid for a grace period; overwrite the
- * parameter and update the function configuration (new containers read it) within that period.
+ * Rotating it in the dashboard keeps the old secret valid for a grace period; deploy again within
+ * that period (the parameter is rewritten and the API's containers read it when they start).
  */
 const turnstileSecretParameter = `/alias/${stage}/turnstile-secret`;
-// The local stage may use Turnstile's always-passing test key; a deployed one needs its own.
-const turnstileSiteKey =
-  process.env.ALIAS_TURNSTILE_SITE_KEY ?? (stage === "local" ? "1x00000000000000000000AA" : "");
-if (turnstileSiteKey === "") {
-  throw new Error("ALIAS_TURNSTILE_SITE_KEY is required to deploy a stage (PLAN.md §20.27)");
-}
+/** Turnstile's documented always-passing test keys, for the `local` stage. */
+const turnstileTestKeys = {
+  siteKey: "1x00000000000000000000AA",
+  secret: "1x0000000000000000000000000000000AA",
+};
 /** Sign-ups everyone together may make in an hour before sign-up pauses (the circuit breaker). */
 const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
 
@@ -180,11 +180,7 @@ const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
  * `CloudFront-Viewer-Address`. A keyring like the others, read by the API at cold start; unlike
  * them, this stack reads it too, at deploy time, because the distribution's origin custom header
  * must carry the current key: the value ends up in the distribution config and the Alchemy state.
- * Put it once before the first deploy:
- *
- *   aws ssm put-parameter --region eu-west-1 --type SecureString \
- *     --name /alias/<stage>/origin-secrets \
- *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ * `scripts/bootstrap-stage.ts` creates it before Alchemy runs.
  *
  * Rotate in three steps: append the new key (`1:<old>,2:<new>`) and update the API function (any
  * configuration change starts fresh containers that accept both); put it first (`2:<new>,1:<old>`)
@@ -197,14 +193,73 @@ const originSecretsParameter = `/alias/${stage}/origin-secrets`;
 const webBucketName = `alias-web-${stage}`;
 const webBuild = new URL("../apps/web/dist", import.meta.url).pathname;
 
+/** Where SES receives mail in eu-west-1 (SES endpoints, "Email receiving"); every MX names it. */
+const inboundMx = "inbound-smtp.eu-west-1.amazonaws.com";
+
+/** The monthly cost budget, in USD; mail goes to `ALIAS_ALERT_EMAIL` at 80% and when forecast over. */
+const budgetUsd = process.env.ALIAS_BUDGET_USD?.trim() || "20";
+
 /**
- * The app domain's certificate (ACM, us-east-1, DNS-validated). DNS stays on Cloudflare, so the
- * first deploy requests it and outputs the validation CNAME (`certificateValidation`), which goes
- * into Cloudflare DNS (DNS only, not proxied) and stays there for renewals. Once ACM says
- * `ISSUED`, deploy again with `ALIAS_APP_CERTIFICATE_ISSUED=true`: CloudFront refuses a pending
- * certificate, so until then the distribution answers on its `*.cloudfront.net` name only.
+ * The Lambda concurrency quota (Service Quotas, "Concurrent executions", L-B99A9384) this stack
+ * asks for; `reservedConcurrency` above needs at least 452.
  */
-const isCertificateIssued = process.env.ALIAS_APP_CERTIFICATE_ISSUED === "true";
+const lambdaConcurrencyQuota = 1000;
+
+/** How long a deploy waits for ACM: validation records appear in seconds, issuance in minutes. */
+const certificatePoll = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(90)]);
+
+/** What the certificate actions throw while ACM isn't there yet; retried by `certificatePoll`. */
+class CertificatePending extends Schema.TaggedError<CertificatePending>()("CertificatePending", {
+  status: Schema.String,
+}) {}
+
+/** ACM in us-east-1 (CloudFront's certificates), with the credentials `scripts/deploy.ts` set. */
+const acmClient = AwsClient.layer({ region: "us-east-1", endpoint: Option.none() });
+
+/**
+ * The app certificate's DNS validation record, once ACM has made it (a few seconds after the
+ * request). ACM names it with a trailing dot; Cloudflare wants none.
+ */
+const CertificateValidationRecord = Alchemy.Action(
+  "CertificateValidationRecord",
+  Effect.fn(function* (input: { certificateArn: string }) {
+    const record = yield* ACM.describeCertificate({ CertificateArn: input.certificateArn }).pipe(
+      Effect.flatMap(({ Certificate }) => {
+        const resource = Certificate?.DomainValidationOptions?.[0]?.ResourceRecord;
+        return resource === undefined
+          ? Effect.fail(new CertificatePending({ status: "no validation record yet" }))
+          : Effect.succeed(resource);
+      }),
+      Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
+      Effect.provide(acmClient),
+    );
+    return { name: record.Name.replace(/\.$/, ""), value: record.Value.replace(/\.$/, "") };
+  }),
+);
+
+/**
+ * Waits until ACM reports the certificate `ISSUED` (CloudFront refuses a pending one), about 15
+ * minutes at most; Cloudflare answers the validation record right away, so it usually takes a
+ * few. Runs again only when its input changes, so later deploys don't wait. Fails on ACM's
+ * terminal statuses and when the wait runs out; deploying again resumes it.
+ */
+const CertificateIssued = Alchemy.Action(
+  "CertificateIssued",
+  Effect.fn(function* (input: { certificateArn: string; validationRecordId: string }) {
+    yield* ACM.describeCertificate({ CertificateArn: input.certificateArn }).pipe(
+      Effect.flatMap(({ Certificate }) => {
+        const status = Certificate?.Status ?? "unknown";
+        if (status === "ISSUED") return Effect.void;
+        return status === "PENDING_VALIDATION"
+          ? Effect.fail(new CertificatePending({ status }))
+          : Effect.die(new Error(`ACM certificate ${input.certificateArn} is ${status}`));
+      }),
+      Effect.retry({ while: P.isTagged("CertificatePending"), schedule: certificatePoll }),
+      Effect.provide(acmClient),
+    );
+    return { certificateArn: input.certificateArn };
+  }),
+);
 
 /**
  * The CloudFront Function on the app's viewer requests: paths without a file extension are the
@@ -309,7 +364,7 @@ const wafRules = [
 export default Alchemy.Stack(
   "alias",
   {
-    providers: AWS.providers(),
+    providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
     state: stage === "local" ? localState() : AWS.state(),
   },
   Effect.gen(function* () {
@@ -513,6 +568,40 @@ export default Alchemy.Stack(
       destinationConfig: { OnFailure: { Destination: asyncFailures.queueArn } },
     } as const;
 
+    // The Cloudflare zone of each of the service's domains (the domain itself or a parent), looked
+    // up by name with the token's account (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`).
+    const zoneIds = new Map<string, string>();
+    if (isOnCloudflare) {
+      const { accountId: cloudflareAccount } = yield* yield* Cloudflare.CloudflareEnvironment;
+      yield* Effect.forEach([...sharedDomains, ...tempDomains], (domain) =>
+        Cloudflare.Zone.resolveZoneId({
+          accountId: cloudflareAccount,
+          zone: undefined,
+          hostname: domain,
+        }).pipe(
+          Effect.map((zoneId) => zoneIds.set(domain, zoneId)),
+          // A domain without a zone in this account can't be served: stop before anything changes.
+          Effect.orDie,
+        ),
+      );
+    }
+    const zoneOf = (domain: string) => zoneIds.get(domain) ?? "";
+
+    // Sign-up's human check (PLAN.md §20.27): the widget, and its secret where the API reads it.
+    const turnstile = isOnCloudflare
+      ? yield* Cloudflare.Turnstile.Widget("Signup", {
+          name: `alias-${stage}`,
+          domains: [appDomain],
+          mode: "managed",
+        })
+      : undefined;
+    yield* AWS.SSM.Parameter("TurnstileSecret", {
+      name: turnstileSecretParameter,
+      type: "SecureString",
+      value: turnstile?.secret ?? Redacted.make(turnstileTestKeys.secret),
+      description: "Turnstile secret key for sign-up (PLAN.md §20.27)",
+    });
+
     const api = yield* AWS.Lambda.Function("Api", {
       main: new URL("../apps/api/src/handler.ts", import.meta.url).pathname,
       runtime: "nodejs24.x",
@@ -540,7 +629,7 @@ export default Alchemy.Stack(
         ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
         // Mints the reverse alias of a contact the owner adds (PLAN.md §20.33).
         ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
-        ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
+        ALIAS_TURNSTILE_SITE_KEY: turnstile?.sitekey ?? turnstileTestKeys.siteKey,
         ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
         ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
         // Only requests through the distribution are served (PLAN.md §20.26).
@@ -736,7 +825,28 @@ export default Alchemy.Stack(
       { functionArn: headers.functionArn, eventType: "viewer-response" as const },
     ];
 
+    // The app domain's certificate (ACM, us-east-1), validated through a CNAME in Cloudflare that
+    // stays there for renewals. The distribution takes it once ACM has issued it.
     const certificate = yield* AWS.ACM.Certificate("App", { domainName: appDomain });
+    const issuedCertificate = isOnCloudflare
+      ? yield* Effect.gen(function* () {
+          const validation = yield* CertificateValidationRecord({
+            certificateArn: certificate.certificateArn,
+          });
+          const validationRecord = yield* Cloudflare.DNS.Record("CertificateValidation", {
+            zoneId: zoneOf(appDomain),
+            name: validation.name,
+            type: "CNAME",
+            content: validation.value,
+            comment: "ACM validation of the app certificate (PLAN.md §20.26); keep for renewals",
+          });
+          return yield* CertificateIssued({
+            certificateArn: certificate.certificateArn,
+            // Unused by the wait; naming it makes the wait start once the record exists.
+            validationRecordId: validationRecord.recordId,
+          });
+        })
+      : undefined;
     const firewall = yield* AWS.WAFv2.WebACL("App", {
       scope: "CLOUDFRONT",
       description: `alias ${stage}: managed rules and rate limits (PLAN.md §20.26)`,
@@ -763,11 +873,11 @@ export default Alchemy.Stack(
     // because OAC can't sign POST bodies for browsers; the origin secret stands in for it.
     const app = yield* AWS.CloudFront.Distribution("App", {
       comment: `alias (${stage})`,
-      ...(isCertificateIssued
+      ...(issuedCertificate !== undefined
         ? {
             aliases: [appDomain],
             viewerCertificate: {
-              acmCertificateArn: certificate.certificateArn,
+              acmCertificateArn: issuedCertificate.certificateArn,
               sslSupportMethod: "sni-only" as const,
               minimumProtocolVersion: "TLSv1.2_2021" as const,
             },
@@ -869,9 +979,9 @@ export default Alchemy.Stack(
             : { invokedViaFunctionUrl: true }),
         }),
     );
-    // Proxied images point at the app domain once its certificate is live, before that at the
-    // distribution's own name (which keeps working for mail forwarded meanwhile).
-    const appOrigin = isCertificateIssued
+    // Proxied images point at the app domain; on the `local` stage, which has none, at the
+    // distribution's own name.
+    const appOrigin = isOnCloudflare
       ? Output.interpolate`https://${appDomain}`
       : Output.interpolate`https://${app.domainName}`;
 
@@ -1082,20 +1192,76 @@ export default Alchemy.Stack(
 
     // Events reach the feedback Lambda, so SES needn't also mail bounces to the sender, which
     // would be a reverse alias (the inbound pipeline drops them as `bounce` anyway).
-    yield* Effect.forEach(sharedDomains, (domain) =>
+    const sharedIdentities = yield* Effect.forEach(sharedDomains, (domain) =>
       AWS.SES.EmailIdentity(`Shared-${domain}`, {
         emailIdentity: domain,
         feedbackForwardingEnabled: false,
-      }),
+      }).pipe(Effect.map((identity) => ({ domain, identity }))),
     );
     // Temp-mail domains only receive (the receipt rule covers every verified domain); nothing
     // is ever sent from them, and the sending policies deny them explicitly.
-    yield* Effect.forEach(tempDomains, (domain) =>
+    const tempIdentities = yield* Effect.forEach(tempDomains, (domain) =>
       AWS.SES.EmailIdentity(`Temp-${domain}`, {
         emailIdentity: domain,
         feedbackForwardingEnabled: false,
-      }),
+      }).pipe(Effect.map((identity) => ({ domain, identity }))),
     );
+
+    // The service's DNS on Cloudflare, all DNS only (never proxied: SES, ACM and CloudFront must
+    // see their own answers). Records a domain already has under the same name and type are not
+    // taken over unless `--adopt` is passed (Alchemy refuses unowned records).
+    if (isOnCloudflare) {
+      // Easy DKIM: SES verifies a domain and signs its mail once these three CNAMEs resolve.
+      yield* Effect.forEach([...sharedIdentities, ...tempIdentities], ({ domain, identity }) =>
+        Effect.forEach([0, 1, 2], (index) => {
+          const token = Output.map((tokens: string[]) => tokens[index] ?? "")(identity.dkimTokens);
+          return Cloudflare.DNS.Record(`Dkim-${domain}-${index}`, {
+            zoneId: zoneOf(domain),
+            name: Output.interpolate`${token}._domainkey.${domain}`,
+            type: "CNAME",
+            content: Output.interpolate`${token}.dkim.amazonses.com`,
+            comment: "SES Easy DKIM (PLAN.md §20.37)",
+          });
+        }),
+      );
+      // Mail for the shared domains, users' subdomains (`*.<domain>`, PLAN.md §20.8) and the
+      // temp-mail domains goes to SES receiving, which the receipt rule above hands on.
+      const mailNames = [
+        ...sharedDomains.flatMap((domain) => [
+          { id: `Mx-${domain}`, domain, name: domain },
+          { id: `MxSubdomains-${domain}`, domain, name: `*.${domain}` },
+        ]),
+        ...tempDomains.map((domain) => ({ id: `Mx-${domain}`, domain, name: domain })),
+      ];
+      yield* Effect.forEach(mailNames, ({ id, domain, name }) =>
+        Cloudflare.DNS.Record(id, {
+          zoneId: zoneOf(domain),
+          name,
+          type: "MX",
+          content: inboundMx,
+          priority: 10,
+          comment: "SES receiving (PLAN.md §20.37)",
+        }),
+      );
+      // The app domain to the distribution; Cloudflare flattens a CNAME at a zone apex.
+      yield* Cloudflare.DNS.Record("App", {
+        zoneId: zoneOf(appDomain),
+        name: appDomain,
+        type: "CNAME",
+        content: app.domainName,
+        comment: "The app's CloudFront distribution (PLAN.md §20.26)",
+      });
+    }
+
+    // Room for `reservedConcurrency` (PLAN.md §20.29). New accounts may start with as few as 10
+    // concurrent executions; the request is submitted only while the applied quota is lower. It
+    // isn't waited for: until AWS approves it, creating the reserved functions fails, and
+    // deploying again afterwards picks up where this one stopped (PLAN.md §20.37).
+    yield* AWS.ServiceQuotas.ServiceQuotaIncreaseRequest("LambdaConcurrency", {
+      serviceCode: "lambda",
+      quotaCode: "L-B99A9384",
+      desiredValue: lambdaConcurrencyQuota,
+    });
 
     // SES reputation alarms (PLAN.md §20.13). SES reviews the account at a 5% bounce or 0.1%
     // complaint rate and may pause sending at 10% / 0.5%; these warn at half the review level and
@@ -1133,6 +1299,27 @@ export default Alchemy.Stack(
         endpoint: alertEmail,
       });
     }
+    // The account's monthly spend (every stage in it counts): mail when 80% is spent and when the
+    // month is forecast to go over. Budgets mails directly; no SNS confirmation.
+    yield* AWS.Budgets.Budget("Monthly", {
+      budgetName: `alias-${stage}-monthly`,
+      budgetType: "COST",
+      timeUnit: "MONTHLY",
+      budgetLimit: { amount: budgetUsd, unit: "USD" },
+      notifications:
+        alertEmail === undefined
+          ? []
+          : [
+              { notificationType: "ACTUAL" as const, threshold: 80 },
+              { notificationType: "FORECASTED" as const, threshold: 100 },
+            ].map(({ notificationType, threshold }) => ({
+              notificationType,
+              comparisonOperator: "GREATER_THAN" as const,
+              threshold,
+              thresholdType: "PERCENTAGE" as const,
+              subscribers: [{ subscriptionType: "EMAIL" as const, address: alertEmail }],
+            })),
+    });
     const reputationAlarms = [
       { name: "bounce-warning", metric: "Reputation.BounceRate", threshold: 0.025 },
       { name: "bounce-critical", metric: "Reputation.BounceRate", threshold: 0.04 },
@@ -1295,8 +1482,7 @@ export default Alchemy.Stack(
       webhookDeliveryFunction: delivery.functionName,
       appUrl: appOrigin,
       distributionDomain: app.domainName,
-      // The CNAME to put into Cloudflare DNS for ACM (PLAN.md §20.26).
-      certificateValidation: certificate.domainValidationOptions,
+      turnstileSiteKey: turnstile?.sitekey,
       webAclArn: firewall.webAclArn,
       verifyDomainsFunction: verifyDomains.functionName,
       asyncFailuresQueue: asyncFailures.queueUrl,

@@ -846,6 +846,9 @@ importers:
       '@alias/webhooks':
         specifier: workspace:*
         version: link:../packages/webhooks
+      '@distilled.cloud/aws':
+        specifier: 'catalog:'
+        version: 1.0.0-rc.15(effect@4.0.5)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)

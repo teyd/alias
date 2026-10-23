@@ -16,6 +16,7 @@
     "@alias/inbox": "workspace:*",
     "@alias/web": "workspace:*",
     "@alias/webhooks": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "catalog:",
     "effect": "catalog:"

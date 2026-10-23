@@ -10,6 +10,7 @@ import { DeleteAccount } from "@/components/DeleteAccount";
 import { Page } from "@/components/Page";
 import { ApiTokens } from "@/components/settings/ApiTokens";
 import { ConnectedApps } from "@/components/settings/ConnectedApps";
+import { KeepFailedMail } from "@/components/settings/KeepFailedMail";
 import { Passkeys } from "@/components/settings/Passkeys";
 import { Sessions } from "@/components/settings/Sessions";
 import { Webhooks } from "@/components/settings/Webhooks";
@@ -80,6 +81,13 @@ const Settings = () => {
             </Section>
           ),
         })}
+        <Separator />
+        <Section
+          title="Failed deliveries"
+          description="Mail that couldn't be forwarded is listed under Failed deliveries for 7 days."
+        >
+          <KeepFailedMail />
+        </Section>
         <Separator />
         <Section
           title="Passkeys"

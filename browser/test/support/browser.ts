@@ -1,4 +1,4 @@
-import { apiHandler, layer as stackLayer } from "@alias/e2e/stack";
+import { apiHandler, sentTo, layer as stackLayer } from "@alias/e2e/stack";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { TurnstileServer } from "@alias/turnstile-emulator";
 import { securityHeaders } from "@alias/web/security-headers";
@@ -9,6 +9,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
@@ -187,3 +188,40 @@ export const api = <S extends Schema.Top>(page: Page, path: string, schema: S) =
 /** Follows an entry of the app's sidebar ("Overview", "Aliases", "Destinations", …). */
 export const goTo = (page: Page, entry: string) =>
   page.getByRole("navigation").getByRole("link", { name: entry, exact: true }).click();
+
+/**
+ * Adds `mailbox` as a destination on the Destinations screen and confirms it from the link in the
+ * confirmation mail SES sent (read on fakecloud), as its owner would.
+ */
+export const confirmDestination = Effect.fn("browser.confirmDestination")(function* (
+  page: Page,
+  mailbox: string,
+) {
+  const { origin } = yield* WebApp;
+  yield* ui(async () => {
+    await goTo(page, "Destinations");
+    await page.getByRole("button", { name: "Add destination" }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Add destination" });
+    await dialog.getByRole("textbox", { name: "Mailbox address" }).fill(mailbox);
+    await dialog.getByRole("button", { name: "Send confirmation" }).click();
+    await page
+      .getByRole("dialog", { name: "Check your inbox" })
+      .getByRole("button", { name: "Done" })
+      .click();
+  });
+  const confirmations = Arr.filter(yield* sentTo(mailbox), (email) =>
+    email.text.includes(`${origin}/destinations?`),
+  );
+  const link = new RegExp(`${origin}/destinations\\?\\S+`).exec(
+    Arr.last(confirmations).pipe(
+      Option.map((email) => email.text),
+      Option.getOrElse(() => ""),
+    ),
+  );
+  yield* ui(async () => {
+    await page.goto(link?.[0] ?? "/");
+    const confirm = page.getByRole("button", { name: "Confirm this address" });
+    await confirm.click();
+    await confirm.waitFor({ state: "detached" });
+  });
+});

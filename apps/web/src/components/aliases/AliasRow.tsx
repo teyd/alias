@@ -7,6 +7,7 @@ import {
   CircleCheckIcon,
   EllipsisIcon,
   PencilIcon,
+  SendIcon,
   Trash2Icon,
   UsersIcon,
 } from "lucide-react";
@@ -29,13 +30,14 @@ import { aliasesQuery, setActive } from "@/lib/aliases";
 
 /**
  * One alias: its description and labels, counters, contacts, the active switch, and
- * edit/deactivate/delete in its menu.
+ * edit/send mail/deactivate/delete in its menu.
  */
 export const AliasRow = ({
   alias,
   labels,
   onContacts,
   onEdit,
+  onCompose,
   onDelete,
 }: {
   readonly alias: AliasView;
@@ -43,6 +45,7 @@ export const AliasRow = ({
   readonly labels: ReadonlyArray<Label>;
   readonly onContacts: () => void;
   readonly onEdit: () => void;
+  readonly onCompose: () => void;
   readonly onDelete: () => void;
 }) => {
   const queryClient = useQueryClient();
@@ -105,6 +108,10 @@ export const AliasRow = ({
                 <DropdownMenuItem onClick={onEdit}>
                   <PencilIcon />
                   Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!alias.isActive} onClick={onCompose}>
+                  <SendIcon />
+                  Send mail
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => toggle.mutate(!alias.isActive)}>
                   {alias.isActive ? <BanIcon /> : <CircleCheckIcon />}

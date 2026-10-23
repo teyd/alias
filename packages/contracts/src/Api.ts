@@ -8,6 +8,7 @@ import { InboxesGroup, RetentionDays } from "./Inboxes.ts";
 import { AliasLabel, LabelsGroup } from "./Labels.ts";
 import { requires } from "./Scopes.ts";
 import { DomainsGroup } from "./Domains.ts";
+import { FailuresGroup } from "./Failures.ts";
 import { RecipientsGroup } from "./Recipients.ts";
 import { BlocklistGroup, RulesGroup } from "./Rules.ts";
 import { SecurityGroup } from "./Security.ts";
@@ -167,6 +168,27 @@ const Contact = Schema.Struct({
 });
 export type Contact = typeof Contact.Type;
 
+/**
+ * A contact the owner added, with its reverse alias: mail the owner sends there from a verified
+ * forwarding address goes to the contact from the alias, like a reply (PLAN.md §20.33).
+ */
+const AddedContact = Schema.Struct({
+  ...Contact.fields,
+  /** `<alias>+r.<token>@<alias domain>`, to send to from the owner's own mailbox. */
+  replyAddress: Schema.String,
+});
+export type AddedContact = typeof AddedContact.Type;
+
+/**
+ * The contact can't be added: not a usable address, one the owner's blocklist names (PLAN.md
+ * §20.32), or the day's allowance of new recipients is used up.
+ */
+export class InvalidContact extends Schema.TaggedError<InvalidContact>()(
+  "InvalidContact",
+  { reason: Schema.Literals(["invalid-address", "blocked-address", "recipient-limit"]) },
+  { httpApiStatus: 422 },
+) {}
+
 /** No such contact on this alias. */
 export class ContactNotFound extends Schema.TaggedError<ContactNotFound>()(
   "ContactNotFound",
@@ -318,9 +340,10 @@ const AliasesGroup = HttpApiGroup.make("aliases")
 const ContactAddress = { ...AliasAddress, contactId: Schema.String };
 
 /**
- * An alias's contacts, created as people write to it. Signed-in only, on the caller's own aliases;
- * other users' aliases answer `AliasNotFound`. Deleting a contact revokes its reverse alias; if it
- * writes again, it becomes a new contact with a new one.
+ * An alias's contacts, created as people write to it or as the owner adds them (to write to them
+ * first, PLAN.md §20.33). Signed-in only, on the caller's own aliases; other users' aliases answer
+ * `AliasNotFound`. Deleting a contact revokes its reverse alias; if it writes again, it becomes a
+ * new contact with a new one.
  */
 const ContactsGroup = HttpApiGroup.make("contacts")
   .add(
@@ -329,6 +352,16 @@ const ContactsGroup = HttpApiGroup.make("contacts")
         params: AliasAddress,
         success: Schema.Array(Contact),
         error: AliasNotFound,
+      }),
+    ),
+  )
+  .add(
+    requires("contacts:write")(
+      HttpApiEndpoint.post("create", "/aliases/:domain/:local/contacts", {
+        params: AliasAddress,
+        payload: Schema.Struct({ address: Schema.String }),
+        success: AddedContact,
+        error: [AliasNotFound, InvalidContact],
       }),
     ),
   )
@@ -373,4 +406,5 @@ export const Api = HttpApi.make("alias")
   .add(OAuthGroup)
   .add(DeviceGroup)
   .add(ConsentGroup)
-  .add(OutboxGroup);
+  .add(OutboxGroup)
+  .add(FailuresGroup);

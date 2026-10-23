@@ -18,7 +18,7 @@
  * `/alias/dev/image-proxy-keys`, and point at `apps/image-proxy/bin/dev.ts` on
  * `ALIAS_IMAGE_PROXY_PORT`, which reads that parameter.
  */
-import { AwsClient, Inbound, SesEvent, SnsEvent, Transport } from "@alias/aws";
+import { AwsClient, Inbound, ReverseKeys, SesEvent, SnsEvent, Transport } from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo, Table } from "@alias/db";
 import { SnsSubscriber } from "@alias/lambda-emulator";
@@ -34,10 +34,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
-import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
+import { Feedback, ImageProxySigner, Pipeline, Spool } from "../src/index.ts";
 
-const DEV_REVERSE_TOKEN_KEYS = "1:ZGV2LW9ubHktcmV2ZXJzZS10b2tlbi1rZXktbm90LXNlY3JldA";
-const reverseKeysParameter = "/alias/dev/reverse-token-keys";
 const DEV_IMAGE_PROXY_KEYS = "1:ZGV2LW9ubHktaW1hZ2UtcHJveHkta2V5LW5vdC1hLXNlY3JldC0x";
 const imageProxyKeysParameter = "/alias/dev/image-proxy-keys";
 const imageProxyUrl = `http://localhost:${process.env.ALIAS_IMAGE_PROXY_PORT ?? 8788}`;
@@ -65,12 +63,8 @@ const putDevKeys = (name: string, value: string) =>
     ),
   );
 
-/** The dev keys, read back like the Lambda reads them. */
-const reverseKeys = Layer.unwrap(
-  putDevKeys(reverseKeysParameter, DEV_REVERSE_TOKEN_KEYS).pipe(
-    Effect.as(ReverseKeys.fromParameter(reverseKeysParameter)),
-  ),
-).pipe(Layer.provide(awsClient));
+/** The dev keys, read back like the Lambda reads them; the API mints with the same ones. */
+const reverseKeys = ReverseKeys.dev(fakecloudUrl);
 const imageProxySigner = Layer.unwrap(
   putDevKeys(imageProxyKeysParameter, DEV_IMAGE_PROXY_KEYS).pipe(
     Effect.as(ImageProxySigner.fromParameter(imageProxyUrl, imageProxyKeysParameter)),

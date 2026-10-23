@@ -1,9 +1,10 @@
-import { AwsClient, Inbound, Objects, type SesEvent, Transport } from "@alias/aws";
+import { AwsClient, Inbound, Objects, ReverseKeys, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import {
   ImageProxy,
   Keyring,
   Pgp,
+  ReverseToken,
   type Rules,
   SharedDomains,
   TempDomains,
@@ -14,6 +15,7 @@ import {
   ContactRepo,
   DeliveryRepo,
   DomainRepo,
+  FailureRepo,
   FilterRepo,
   RecipientRepo,
   SentRepo,
@@ -40,7 +42,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import * as openpgp from "openpgp";
-import { ImageProxySigner, Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
+import { ImageProxySigner, Limits, Pipeline, Spool } from "../src/index.ts";
 
 /**
  * The pipeline as the Lambda runs it, on one fakecloud: the real repositories on a fresh table,
@@ -2203,6 +2205,308 @@ describe("blocklist and rules in the inbound pipeline (fakecloud)", () => {
         ]);
         expect(yield* forwardPixel()).toContain("open.gif");
       }),
+    ),
+  );
+});
+
+/** The owner's failed deliveries, newest first (PLAN.md §20.33). */
+const failures = FailureRepo.FailureRepo.use((repo) => repo.list("usr_1")).pipe(
+  Effect.provide(FailureRepo.layer),
+);
+
+/** The kept copy of a failed delivery, opened. */
+const keptCopy = (failure: FailureRepo.Failure) =>
+  Inbox.Inbox.use((inbox) =>
+    Effect.flatMap(Effect.fromOption(failure.kept), (kept) =>
+      inbox.retrieve(failure.aliasId, failure.id, kept),
+    ),
+  );
+
+const keepFailedMail = UserRepo.UserRepo.use((users) =>
+  users.updateSettings("usr_1", { isFailedMailKept: true }),
+);
+
+const pause = RecipientRepo.RecipientRepo.use((repo) =>
+  repo.markBounced("usr_1", "ada@mail.example", DateTime.makeUnsafe(1), "address-unknown"),
+);
+
+describe("inbound pipeline: failed deliveries (PLAN.md §20.33)", () => {
+  it.effect("records a forward to a paused address with metadata only, by default", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* pause;
+        const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "recipient-bounced" },
+        ]);
+        expect(yield* sent).toEqual([]);
+        const [failure, ...rest] = yield* failures;
+        expect(rest).toEqual([]);
+        expect(failure).toMatchObject({
+          aliasId: "al_shop",
+          alias: "shop@alias.test",
+          sender: Option.some("shop@store.example"),
+          reason: "recipient-bounced",
+          kept: Option.none(),
+        });
+        expect(yield* storedObjects()).toEqual([]);
+        // A redelivered event records nothing twice.
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Duplicate" }]);
+        expect(yield* failures).toHaveLength(1);
+      }),
+    ),
+  );
+
+  it.effect("keeps the forward the owner would have read, sealed, when they opted in", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* keepFailedMail;
+        yield* pause;
+        const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+        yield* Pipeline.handle(event);
+        const [failure] = yield* failures;
+        if (failure === undefined) return expect.fail("nothing recorded");
+        if (Option.isNone(failure.kept)) return expect.fail("no copy kept");
+        const kept = failure.kept.value;
+        expect(kept.objectKey).toBe(`inbox/7d/al_shop/${failure.id}`);
+        expect(kept.envelopeFrom).toMatch(/^shop\+r\.[a-z2-7]+@alias\.test$/);
+        // Sealed at rest; opened, it is the rewritten forward, from the reverse alias.
+        const [object] = yield* storedObjects();
+        expect(new TextDecoder("latin1").decode(object)).not.toContain("Thanks for your order");
+        const copy = new TextDecoder().decode(yield* keptCopy(failure));
+        expect(copy).toContain("Thanks for your order!");
+        expect(Option.getOrElse(header(copy, "Reply-To"), () => "")).toContain(
+          `<${kept.envelopeFrom}>`,
+        );
+        // The sender became a contact, so the reverse alias works once it is delivered.
+        expect(Arr.map(yield* contacts, (contact) => contact.address)).toEqual([
+          "shop@store.example",
+        ]);
+      }),
+    ),
+  );
+
+  // fakecloud refuses a suppressed recipient (PLAN.md §20.11), which stands in for any rejection.
+  it.effect("records what SES refuses, and tells the owner's webhooks without the sender", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* keepFailedMail;
+        yield* WebhookRepo.WebhookRepo.use((repo) =>
+          repo.create({
+            id: "wh_1",
+            userId: "usr_1",
+            url: "https://hooks.example.com/",
+            eventTypes: ["mail.failed"],
+            sealedSecret: new TextEncoder().encode("sealed"),
+            createdAt: DateTime.makeUnsafe(0),
+          }),
+        ).pipe(Effect.provide(WebhookRepo.layer));
+        yield* SESV2.putSuppressedDestination({
+          EmailAddress: "ada@mail.example",
+          Reason: "BOUNCE",
+        });
+        const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Dropped", reason: "rejected" }]);
+        const [failure] = yield* failures;
+        expect(failure?.reason).toBe("rejected");
+        expect(Option.isSome(failure?.kept ?? Option.none())).toBe(true);
+        const bodies = yield* queuedJobs();
+        expect(Arr.map(bodies, (body) => JSON.parse(body).event)).toEqual([
+          {
+            type: "mail.failed",
+            timestamp: expect.any(String),
+            data: {
+              aliasId: "al_shop",
+              address: "shop@alias.test",
+              failureId: failure?.id,
+              reason: "rejected",
+            },
+          },
+        ]);
+        expect(bodies.join("")).not.toContain("store.example");
+      }),
+    ),
+  );
+
+  it.effect("records oversized mail without a copy, whatever the setting", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* keepFailedMail;
+        const { event } = yield* receive({
+          recipients: ["shop@alias.test"],
+          headers: [`X-Padding: ${"x".repeat(2_000)}`],
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Dropped", reason: "too-large" }]);
+        const [failure] = yield* failures;
+        expect(failure).toMatchObject({ reason: "too-large", kept: Option.none() });
+        expect(failure?.size).toBeGreaterThan(1_000);
+        expect(yield* storedObjects()).toEqual([]);
+      }),
+      { ...Limits.defaults, maxMessageBytes: 1_000 },
+    ),
+  );
+
+  it.effect("records nothing for refusals that aren't failures, nor for both-mode aliases", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* alias({ id: "al_both", localPart: "both", mode: "both" });
+        yield* recipient("ada@mail.example");
+        const spam = yield* receive({
+          recipients: ["shop@alias.test"],
+          verdicts: { spam: "FAIL" },
+        });
+        expect(yield* Pipeline.handle(spam.event)).toEqual([{ _tag: "Dropped", reason: "spam" }]);
+        yield* pause;
+        const both = yield* receive({ recipients: ["both@alias.test"] });
+        expect(yield* Pipeline.handle(both.event)).toEqual([{ _tag: "Stored" }]);
+        expect(yield* failures).toEqual([]);
+      }),
+    ),
+  );
+
+  // Per-alias recipients (PLAN.md §20.31): a failure is the message's, not one copy's.
+  it.effect("records a forward to several mailboxes only when no copy goes out", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("work@mail.example");
+        yield* alias({ recipientIds: ["rcp_ada@mail.example", "rcp_work@mail.example"] });
+        yield* keepFailedMail;
+        // One paused: the other gets it, and nothing failed.
+        yield* pause;
+        const first = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(first.event)).toEqual([{ _tag: "Forwarded" }]);
+        expect(Arr.map(yield* sent, (email) => email.to)).toEqual([["work@mail.example"]]);
+        expect(yield* failures).toEqual([]);
+        // SES refuses the one left (fakecloud: suppressed): no copy went out, so it failed.
+        yield* SESV2.putSuppressedDestination({
+          EmailAddress: "work@mail.example",
+          Reason: "BOUNCE",
+        });
+        const second = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(second.event)).toEqual([
+          { _tag: "Dropped", reason: "rejected" },
+        ]);
+        // Both paused: recorded as such, with the copy kept.
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          repo.markBounced("usr_1", "work@mail.example", DateTime.makeUnsafe(1), "address-unknown"),
+        );
+        const third = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(third.event)).toEqual([
+          { _tag: "Dropped", reason: "recipient-bounced" },
+        ]);
+        const recorded = yield* failures;
+        expect(Arr.map(recorded, (failure) => failure.reason).toSorted()).toEqual([
+          "recipient-bounced",
+          "rejected",
+        ]);
+        expect(Arr.every(recorded, (failure) => Option.isSome(failure.kept))).toBe(true);
+        expect(yield* sent).toHaveLength(1);
+      }),
+    ),
+  );
+
+  it.effect("records at most the day's allowance of failures; mail is dropped either way", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* pause;
+        const outcomes = yield* Effect.forEach(
+          Arr.range(1, 3),
+          () =>
+            Effect.flatMap(receive({ recipients: ["shop@alias.test"] }), ({ event }) =>
+              Pipeline.handle(event),
+            ),
+          { concurrency: 1 },
+        );
+        expect(Arr.flatten(outcomes)).toEqual(
+          Arr.makeBy(3, () => ({ _tag: "Dropped", reason: "recipient-bounced" })),
+        );
+        expect(yield* failures).toHaveLength(2);
+      }),
+      { ...Limits.defaults, failuresPerDay: 2 },
+    ),
+  );
+});
+
+describe("inbound pipeline: mail the owner writes (PLAN.md §20.33)", () => {
+  /** A contact the owner added (the API's `POST …/contacts`), and its reverse alias. */
+  const added = Effect.fn("added")(function* (address: string) {
+    const repo = yield* ContactRepo.ContactRepo;
+    const id = "addedc0ntact0001";
+    yield* repo.create(
+      { id, aliasId: "al_shop", address, name: Option.none(), createdAt: DateTime.makeUnsafe(0) },
+      { domain: "alias.test", localPart: "shop" },
+    );
+    const token = yield* ReverseToken.mint(
+      yield* Keyring.parse(keys),
+      { local: "shop", domain: "alias.test" },
+      id,
+    );
+    return `shop+r.${token}@alias.test`;
+  });
+
+  it.effect("sends a first message to a contact the owner added, from the alias", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const reverse = yield* added("grace@elsewhere.example");
+        expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
+        const [email] = yield* sent;
+        expect(email?.from).toBe("shop@alias.test");
+        expect(email?.to).toEqual(["grace@elsewhere.example"]);
+        expect(
+          text(Option.flatMap(Option.fromUndefinedOr(email), (found) => found.raw)),
+        ).not.toContain("ada@mail.example");
+      }),
+    ),
+  );
+
+  it.effect("refuses a contact on the suppression list, before spending the allowance", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const reverse = yield* added("gone@elsewhere.example");
+        yield* SESV2.putSuppressedDestination({
+          EmailAddress: "gone@elsewhere.example",
+          Reason: "BOUNCE",
+        });
+        expect(yield* replyTo(reverse)).toEqual([
+          { _tag: "Dropped", reason: "suppressed-recipient" },
+        ]);
+        expect(yield* sent).toEqual([]);
+        // Off the list again, the day's only send is still there.
+        yield* SESV2.deleteSuppressedDestination({ EmailAddress: "gone@elsewhere.example" });
+        expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
+      }),
+      { ...Limits.defaults, sendsPerDay: 1 },
+    ),
+  );
+
+  it.effect("caps what the owner sends per day, replies included", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const reverse = yield* added("grace@elsewhere.example");
+        expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
+        expect(yield* replyTo(reverse)).toEqual([{ _tag: "Replied" }]);
+        expect(yield* replyTo(reverse)).toEqual([{ _tag: "Dropped", reason: "send-limited" }]);
+        expect(yield* sent).toHaveLength(2);
+      }),
+      { ...Limits.defaults, sendsPerDay: 2 },
     ),
   );
 });

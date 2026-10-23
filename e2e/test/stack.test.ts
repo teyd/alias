@@ -9,7 +9,7 @@ import {
   Transport,
 } from "@alias/aws";
 import { Username, Webhook } from "@alias/core";
-import { Dynamo } from "@alias/db";
+import { Dynamo, RecipientRepo } from "@alias/db";
 import { DohServer } from "@alias/doh-emulator";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Feedback, Pipeline } from "@alias/inbound";
@@ -661,6 +661,173 @@ describe("emulated stack", () => {
           expect(replyText.toLowerCase()).not.toContain(ada.mailbox);
           expect(reply?.to).toEqual(["orders@store.example"]);
         }),
+    );
+
+    // PLAN.md §20.33: new mail from an alias, written in the web app or from the owner's mailbox.
+    it.effect(
+      "writes new mail from an alias: composed in the app, or through a send-to address",
+      () =>
+        Effect.gen(function* () {
+          yield* Transport.ensureIdentity("alias.test");
+          const wren = yield* owner("wren");
+
+          // Composed in the web app, to someone who never wrote to the alias.
+          const composed = yield* call("/v1/outbox", {
+            cookie: wren.cookie,
+            body: {
+              from: wren.alias,
+              to: "grace@elsewhere.example",
+              subject: "Hello",
+              text: "Hi Grace!",
+            },
+          });
+          expect(composed).toMatchObject({ status: 200, body: { status: "sent" } });
+          const [toGrace, ...moreToGrace] = yield* sentTo("grace@elsewhere.example");
+          expect(moreToGrace).toEqual([]);
+          expect(toGrace?.from).toBe(wren.alias);
+          expect(toGrace?.to).toEqual(["grace@elsewhere.example"]);
+          const graceText = toGrace?.text ?? "";
+          expect(field(graceText, "from")).toEqual(Option.some(wren.alias));
+          expect(field(graceText, "message-id")).toEqual(
+            Option.some(expect.stringMatching(/^<[\w-]+@wren\.alias\.test>$/)),
+          );
+          // No trace of the owner's mailbox, in a header, the body or the envelope.
+          expect(graceText.toLowerCase()).not.toContain(wren.mailbox);
+          expect(JSON.stringify(toGrace?.to)).not.toContain(wren.mailbox);
+
+          // From the mailbox: add a contact, mail its send-to address, and it leaves as the alias.
+          const added = yield* call(`/v1/aliases/wren.alias.test/shop/contacts`, {
+            cookie: wren.cookie,
+            body: { address: "hal@elsewhere.example" },
+          });
+          expect(added.status).toBe(200);
+          const sendTo = String(added.body.replyAddress);
+          expect(sendTo).toMatch(/^shop\+r\.[a-z2-7]+@wren\.alias\.test$/);
+          const written = yield* smtp({
+            from: `"Wren" <${wren.mailbox}>`,
+            to: sendTo,
+            subject: "Introduction",
+            text: `Hello Hal,\r\n\r\nWren (${wren.mailbox})`,
+            headers: { "User-Agent": "Thunderbird/128.0" },
+          });
+          expect(yield* invoke(written)).toEqual([{ _tag: "Replied" }]);
+          const [toHal] = yield* sentTo("hal@elsewhere.example");
+          expect(toHal?.from).toBe(wren.alias);
+          expect(field(toHal?.text ?? "", "from")).toEqual(Option.some(wren.alias));
+          expect(field(toHal?.text ?? "", "user-agent")).toEqual(Option.none());
+          expect((toHal?.text ?? "").toLowerCase()).not.toContain(wren.mailbox);
+
+          // Nobody else can use the send-to address.
+          const stranger = yield* smtp({
+            from: "mallory@evil.example",
+            to: sendTo,
+            subject: "Hi",
+            text: "Spam",
+          });
+          expect(yield* invoke(stranger)).toEqual([
+            { _tag: "Dropped", reason: "foreign-reply-sender" },
+          ]);
+          expect(yield* sentTo("hal@elsewhere.example")).toHaveLength(1);
+        }),
+    );
+
+    it.effect("lists a failed forward, keeps it when asked, and sends it again once resumed", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        // The inbound Lambda stamps the failure's week with the test's clock, the API reads it in
+        // real time: start them at the same instant.
+        yield* TestClock.setTime(DateTime.toEpochMillis(yield* TestClock.withLive(DateTime.now)));
+        const yara = yield* owner("yara");
+        const settings = yield* call("/v1/settings", {
+          cookie: yara.cookie,
+          method: "PATCH",
+          body: { isFailedMailKept: true },
+        });
+        expect(settings.body).toMatchObject({ isFailedMailKept: true });
+        // The mailbox is paused, as after a bounce (§20.28).
+        const [recipient] = (yield* call("/v1/recipients", { cookie: yara.cookie })).body;
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          repo.markBounced(yara.userId, yara.mailbox, DateTime.makeUnsafe(1), "address-unknown"),
+        ).pipe(Effect.provide(RecipientRepo.layer));
+
+        const forward = yield* smtp({
+          from: '"Store" <orders@store.example>',
+          to: yara.alias,
+          subject: "Invoice",
+          text: "Your invoice is attached.",
+        });
+        expect(yield* invoke(forward)).toEqual([{ _tag: "Dropped", reason: "recipient-bounced" }]);
+        const listed = yield* call("/v1/failed-deliveries", { cookie: yara.cookie });
+        expect(listed.body).toEqual([
+          {
+            id: expect.stringMatching(/^fail_/),
+            alias: yara.alias,
+            sender: "orders@store.example",
+            reason: "recipient-bounced",
+            receivedAt: expect.any(String),
+            expiresAt: expect.any(String),
+            size: expect.any(Number),
+            isKept: true,
+          },
+        ]);
+        const failureId = String(listed.body[0].id);
+        // The kept copy is sealed in the inbox bucket: no plaintext at rest.
+        const { url } = yield* FunctionUrlServer.FunctionUrlServer;
+        const download = yield* Effect.promise(() =>
+          fetch(`${url}/v1/failed-deliveries/${failureId}/message`, {
+            headers: { cookie: yara.cookie, origin },
+          }),
+        );
+        expect(download.headers.get("content-type")).toBe("message/rfc822");
+        const copy = yield* Effect.promise(() => download.text());
+        expect(copy).toContain("Your invoice is attached.");
+        expect(field(copy, "from")).toEqual(
+          Option.some(expect.stringMatching(/^"Store \(orders@store\.example\)" <shop\+r\./)),
+        );
+
+        // Resuming is the confirmation link again (§20.28); then the copy goes out. The API allows
+        // one confirmation mail a minute (real time), so the test does what confirming the
+        // Resume link does, in the repository: a new token, used up.
+        expect(
+          (yield* call(`/v1/failed-deliveries/${failureId}/resend`, {
+            cookie: yara.cookie,
+            body: {},
+          })).body,
+        ).toMatchObject({ _tag: "ResendFailed", reason: "recipient-bounced" });
+        yield* RecipientRepo.RecipientRepo.use((repo) =>
+          Effect.gen(function* () {
+            const paused = yield* Effect.flatMap(
+              repo.find(yara.userId, recipient.id),
+              Effect.fromOption,
+            );
+            const now = yield* DateTime.now;
+            yield* repo.renewConfirmation(paused, {
+              tokenHash: "resume",
+              expiresAt: DateTime.add(now, { hours: 1 }),
+              sentAt: now,
+            });
+            const renewed = yield* Effect.flatMap(
+              repo.find(yara.userId, recipient.id),
+              Effect.fromOption,
+            );
+            yield* repo.confirm(renewed, "resume", now);
+          }),
+        ).pipe(Effect.provide(RecipientRepo.layer));
+        const before = (yield* sentTo(yara.mailbox)).length;
+        expect(
+          (yield* call(`/v1/failed-deliveries/${failureId}/resend`, {
+            cookie: yara.cookie,
+            body: {},
+          })).status,
+        ).toBe(204);
+        const delivered = (yield* sentTo(yara.mailbox)).slice(before);
+        expect(delivered).toHaveLength(1);
+        expect(delivered[0]?.from).toMatch(/^shop\+r\.[a-z2-7]+@yara\.alias\.test$/);
+        expect(delivered[0]?.text).toContain("Your invoice is attached.");
+        expect((yield* call("/v1/failed-deliveries", { cookie: yara.cookie })).body).toEqual([]);
+        // The failure and its copy's key are gone from the table.
+        expect(yield* itemsMentioning(failureId)).toEqual([]);
+      }),
     );
 
     it.effect("drops spoofed replies: a stranger, or the owner's address without DKIM", () =>

@@ -1,3 +1,4 @@
+import { OutboxRepo } from "@alias/db";
 import * as Context from "effect/Context";
 
 /** The pipeline's hard limits. Tests lower them; production runs with {@link defaults}. */
@@ -29,6 +30,16 @@ export class Limits extends Context.Service<
     readonly maxStoredBytes: number;
     /** Messages stored per user and UTC day, all inboxes together. Past it: `storage-limited`. */
     readonly storedPerDay: number;
+    /**
+     * Mail the owner sends through reverse aliases per UTC day, counted with composed mail and
+     * drafts (PLAN.md §20.33). Past it, replies are dropped as `send-limited`.
+     */
+    readonly sendsPerDay: number;
+    /**
+     * Failed deliveries recorded per user and UTC day (PLAN.md §20.33). Past it, failures are
+     * only logged, so a flood of failing mail writes a bounded number of items.
+     */
+    readonly failuresPerDay: number;
   }
 >()("@alias/inbound/Limits") {}
 
@@ -38,4 +49,6 @@ export const defaults: Limits["Service"] = {
   aliasesCreatedPerDay: 20,
   maxStoredBytes: 10 * 1024 * 1024,
   storedPerDay: 500,
+  sendsPerDay: OutboxRepo.SENDS_PER_DAY,
+  failuresPerDay: 100,
 };

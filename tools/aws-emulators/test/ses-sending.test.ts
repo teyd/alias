@@ -154,6 +154,21 @@ describe("SES sending on fakecloud (SESv2 SendEmail, Content.Raw)", () => {
       }),
     );
 
+    // `GetSuppressedDestination` answers a listed address and `NotFoundException` for any other,
+    // as the SESv2 API reference documents; mail the owner writes is refused on it (§20.33).
+    it.effect("tells whether an address is on the suppression list", () =>
+      Effect.gen(function* () {
+        const transport = yield* Transport.Transport;
+        const address = "dead@elsewhere.test";
+        expect(yield* transport.isSuppressed(address)).toBe(false);
+        yield* transport.suppress(address);
+        expect(yield* transport.isSuppressed(address)).toBe(true);
+        expect(yield* transport.isSuppressed("alive@elsewhere.test")).toBe(false);
+        yield* transport.unsuppress(address);
+        expect(yield* transport.isSuppressed(address)).toBe(false);
+      }),
+    );
+
     it.effect("sends through a configuration set with message tags", () =>
       Effect.gen(function* () {
         const rawMessage = yield* readRawMessage;

@@ -14,6 +14,7 @@ import {
   type MessageQueue,
   Objects,
   Parameters,
+  ReverseKeys,
   SendingEvent,
   SesEvent,
   SnsEvent,
@@ -30,7 +31,7 @@ import { DohServer } from "@alias/doh-emulator";
 import { Proxy } from "@alias/image-proxy";
 import * as ImageProxyTesting from "@alias/image-proxy/testing";
 import { Inbox } from "@alias/inbox";
-import { Feedback, ImageProxySigner, Pipeline, ReverseKeys, Spool } from "@alias/inbound";
+import { Feedback, ImageProxySigner, Pipeline, Spool } from "@alias/inbound";
 import { FunctionUrlServer, SnsSubscriber, SqsEventSource } from "@alias/lambda-emulator";
 import { Turnstile } from "@alias/turnstile";
 import { TestKeys, TurnstileServer } from "@alias/turnstile-emulator";
@@ -202,6 +203,8 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (
       Layer.succeedContext(yield* Effect.context<MessageQueue.MessageQueue>()),
       Layer.succeedContext(yield* Effect.context<Inbox.Inbox>()),
       Layer.succeedContext(yield* Effect.context<Secrets.WebhookKeys>()),
+      // The keys the inbound Lambda verifies replies with: one SSM parameter for both.
+      Layer.succeedContext(yield* Effect.context<ReverseKeys.ReverseKeys>()),
       tempDomains,
       urlPolicy,
       // The contexts above carry the test's clock; the Lambda runs in real time, which its long
@@ -369,7 +372,9 @@ const delivery = Layer.effect(
 /** Everything, with `api` (a layer that serves `apiHandler`) on the same table, queue and fakecloud. */
 export const layer = <ROut, E, RIn>(api: Layer.Layer<ROut, E, RIn>) =>
   Layer.mergeAll(
-    api.pipe(Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore, webhookKeys))),
+    api.pipe(
+      Layer.provide(Layer.mergeAll(database, webhookQueue, inboxStore, webhookKeys, reverseKeys)),
+    ),
     inbound,
     feedback,
     delivery,

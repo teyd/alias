@@ -1,6 +1,7 @@
 import {
   type Inbound,
   type MessageQueue,
+  ReverseKeys,
   SendingEvent,
   type SesEvent,
   Transport,
@@ -23,8 +24,11 @@ import {
   DeliveryRepo,
   DomainRepo,
   type Dynamo,
+  FailureRepo,
   FilterRepo,
+  Forwarding,
   MessageRepo,
+  OutboxRepo,
   RecipientRepo,
   SentRepo,
   UserRepo,
@@ -47,7 +51,6 @@ import * as Schema from "effect/Schema";
 import { ImageProxySigner } from "./ImageProxySigner.ts";
 import * as Limits from "./Limits.ts";
 import * as Policy from "./Policy.ts";
-import { ReverseKeys } from "./ReverseKeys.ts";
 import { Route, route } from "./Route.ts";
 import { Spool } from "./Spool.ts";
 
@@ -87,12 +90,23 @@ class InboundDeferred extends Schema.TaggedError<InboundDeferred>()("InboundDefe
 
 type Record = SesEvent.SesEvent["Records"][number];
 
+/**
+ * How a forward that fails for good is recorded as a failed delivery (PLAN.md §20.33): who wrote,
+ * and whether the owner keeps the message. Only forwards to a forward-mode alias are recorded; a
+ * `both` alias has the message in its inbox anyway.
+ */
+interface FailureNote {
+  readonly sender: string;
+  readonly isKept: boolean;
+}
+
 /** A message to send for one recipient, rewritten from the spooled original when it's read. */
 interface Send {
   readonly kind: "forward" | "reply";
   readonly alias: AliasRepo.Alias;
   /** Rules whose `webhook` action matched (PLAN.md §20.32), announced once the mail is claimed. */
   readonly notify?: ReadonlyArray<string>;
+  readonly failure: Option.Option<FailureNote>;
   /**
    * The checks that need the message's header block (loops, auto-replies, bounces) or spend an
    * allowance, run once it is read, then what goes out. Anything written for the message (a new
@@ -103,7 +117,7 @@ interface Send {
   ) => Effect.Effect<
     Result.Result<Outgoing, Refusal>,
     DatabaseError,
-    ContactRepo.ContactRepo | Crypto.Crypto
+    ContactRepo.ContactRepo | OutboxRepo.OutboxRepo | Transport.Transport | Crypto.Crypto
   >;
 }
 
@@ -120,6 +134,11 @@ interface Outgoing {
    * recipients (PLAN.md §20.31).
    */
   readonly copies: Arr.NonEmptyReadonlyArray<Copy>;
+  /**
+   * Admitted, but it can't go out: every forwarding address is paused. It is still rewritten, so
+   * a failed delivery keeps what the owner would have read and can send it again (PLAN.md §20.33).
+   */
+  readonly undeliverable: Option.Option<Policy.DropReason>;
 }
 
 /** One copy of an admitted message, sent on its own. */
@@ -208,20 +227,6 @@ const replyTarget = Effect.fn("Pipeline.replyTarget")(function* (
   return Result.succeed(contact.value.address);
 });
 
-/**
- * The default recipient of the additional username (PLAN.md §20.34) whose subdomain the alias is
- * on, if it has one. One GetItem in the owner's partition; none on their primary username's
- * subdomain (it has no entry) and on other domains (no read).
- */
-const usernameRecipient = Effect.fn("Pipeline.usernameRecipient")(function* (
-  alias: AliasRepo.Alias,
-) {
-  const destination = Address.classify(aliasAddress(alias), yield* SharedDomains.SharedDomains);
-  if (!Address.Destination.$is("UserSubdomain")(destination)) return Option.none<string>();
-  const entry = yield* (yield* UsernameRepo.UsernameRepo).find(alias.userId, destination.username);
-  return Option.flatMap(entry, (found) => found.defaultRecipientId);
-});
-
 /** Mail the blocklist or a rule blocks, and the rules whose webhooks still fire. */
 interface Filtered {
   readonly reason: Extract<Policy.DropReason, "blocked-sender" | "rule-blocked">;
@@ -261,17 +266,20 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   alias: AliasRepo.Alias,
   ruled: Rules.Outcome,
 ) {
-  const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
   // A rule's destination, while it can take mail, replaces the alias's (PLAN.md §20.32).
-  const preferred = yield* usernameRecipient(alias);
+  const { recipients, targets: aliasTargets } = yield* Forwarding.targetsOf(alias);
   const targets = Option.match(Policy.ruleTarget(recipients, ruled.recipientId), {
     onSome: (target) => Option.some(Arr.of(target)),
-    onNone: () => Policy.forwardTargets(alias, recipients, preferred),
+    onNone: () => aliasTargets,
   });
   if (Option.isNone(targets)) return Plan.Drop({ reason: "no-recipient" });
-  // Paused recipients get nothing; mail goes on to the others.
+  // Paused recipients get nothing; mail goes on to the others. When all are paused, mail to a
+  // forward-mode alias still counts as admitted mail that failed (PLAN.md §20.33), to send again
+  // once one is resumed; a `both` alias has it in its inbox.
   const live = Arr.filter(targets.value, (target) => Option.isNone(target.bouncedAt));
-  if (!Arr.isReadonlyArrayNonEmpty(live)) return Plan.Drop({ reason: "recipient-bounced" });
+  const isPaused = !Arr.isReadonlyArrayNonEmpty(live);
+  if (isPaused && alias.mode !== "forward") return Plan.Drop({ reason: "recipient-bounced" });
+  const destinations = Arr.isReadonlyArrayNonEmpty(live) ? live : targets.value;
   const sender = Policy.sender(record.ses.mail);
   if (Option.isNone(sender)) return Plan.Drop({ reason: "no-sender" });
   if (!Policy.isStorableAddress(sender.value.address)) {
@@ -287,7 +295,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
     return Plan.Block({ alias, reason: "blocked-contact" });
   }
   const address = aliasAddress(alias);
-  const reverseKeys = yield* ReverseKeys;
+  const reverseKeys = yield* ReverseKeys.ReverseKeys;
   const settings = yield* (yield* UserRepo.UserRepo).settings(alias.userId);
   const protection: Mail.Protection = ruled.isTrackerRemovalSkipped
     ? { images: "off", isLinkCleaningEnabled: false }
@@ -354,14 +362,24 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
           edits,
           // Signing image URLs needs a working SHA-256; without one nothing can run.
         }).pipe(Effect.catchTag("PlatformError", Effect.die)),
-      copies: Arr.map(live, (target) => ({
+      copies: Arr.map(destinations, (target) => ({
         recipientId: Option.some(target.id),
         seal: encrypt(target),
         envelope: { from, to: [target.address], tags: SendingEvent.tags(alias.userId, "forward") },
       })),
+      undeliverable: isPaused ? Option.some("recipient-bounced") : Option.none(),
     });
   });
-  return Plan.Send({ kind: "forward", alias, admit, notify: ruled.notify });
+  return Plan.Send({
+    kind: "forward",
+    alias,
+    failure:
+      alias.mode === "forward"
+        ? Option.some({ sender: sender.value.address, isKept: settings.isFailedMailKept })
+        : Option.none(),
+    admit,
+    notify: ruled.notify,
+  });
 });
 
 const planReply = Effect.fn("Pipeline.planReply")(function* (
@@ -370,7 +388,9 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   token: string,
 ) {
   const address = aliasAddress(alias);
-  const claims = yield* ReverseToken.verify(yield* ReverseKeys, address, token).pipe(Effect.option);
+  const claims = yield* ReverseToken.verify(yield* ReverseKeys.ReverseKeys, address, token).pipe(
+    Effect.option,
+  );
   if (Option.isNone(claims)) return Plan.Drop({ reason: "bad-token" });
   const target = yield* replyTarget(alias, claims.value);
   if (Result.isFailure(target)) return Plan.Drop({ reason: target.failure });
@@ -405,24 +425,32 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
         },
       },
     ],
+    undeliverable: Option.none(),
   };
-  return Plan.Send({
-    kind: "reply",
-    alias,
-    admit: (signals) =>
-      Effect.succeed(
-        Option.match(
-          Policy.automatedReply(signals, record.ses.mail).pipe(
-            Option.orElse(() => Policy.rejectReply(record.ses.receipt, from, recipients)),
-            Option.orElse(() => Policy.rejectAmbiguousSender(signals, from)),
-          ),
-          {
-            onNone: () => Result.succeed(outgoing),
-            onSome: (reason) => Result.fail<Refusal>(Plan.Drop({ reason })),
-          },
+  const { sendsPerDay } = yield* Limits.Limits;
+  // Mail the owner writes: an answer, or a first message to a contact they added (PLAN.md §20.33).
+  const admit = Effect.fn("Pipeline.admitReply")(function* (signals: Mail.Signals) {
+    const rejected = Policy.automatedReply(signals, record.ses.mail).pipe(
+      Option.orElse(() => Policy.rejectReply(record.ses.receipt, from, recipients)),
+      Option.orElse(() => Policy.rejectAmbiguousSender(signals, from)),
+    );
+    if (Option.isSome(rejected)) return Result.fail<Refusal>(Plan.Drop({ reason: rejected.value }));
+    // SES would take it and drop it; unknown is no reason to refuse, SES still drops what it must.
+    const isSuppressed = yield* (yield* Transport.Transport)
+      .isSuppressed(contact)
+      .pipe(
+        Effect.catchTag("SuppressionError", (error) =>
+          Effect.as(Effect.logWarning("inbound suppression check failed", error.reason), false),
         ),
-      ),
+      );
+    if (isSuppressed) return Result.fail<Refusal>(Plan.Drop({ reason: "suppressed-recipient" }));
+    const outbox = yield* OutboxRepo.OutboxRepo;
+    if (!(yield* outbox.reserveSend(alias.userId, yield* DateTime.now, sendsPerDay))) {
+      return Result.fail<Refusal>(Plan.Drop({ reason: "send-limited" }));
+    }
+    return Result.succeed(outgoing);
   });
+  return Plan.Send({ kind: "reply", alias, failure: Option.none(), admit });
 });
 
 /**
@@ -618,14 +646,25 @@ const announce = Effect.fn("Pipeline.announce")(function* (
   alias: AliasRepo.Alias,
   what:
     | { readonly type: "mail.forwarded"; readonly contactId: string }
-    | { readonly type: "mail.blocked"; readonly reason: Policy.DropReason },
+    | { readonly type: "mail.blocked"; readonly reason: Policy.DropReason }
+    | {
+        readonly type: "mail.failed";
+        readonly reason: Policy.DropReason;
+        readonly failureId: string;
+      },
 ) {
   const timestamp = DateTime.formatIso(yield* DateTime.now);
   const ref = { aliasId: alias.id, address: Address.format(aliasAddress(alias)) };
   const event: WebhookEvent =
     what.type === "mail.forwarded"
       ? { type: what.type, timestamp, data: { ...ref, contactId: what.contactId } }
-      : { type: what.type, timestamp, data: { ...ref, reason: what.reason } };
+      : what.type === "mail.failed"
+        ? {
+            type: what.type,
+            timestamp,
+            data: { ...ref, failureId: what.failureId, reason: what.reason },
+          }
+        : { type: what.type, timestamp, data: { ...ref, reason: what.reason } };
   yield* (yield* Publisher.Publisher).publish(
     alias.userId,
     event,
@@ -732,6 +771,83 @@ const sendCopies = Effect.fn("Pipeline.sendCopies")(function* (
   );
 });
 
+/** A forward's rewritten message and the reverse alias it goes out from, to keep and resend. */
+interface KeptCopy {
+  readonly raw: Uint8Array;
+  readonly envelopeFrom: string;
+}
+
+/** Failed deliveries are listed, and kept copies kept, for a week (PLAN.md §20.33). */
+const FAILURE_LIFETIME = Duration.days(7);
+
+/**
+ * Records a forward that failed for good as a failed delivery (PLAN.md §20.33), with the
+ * rewritten message sealed in the inbox bucket when the owner keeps failed mail and it fits, and
+ * tells the owner's webhooks. At most `failuresPerDay` per user. Best effort: the outcome of the
+ * mail stands whatever happens here.
+ */
+const recordFailure = Effect.fn("Pipeline.recordFailure")(
+  function* (
+    delivery: DeliveryRepo.Delivery,
+    planned: Send,
+    reason: Policy.DropReason,
+    size: number,
+    copy: Option.Option<KeptCopy>,
+  ) {
+    if (Option.isNone(planned.failure)) return;
+    const note = planned.failure.value;
+    const alias = planned.alias;
+    const { failuresPerDay, maxStoredBytes } = yield* Limits.Limits;
+    const failures = yield* FailureRepo.FailureRepo;
+    const now = yield* DateTime.now;
+    if (!(yield* failures.reserve(alias.userId, now, failuresPerDay))) {
+      return yield* Effect.logInfo("inbound failure not recorded", "limit");
+    }
+    const ulid = yield* Effect.orDie((yield* Crypto.Crypto).randomULID);
+    const failureId = `fail_${ulid.toLowerCase()}`;
+    const inbox = yield* Inbox.Inbox;
+    const toKeep = Option.filter(
+      copy,
+      (kept) => note.isKept && kept.raw.byteLength <= maxStoredBytes,
+    );
+    const kept = yield* Option.match(toKeep, {
+      onNone: () => Effect.succeedNone,
+      onSome: (kept) =>
+        Effect.map(inbox.keep(alias, failureId, kept.raw), (body) =>
+          Option.some({ ...body, envelopeFrom: kept.envelopeFrom }),
+        ),
+    });
+    yield* failures
+      .insert(
+        {
+          id: failureId,
+          aliasId: alias.id,
+          userId: alias.userId,
+          alias: Address.format(aliasAddress(alias)),
+          sender: Option.some(note.sender),
+          reason,
+          receivedAt: now,
+          expiresAt: DateTime.addDuration(now, FAILURE_LIFETIME),
+          size,
+          kept,
+        },
+        alias,
+      )
+      // Without its record a kept copy can't be opened; remove it right away.
+      .pipe(
+        Effect.tapError(() =>
+          Option.match(kept, {
+            onNone: () => Effect.void,
+            onSome: (body) => Effect.ignore(inbox.discard(body.objectKey)),
+          }),
+        ),
+      );
+    yield* Effect.logInfo("inbound failure recorded", reason);
+    yield* announce(delivery, alias, { type: "mail.failed", reason, failureId });
+  },
+  Effect.catch((error) => Effect.logWarning("inbound failure not recorded", error._tag)),
+);
+
 /** Size check, read, header checks, rewrite, send: everything after the claim. */
 const send = Effect.fn("Pipeline.send")(function* (
   delivery: DeliveryRepo.Delivery,
@@ -739,7 +855,9 @@ const send = Effect.fn("Pipeline.send")(function* (
   message: Spooled,
 ) {
   const { maxMessageBytes } = yield* Limits.Limits;
-  if ((yield* message.size) > maxMessageBytes) {
+  const size = yield* message.size;
+  if (size > maxMessageBytes) {
+    yield* recordFailure(delivery, planned, "too-large", size, Option.none());
     return yield* refuse(delivery, Plan.Block({ alias: planned.alias, reason: "too-large" }));
   }
   const raw = yield* message.raw;
@@ -747,6 +865,18 @@ const send = Effect.fn("Pipeline.send")(function* (
   if (Result.isFailure(admitted)) return yield* refuse(delivery, admitted.failure);
   const outgoing = admitted.success;
   const rewritten = yield* outgoing.rewrite(raw);
+  const failed = (reason: Policy.DropReason) =>
+    recordFailure(
+      delivery,
+      planned,
+      reason,
+      size,
+      Option.some({ raw: rewritten, envelopeFrom: outgoing.copies[0].envelope.from }),
+    );
+  if (Option.isSome(outgoing.undeliverable)) {
+    yield* failed(outgoing.undeliverable.value);
+    return dropped(outgoing.undeliverable.value);
+  }
   const [first, ...others] = outgoing.copies;
   if (Arr.isArrayNonEmpty(others)) {
     // Several mailboxes: each copy on its own (one copy's failure is handled like a single one's
@@ -761,15 +891,33 @@ const send = Effect.fn("Pipeline.send")(function* (
       { concurrency: 1, discard: true },
     );
     if (Arr.length(refusals) === Arr.length(outcomes)) {
+      const isKeyUnusable = Arr.some(refusals, ({ reason }) => reason === "key-unusable");
+      yield* failed(isKeyUnusable ? "key-unusable" : "rejected");
       return yield* refuse(
         delivery,
-        Arr.some(refusals, ({ reason }) => reason === "key-unusable")
+        isKeyUnusable
           ? Plan.Block({ alias: planned.alias, reason: "key-unusable" })
           : Plan.Drop({ reason: "rejected" }),
       );
     }
   } else {
-    yield* sendCopy(planned, first, rewritten);
+    const refused = yield* sendCopy(planned, first, rewritten).pipe(
+      Effect.as(Option.none<"rejected" | "key-unusable">()),
+      // Only the message's own content (or its key) is at fault: sending again fails alike.
+      Effect.catchTags({
+        TransportRejected: () => Effect.succeedSome("rejected" as const),
+        InvalidKey: () => Effect.succeedSome("key-unusable" as const),
+      }),
+    );
+    if (Option.isSome(refused)) {
+      yield* failed(refused.value);
+      return yield* refuse(
+        delivery,
+        refused.value === "key-unusable"
+          ? Plan.Block({ alias: planned.alias, reason: "key-unusable" })
+          : Plan.Drop({ reason: "rejected" }),
+      );
+    }
   }
   if (planned.kind === "reply") return replied;
   yield* count(planned.alias, "forwarded");
@@ -837,9 +985,9 @@ const execute = Effect.fn("Pipeline.execute")(function* (
   ).pipe(
     Effect.catchTags({
       InboxUnavailable: (error) => defer(error._tag),
-      TransportRejected: () => Effect.succeed(dropped("rejected")),
       MessageGone: () => Effect.succeed(dropped("spool-missing")),
       MalformedMessage: () => Effect.succeed(dropped("malformed-message")),
+      // Only from the reply path's rewrite: a forward's key is checked when it is sealed.
       InvalidKey: () =>
         refuse(delivery, Plan.Block({ alias: planned.alias, reason: "key-unusable" })),
       TransportRetryable: (error) => defer(error.code),
@@ -911,7 +1059,7 @@ export type Services =
   | MessageQueue.MessageQueue
   | Spool
   | SharedDomains.SharedDomains
-  | ReverseKeys
+  | ReverseKeys.ReverseKeys
   | ImageProxySigner
   | TempDomains.TempDomains
   | Inbox.Inbox;
@@ -931,8 +1079,10 @@ export const layer = <E, R>(
     SentRepo.layer,
     DeliveryRepo.layer,
     DomainRepo.layer,
+    FailureRepo.layer,
     FilterRepo.layer,
     MessageRepo.layer,
+    OutboxRepo.layer,
     UserRepo.layer,
     UsernameRepo.layer,
     NodeCrypto.layer,

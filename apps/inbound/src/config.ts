@@ -1,11 +1,10 @@
-import { MessageQueue, Transport } from "@alias/aws";
+import { MessageQueue, ReverseKeys, Transport } from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { Inbox } from "@alias/inbox";
 import * as Config from "effect/Config";
 import * as Layer from "effect/Layer";
 import * as ImageProxySigner from "./ImageProxySigner.ts";
-import * as ReverseKeys from "./ReverseKeys.ts";
 import * as Spool from "./Spool.ts";
 
 /**

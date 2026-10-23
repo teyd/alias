@@ -41,22 +41,57 @@ export interface Sealed {
   readonly summary: Uint8Array;
 }
 
+/**
+ * A fresh random data key for one message, and that key wrapped with the keyring's current key.
+ * Callers zero `raw` once they've sealed with `dataKey`.
+ */
+const freshKey = Effect.fn("Envelope.freshKey")(function* (
+  keys: Keyring.Keyring,
+  context: Context,
+) {
+  const raw = yield* (yield* Crypto.Crypto).randomBytes(KEY_BYTES);
+  const kek = yield* Seal.deriveKey(keys.current, KEK_LABEL);
+  return {
+    raw,
+    dataKey: yield* Seal.importKey(raw),
+    keyVersion: keys.current.version,
+    wrappedKey: yield* Seal.seal(kek, aad(context, "key"), raw),
+  };
+});
+
 /** Seals a message's body and summary under a fresh data key, wrapped with the current key. */
 export const sealMessage = Effect.fn("Envelope.sealMessage")(function* (
   keys: Keyring.Keyring,
   context: Context,
   parts: { readonly body: Uint8Array; readonly summary: Uint8Array },
 ) {
-  const raw = yield* (yield* Crypto.Crypto).randomBytes(KEY_BYTES);
-  const dataKey = yield* Seal.importKey(raw);
-  const kek = yield* Seal.deriveKey(keys.current, KEK_LABEL);
+  const key = yield* freshKey(keys, context);
   const sealed: Sealed = {
-    keyVersion: keys.current.version,
-    wrappedKey: yield* Seal.seal(kek, aad(context, "key"), raw),
-    body: yield* Seal.seal(dataKey, aad(context, "body"), parts.body),
-    summary: yield* Seal.seal(dataKey, aad(context, "summary"), parts.summary),
+    keyVersion: key.keyVersion,
+    wrappedKey: key.wrappedKey,
+    body: yield* Seal.seal(key.dataKey, aad(context, "body"), parts.body),
+    summary: yield* Seal.seal(key.dataKey, aad(context, "summary"), parts.summary),
   };
-  raw.fill(0);
+  key.raw.fill(0);
+  return sealed;
+});
+
+/**
+ * Seals a body alone under a fresh data key: the kept copy of a failed delivery (PLAN.md §20.33),
+ * whose metadata is in the clear. Opened like a stored message's body.
+ */
+export const sealBody = Effect.fn("Envelope.sealBody")(function* (
+  keys: Keyring.Keyring,
+  context: Context,
+  body: Uint8Array,
+) {
+  const key = yield* freshKey(keys, context);
+  const sealed: Omit<Sealed, "summary"> = {
+    keyVersion: key.keyVersion,
+    wrappedKey: key.wrappedKey,
+    body: yield* Seal.seal(key.dataKey, aad(context, "body"), body),
+  };
+  key.raw.fill(0);
   return sealed;
 });
 

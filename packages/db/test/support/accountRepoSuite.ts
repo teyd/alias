@@ -21,6 +21,7 @@ import {
   ContactRepo,
   DomainRepo,
   Dynamo,
+  FailureRepo,
   FilterRepo,
   OAuthRepo,
   OutboxRepo,
@@ -44,6 +45,7 @@ const repos = Layer.mergeAll(
   FilterRepo.layer,
   OAuthRepo.layer,
   OutboxRepo.layer,
+  FailureRepo.layer,
   MessageRepo.layer,
   RecipientRepo.layer,
   SessionRepo.layer,
@@ -62,6 +64,7 @@ type Repos =
   | OAuthRepo.OAuthRepo
   | OutboxRepo.OutboxRepo
   | MessageRepo.MessageRepo
+  | FailureRepo.FailureRepo
   | RecipientRepo.RecipientRepo
   | SessionRepo.SessionRepo
   | TokenRepo.TokenRepo
@@ -220,7 +223,10 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
         pendingUntil: at(9_000_000_000_000),
         expiresAt: at(9_000_000_000_000),
       }),
-      outbox.reserveSend(userId, at(1_000), 50),
+      Effect.andThen(
+        outbox.reserveSend(userId, at(1_000), 50),
+        outbox.reserveRecipient(userId, at(1_000), 20),
+      ),
     ),
   );
   yield* WebhookRepo.WebhookRepo.use((webhooks) =>
@@ -256,6 +262,7 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     isOnTheFlyEnabled: true,
     imageProtection: "off",
     isLinkCleaningEnabled: true,
+    isFailedMailKept: true,
   });
   yield* recipients.add(
     { id: `rcp_${name}`, userId, address: `${name}@mailbox.example`, createdAt: at(1_000) },
@@ -366,6 +373,29 @@ const seedUser = Effect.fn("seedUser")(function* (userId: string, name: string) 
     },
     temporary,
   );
+  // A failed delivery with its kept copy (PLAN.md §20.33), and the day's count of them.
+  const failures = yield* FailureRepo.FailureRepo;
+  yield* failures.reserve(userId, at(1_000), 100);
+  yield* failures.insert(
+    {
+      id: `fail_${name}`,
+      aliasId: `al_${name}_shared`,
+      userId,
+      alias: `${name}-shared@alias.test`,
+      sender: Option.some("someone@shared.example"),
+      reason: "recipient-bounced",
+      receivedAt: at(1_000),
+      expiresAt: at(9_000_000_000_000),
+      size: 10,
+      kept: Option.some({
+        objectKey: `inbox/7d/al_${name}_shared/fail_${name}`,
+        keyVersion: 1,
+        wrappedKey: new Uint8Array([1]),
+        envelopeFrom: `${name}-shared+r.token@alias.test`,
+      }),
+    },
+    addresses.shared,
+  );
 
   return {
     userId,
@@ -465,6 +495,7 @@ export const accountRepoSuite = (
               isOnTheFlyEnabled: false,
               imageProtection: "block-trackers",
               isLinkCleaningEnabled: false,
+              isFailedMailKept: false,
             });
           }),
         ),

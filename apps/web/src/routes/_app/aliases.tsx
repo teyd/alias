@@ -9,6 +9,7 @@ import * as Struct from "effect/Struct";
 
 import {
   AtSignIcon,
+  CircleCheckIcon,
   DownloadIcon,
   FilterIcon,
   GlobeIcon,
@@ -16,8 +17,10 @@ import {
   SearchIcon,
   TagIcon,
   UploadIcon,
+  XIcon,
 } from "lucide-react";
 import { AliasRow } from "@/components/aliases/AliasRow";
+import { ComposeDialog } from "@/components/aliases/ComposeDialog";
 import { ContactsSheet } from "@/components/aliases/ContactsSheet";
 import { CreateAliasDialog } from "@/components/aliases/CreateAliasDialog";
 import { DeleteAliasDialog } from "@/components/aliases/DeleteAliasDialog";
@@ -28,6 +31,7 @@ import { OnTheFlySetting } from "@/components/aliases/OnTheFlySetting";
 import { TrackerSettings } from "@/components/aliases/TrackerSettings";
 import { Page } from "@/components/Page";
 import { EmptyState, LoadFailed, Problem, SkeletonRows } from "@/components/states";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
@@ -63,6 +67,11 @@ const Search = Schema.Struct({
   contacts: Schema.optionalKey(Schema.String),
   edit: Schema.optionalKey(Schema.String),
   delete: Schema.optionalKey(Schema.String),
+  /** The alias "Send mail" writes from, and the recipient it was opened for. */
+  compose: Schema.optionalKey(Schema.String),
+  to: Schema.optionalKey(Schema.String),
+  /** Who the last mail went to, for the confirmation. */
+  sent: Schema.optionalKey(Schema.String),
 });
 type Search = typeof Search.Type;
 
@@ -283,6 +292,25 @@ const Aliases = () => {
       </div>
       <Problem error={exporting.error} />
 
+      {search.sent !== undefined && (
+        <Alert>
+          <CircleCheckIcon />
+          <AlertTitle>Sent</AlertTitle>
+          <AlertDescription>
+            Your mail to <span className="data">{search.sent}</span> left from the alias.
+          </AlertDescription>
+          <AlertAction>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Dismiss"
+              onClick={() => without("sent")}
+            >
+              <XIcon />
+            </Button>
+          </AlertAction>
+        </Alert>
+      )}
       {domains.isSuccess && <OnTheFlySetting subdomains={domains.data.subdomains} />}
       <TrackerSettings />
 
@@ -342,6 +370,12 @@ const Aliases = () => {
                         onContacts={() =>
                           change((current) => ({ ...current, contacts: alias.address }))
                         }
+                        onCompose={() =>
+                          change((current) => ({
+                            ...Struct.omit(current, ["to", "sent"]),
+                            compose: alias.address,
+                          }))
+                        }
                         onDelete={() =>
                           change((current) => ({ ...current, delete: alias.address }))
                         }
@@ -365,6 +399,21 @@ const Aliases = () => {
       <ContactsSheet
         aliasAddress={Option.fromUndefinedOr(search.contacts)}
         onClose={() => without("contacts")}
+        onWrite={(aliasAddress, to) =>
+          change((current) => ({
+            ...Struct.omit(current, ["contacts", "sent"]),
+            compose: aliasAddress,
+            to,
+          }))
+        }
+      />
+      <ComposeDialog
+        aliasAddress={Option.fromUndefinedOr(search.compose)}
+        to={Option.fromUndefinedOr(search.to)}
+        onClose={() => change((current) => Struct.omit(current, ["compose", "to"]))}
+        onSent={(to) =>
+          change((current) => ({ ...Struct.omit(current, ["compose", "to"]), sent: to }))
+        }
       />
       <EditAliasDialog
         alias={Arr.findFirst(aliases.data ?? [], (alias) => alias.address === search.edit)}

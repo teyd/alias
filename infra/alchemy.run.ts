@@ -538,6 +538,8 @@ export default Alchemy.Stack(
         ALIAS_INBOX_BUCKET: inboxBucketName,
         ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
         ALIAS_WEBHOOK_KEYS_PARAMETER: webhookKeysParameter,
+        // Mints the reverse alias of a contact the owner adds (PLAN.md §20.33).
+        ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
         ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
         ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
         ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
@@ -549,6 +551,12 @@ export default Alchemy.Stack(
     yield* api.bind("TurnstileSecret", {
       policyStatements: [
         { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: turnstileSecretParameterArn },
+      ],
+    });
+    // The reverse-token keys, to mint a contact's reverse alias (same `aws/ssm` key, no KMS grant).
+    yield* api.bind("ReverseTokenKeys", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: reverseTokenKeysParameterArn },
       ],
     });
     yield* api.bind("OriginSecrets", {
@@ -593,9 +601,11 @@ export default Alchemy.Stack(
           Resource: [identityArn(appDomain), configurationSetArn],
         },
         {
-          // Re-adding a bounced address takes it off the suppression list once (§20.11).
+          // Re-adding a bounced address takes it off the suppression list once (§20.11); mail the
+          // owner writes is refused for an address on it (§20.33). Neither action takes a
+          // resource-level permission.
           Effect: "Allow",
-          Action: ["ses:DeleteSuppressedDestination"],
+          Action: ["ses:DeleteSuppressedDestination", "ses:GetSuppressedDestination"],
           Resource: "*",
         },
       ],
@@ -893,7 +903,8 @@ export default Alchemy.Stack(
         ALIAS_INBOX_KEYS_PARAMETER: inboxKeysParameter,
       },
     });
-    // Inbox mode: put a sealed body, and delete it again when its alias vanished meanwhile.
+    // Inbox mode and kept failed deliveries (§20.33): put a sealed body, and delete it again when
+    // its alias vanished meanwhile.
     yield* inbound.bind("Inbox", {
       policyStatements: [
         { Effect: "Allow", Action: ["s3:PutObject", "s3:DeleteObject"], Resource: inboxObjects },
@@ -935,6 +946,12 @@ export default Alchemy.Stack(
       policyStatements: [sendFromAliasDomains, ...denySendFromTempDomains],
     });
     yield* inbound.bind("PublishWebhooks", { policyStatements: [publishWebhooks] });
+    // Replies to an address on the suppression list are refused, not sent (PLAN.md §20.33).
+    yield* inbound.bind("SuppressionCheck", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ses:GetSuppressedDestination"], Resource: "*" },
+      ],
+    });
     yield* inbound.bind("AsyncFailures", { policyStatements: [sendAsyncFailures] });
     // The reverse-token keys, one parameter, read once per container. No `kms:Decrypt` grant: the
     // value is encrypted with the AWS managed key `aws/ssm`, whose own policy lets principals of

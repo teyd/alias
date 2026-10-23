@@ -5,7 +5,16 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { WebApp, api, goTo, layer, openPage, signUp, ui } from "./support/browser.ts";
+import {
+  WebApp,
+  api,
+  confirmDestination,
+  goTo,
+  layer,
+  openPage,
+  signUp,
+  ui,
+} from "./support/browser.ts";
 
 const Recipients = Schema.Array(
   Schema.Struct({
@@ -120,31 +129,11 @@ describe("destinations and contacts in the web app", () => {
 
     it.effect("says why forwarding to a destination is paused, and offers to resume it", () =>
       Effect.gen(function* () {
-        const { origin } = yield* WebApp;
         const { page } = yield* openPage();
         const mailbox = "erin@mailbox.example";
         yield* signUp(page, "erin");
         const { userId } = yield* api(page, "/v1/me", Schema.Struct({ userId: Schema.String }));
-
-        yield* ui(async () => {
-          await goTo(page, "Destinations");
-          await page.getByRole("button", { name: "Add destination" }).first().click();
-          const dialog = page.getByRole("dialog", { name: "Add destination" });
-          await dialog.getByRole("textbox", { name: "Mailbox address" }).fill(mailbox);
-          await dialog.getByRole("button", { name: "Send confirmation" }).click();
-          await page
-            .getByRole("dialog", { name: "Check your inbox" })
-            .getByRole("button", { name: "Done" })
-            .click();
-        });
-        const [confirmation] = yield* sentTo(mailbox);
-        const link = new RegExp(`${origin}/destinations\\?\\S+`).exec(confirmation?.text ?? "");
-        yield* ui(async () => {
-          await page.goto(link?.[0] ?? "/");
-          const confirm = page.getByRole("button", { name: "Confirm this address" });
-          await confirm.click();
-          await confirm.waitFor({ state: "detached" });
-        });
+        yield* confirmDestination(page, mailbox);
 
         // A forward bounces: the mailbox is gone (what SES publishes, through SNS).
         yield* ui(async () => {

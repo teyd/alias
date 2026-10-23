@@ -13,10 +13,23 @@ import * as Item from "./Item.ts";
 import * as Quota from "./Quota.ts";
 
 /**
- * Mail an MCP client drafted for its user (PLAN.md §20.24), waiting for the user to send or
- * discard it in the web app. Each draft goes out at most once: leaving `pending` is one
- * conditional update.
+ * Mail an MCP client drafted for its user (PLAN.md §20.24), or the user composed in the web app
+ * (§20.33), waiting for the user to send or discard it. Each draft goes out at most once: leaving
+ * `pending` is one conditional update. The daily allowances of mail the user writes live here too.
  */
+
+/**
+ * Mail a user may send from their aliases per UTC day: replies through reverse aliases, composed
+ * mail and drafts together (PLAN.md §20.33). Far above a person's use, far below a spammer's.
+ */
+export const SENDS_PER_DAY = 100;
+
+/**
+ * New recipients a user may add per UTC day (a contact the owner creates, to compose to or mail
+ * through its reverse alias). Sending to strangers is what spam needs; replying to people who
+ * wrote first is not.
+ */
+export const NEW_RECIPIENTS_PER_DAY = 20;
 
 type DraftStatus = "pending" | "sent" | "discarded";
 
@@ -76,6 +89,15 @@ export class OutboxRepo extends Context.Service<
       now: DateTime.Utc,
       max: number,
     ) => Effect.Effect<boolean, DatabaseError>;
+    /**
+     * Counts one new recipient added by `userId` in the UTC day of `now`, up to `max`. False when
+     * used up.
+     */
+    readonly reserveRecipient: (
+      userId: string,
+      now: DateTime.Utc,
+      max: number,
+    ) => Effect.Effect<boolean, DatabaseError>;
   }
 >()("@alias/db/OutboxRepo") {}
 
@@ -86,6 +108,11 @@ const draftKey = (userId: string, draftId: string) => ({
 const sendsKey = (userId: string, date: string) => ({
   pk: { S: `USER#${userId}` },
   sk: { S: `SENDS#${date}` },
+});
+
+const recipientsKey = (userId: string, date: string) => ({
+  pk: { S: `USER#${userId}` },
+  sk: { S: `NEW-RECIPIENTS#${date}` },
 });
 
 const DraftItem = Item.codec(
@@ -190,6 +217,13 @@ const make = Effect.fn("OutboxRepo.make")(function* () {
     reserveSend: (userId, now, max) => {
       const day = Quota.window(now, "day");
       return Quota.reserve(table, sendsKey(userId, day.label), day, max).pipe(
+        Effect.provide(client),
+      );
+    },
+
+    reserveRecipient: (userId, now, max) => {
+      const day = Quota.window(now, "day");
+      return Quota.reserve(table, recipientsKey(userId, day.label), day, max).pipe(
         Effect.provide(client),
       );
     },

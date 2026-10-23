@@ -1,4 +1,4 @@
-import { AwsClient, FunctionUrl, Identities, Transport } from "@alias/aws";
+import { AwsClient, FunctionUrl, Identities, ReverseKeys, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { freshTable } from "@alias/db/testing";
@@ -49,6 +49,9 @@ const turnstile = (secret: string) =>
       }),
     ),
   ).pipe(Layer.provide(NodeCrypto.layer));
+
+/** The reverse-token keys the API mints with; tests verify reverse aliases against them. */
+export const reverseKeys = Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64url")}`);
 
 interface Options {
   /** Limits other than the defaults (`SignupLimits`). */
@@ -105,6 +108,7 @@ export const makeWith = (options: Options = {}) =>
             Layer.provide(SharedDomains.layer(`${sharedDomain},alias2.test`)),
           ),
           SignupLimits.layer(options.limits ?? {}),
+          ReverseKeys.layer(reverseKeys),
         ),
         options.front ?? FunctionUrl.direct,
       );

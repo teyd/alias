@@ -14,7 +14,7 @@ import { DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
 import * as Attribute from "./Attribute.ts";
 import * as Item from "./Item.ts";
-import { aliasKey, contactsPartition, inboxPartition } from "./Keys.ts";
+import { aliasKey, contactsPartition, failuresPartition, inboxPartition } from "./Keys.ts";
 import * as Purge from "./Purge.ts";
 import * as Quota from "./Quota.ts";
 
@@ -365,7 +365,8 @@ export const retire = Effect.fn("AliasRepo.retire")(function* (
  * Deletes everything a deleted alias left besides its tombstone: its contacts (partition
  * `CONTACTS#<aliasId>`, both the contacts and their id pointers), its stored messages' metadata
  * (partition `INBOX#<aliasId>`, which holds the only copies of their wrapped keys, so the bodies
- * left in S3 can't be decrypted any more) and its forward counters, then marks the tombstone
+ * left in S3 can't be decrypted any more), its failed deliveries (partition `FAILURES#<aliasId>`,
+ * likewise for kept bodies) and its forward counters, then marks the tombstone
  * done by dropping the alias id. Safe to run again.
  */
 export const purge = Effect.fn("AliasRepo.purge")(function* (
@@ -380,6 +381,10 @@ export const purge = Effect.fn("AliasRepo.purge")(function* (
   yield* Purge.deleteAll(
     table,
     yield* Purge.partitionKeys(table, inboxPartition(aliasId), Option.none()),
+  );
+  yield* Purge.deleteAll(
+    table,
+    yield* Purge.partitionKeys(table, failuresPartition(aliasId), Option.none()),
   );
   yield* Purge.deleteAll(
     table,

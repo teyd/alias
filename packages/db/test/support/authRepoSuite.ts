@@ -121,6 +121,7 @@ export const authRepoSuite = (
           isOnTheFlyEnabled: false,
           imageProtection: "block-trackers",
           isLinkCleaningEnabled: false,
+          isFailedMailKept: false,
         };
 
         it.effect("starts with on-the-fly aliases off and stores the user's choice", () =>

@@ -1,4 +1,11 @@
-import { FunctionUrl, Identities, MessageQueue, Parameters, Transport } from "@alias/aws";
+import {
+  FunctionUrl,
+  Identities,
+  MessageQueue,
+  Parameters,
+  ReverseKeys,
+  Transport,
+} from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { Dynamo } from "@alias/db";
 import { Doh } from "@alias/dns";
@@ -84,6 +91,7 @@ export const ServicesConfig = Config.all([
   Doh.config,
   TurnstileConfig,
   SignupLimits.config,
+  ReverseKeys.config,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));
 
 /**

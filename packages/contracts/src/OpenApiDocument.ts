@@ -33,7 +33,9 @@ const groups = {
   device:
     "The signed-in person's side of a device login: look up the code a device shows, then approve or deny it. Session-only.",
   outbox:
-    "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them. Session-only: no token sends mail.",
+    "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them, and new mail the person writes from an alias. Session-only: no token sends mail.",
+  failures:
+    "Mail to your aliases that could not be forwarded for good, for 7 days: metadata, and with `isFailedMailKept` an encrypted copy to download or send again.",
   consent:
     "The signed-in person's side of an MCP client's authorization (the web app's `/oauth/authorize` page), and the connected apps it created. Session-only.",
 } satisfies Record<string, string>;
@@ -65,6 +67,7 @@ const summaries = {
   "aliases.update": "Enable, disable or change an alias",
   "aliases.remove": "Delete an alias for good",
   "contacts.list": "List an alias's contacts",
+  "contacts.create": "Add a contact to write to, and get its reverse alias",
   "contacts.update": "Block or unblock a contact",
   "contacts.remove": "Delete a contact and revoke its reverse alias",
   "recipients.list": "List your forwarding addresses",
@@ -91,9 +94,14 @@ const summaries = {
   "device.lookup": "Look up a device login by its user code",
   "device.approve": "Approve a device login: the device gets a token with the requested scopes",
   "device.deny": "Deny a device login",
+  "outbox.compose": "Write and send an email from one of your aliases to any address",
   "outbox.get": "Show a drafted email",
   "outbox.send": "Send a drafted email, once",
   "outbox.discard": "Discard a drafted email",
+  "failures.list": "List mail that could not be forwarded",
+  "failures.download": "Download the kept copy of a failed delivery",
+  "failures.resend": "Send a failed delivery's kept copy to your forwarding address again",
+  "failures.remove": "Delete a failed delivery and its kept copy",
   "consent.inspect": "Validate an MCP client's authorization request for the consent screen",
   "consent.decide": "Approve or deny an MCP client: the redirect with a code or an error",
   "consent.grants": "List the MCP clients you connected",

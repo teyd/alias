@@ -19,7 +19,7 @@
  * (`tools/doh-emulator/bin/serve.ts`, on `ALIAS_DOH_PORT`), and the verification cron runs here
  * every minute instead of on EventBridge Scheduler.
  */
-import { AwsClient, type FunctionUrl, Identities, Transport } from "@alias/aws";
+import { AwsClient, type FunctionUrl, Identities, ReverseKeys, Transport } from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
 import { AliasRepo, DomainRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { Doh } from "@alias/dns";
@@ -161,7 +161,18 @@ const serve = Effect.fn("api.dev")(function* () {
     Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
   const { handle } = makeFunctionUrlHandler(
-    Layer.mergeAll(database, relyingParty, mail, webhooks, domains, inbox, tempDomains, turnstile),
+    Layer.mergeAll(
+      database,
+      relyingParty,
+      mail,
+      webhooks,
+      domains,
+      inbox,
+      tempDomains,
+      turnstile,
+      // The keys `apps/inbound/bin/dev.ts` verifies replies with.
+      ReverseKeys.dev(fakecloudUrl),
+    ),
   );
   // The verification cron, as EventBridge Scheduler would run it (every ten minutes in infra).
   yield* DomainVerification.runDue().pipe(

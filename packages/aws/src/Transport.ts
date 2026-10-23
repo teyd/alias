@@ -85,6 +85,13 @@ export class Transport extends Context.Service<
     readonly suppress: (address: string) => Effect.Effect<void, SuppressionError>;
     /** Takes an address off the suppression list, e.g. when its owner adds it again. */
     readonly unsuppress: (address: string) => Effect.Effect<void, SuppressionError>;
+    /**
+     * Whether the address is on the account-level suppression list (SESv2
+     * `GetSuppressedDestination`; `NotFoundException` means it isn't). Mail the owner writes
+     * (replies, compose, drafts) is refused for such an address instead of being sent for SES to
+     * drop (PLAN.md §20.33).
+     */
+    readonly isSuppressed: (address: string) => Effect.Effect<boolean, SuppressionError>;
   }
 >()("@alias/aws/Transport") {}
 
@@ -119,6 +126,13 @@ const makeSes = Effect.fn("Transport.makeSes")(function* (configurationSet: Opti
       SESV2.deleteSuppressedDestination({ EmailAddress: address }).pipe(
         Effect.asVoid,
         Effect.catchTag("NotFoundException", () => Effect.void),
+        Effect.mapError(suppressionError),
+        Effect.provide(client),
+      ),
+    isSuppressed: (address) =>
+      SESV2.getSuppressedDestination({ EmailAddress: address }).pipe(
+        Effect.as(true),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(false)),
         Effect.mapError(suppressionError),
         Effect.provide(client),
       ),

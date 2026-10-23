@@ -24,6 +24,13 @@ const Settings = Schema.Struct({
    * caller turns it on, since a few sites need them.
    */
   isLinkCleaningEnabled: Schema.Boolean,
+  /**
+   * Mail that can't be forwarded for good (SES refused it, the forwarding address is paused, its
+   * OpenPGP key no longer encrypts) is kept encrypted for 7 days with its failed delivery, to
+   * download or send again. Off until the caller turns it on: by default only when, which alias,
+   * who wrote and why are recorded.
+   */
+  isFailedMailKept: Schema.Boolean,
 });
 
 export type Settings = typeof Settings.Type;
@@ -33,6 +40,7 @@ const SettingsChanges = Schema.Struct({
   isOnTheFlyEnabled: Schema.optionalKey(Schema.Boolean),
   imageProtection: Schema.optionalKey(ImageProtection),
   isLinkCleaningEnabled: Schema.optionalKey(Schema.Boolean),
+  isFailedMailKept: Schema.optionalKey(Schema.Boolean),
 });
 
 /** Signed-in only. */

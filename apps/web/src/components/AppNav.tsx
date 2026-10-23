@@ -11,6 +11,7 @@ import {
   ListFilterIcon,
   LogOutIcon,
   MailIcon,
+  MailWarningIcon,
   MenuIcon,
   SettingsIcon,
   ShieldBanIcon,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/sidebar";
 import { aliasesQuery, domainsQuery } from "@/lib/aliases";
 import { callApi } from "@/lib/api";
+import { failuresQuery } from "@/lib/failures";
 import { inboxesQuery } from "@/lib/inboxes";
 import { recipientsQuery } from "@/lib/recipients";
 import { forgetSession, meQuery } from "@/lib/session";
@@ -42,6 +44,7 @@ type Destination =
   | "/"
   | "/aliases"
   | "/inbox"
+  | "/failed"
   | "/destinations"
   | "/domains"
   | "/blocklist"
@@ -133,6 +136,7 @@ const NavContent = ({ isClosing }: { readonly isClosing: boolean }) => {
   const aliases = useQuery(aliasesQuery);
   const recipients = useQuery(recipientsQuery);
   const inboxes = useQuery(inboxesQuery);
+  const failures = useQuery(failuresQuery);
   const domains = useQuery(domainsQuery);
   const domainCount = Option.map(Option.fromUndefinedOr(domains.data), (data) =>
     Arr.length(Arr.appendAll(data.shared, data.subdomains)),
@@ -171,6 +175,13 @@ const NavContent = ({ isClosing }: { readonly isClosing: boolean }) => {
                   icon={<MailIcon />}
                   label="Inbox"
                   count={countOf(Option.fromUndefinedOr(inboxes.data))}
+                  isClosing={isClosing}
+                />
+                <NavItem
+                  to="/failed"
+                  icon={<MailWarningIcon />}
+                  label="Failed deliveries"
+                  count={countOf(Option.fromUndefinedOr(failures.data))}
                   isClosing={isClosing}
                 />
                 <NavItem

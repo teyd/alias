@@ -2711,6 +2711,158 @@
         },
         "summary": "List an alias's contacts",
         "description": "API tokens need the `contacts:read` scope."
+      },
+      "post": {
+        "tags": [
+          "contacts"
+        ],
+        "operationId": "contacts.create",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "local",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "contacts:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "isBlocked": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "replyAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "address",
+                    "isBlocked",
+                    "createdAt",
+                    "replyAddress"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "AliasNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AliasNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidContact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidContactEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Add a contact to write to, and get its reverse alias",
+        "description": "API tokens need the `contacts:write` scope."
       }
     },
     "/v1/aliases/{domain}/{local}/contacts/{contactId}": {
@@ -6376,12 +6528,16 @@
                     },
                     "isLinkCleaningEnabled": {
                       "type": "boolean"
+                    },
+                    "isFailedMailKept": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "isOnTheFlyEnabled",
                     "imageProtection",
-                    "isLinkCleaningEnabled"
+                    "isLinkCleaningEnabled",
+                    "isFailedMailKept"
                   ],
                   "additionalProperties": false
                 }
@@ -6466,12 +6622,16 @@
                     },
                     "isLinkCleaningEnabled": {
                       "type": "boolean"
+                    },
+                    "isFailedMailKept": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "isOnTheFlyEnabled",
                     "imageProtection",
-                    "isLinkCleaningEnabled"
+                    "isLinkCleaningEnabled",
+                    "isFailedMailKept"
                   ],
                   "additionalProperties": false
                 }
@@ -6534,6 +6694,9 @@
                     ]
                   },
                   "isLinkCleaningEnabled": {
+                    "type": "boolean"
+                  },
+                  "isFailedMailKept": {
                     "type": "boolean"
                   }
                 },
@@ -9903,6 +10066,8 @@
                             "aliases:write",
                             "contacts:read",
                             "contacts:write",
+                            "deliveries:read",
+                            "deliveries:write",
                             "domains:read",
                             "domains:write",
                             "inboxes:read",
@@ -10020,6 +10185,8 @@
                           "aliases:write",
                           "contacts:read",
                           "contacts:write",
+                          "deliveries:read",
+                          "deliveries:write",
                           "domains:read",
                           "domains:write",
                           "inboxes:read",
@@ -10122,6 +10289,8 @@
                           "aliases:write",
                           "contacts:read",
                           "contacts:write",
+                          "deliveries:read",
+                          "deliveries:write",
                           "domains:read",
                           "domains:write",
                           "inboxes:read",
@@ -10146,6 +10315,8 @@
                         "aliases:write",
                         "contacts:read",
                         "contacts:write",
+                        "deliveries:read",
+                        "deliveries:write",
                         "domains:read",
                         "domains:write",
                         "inboxes:read",
@@ -10296,6 +10467,7 @@
                             "alias.deleted",
                             "mail.forwarded",
                             "mail.blocked",
+                            "mail.failed",
                             "recipient.bounced",
                             "rule.matched"
                           ]
@@ -10396,6 +10568,7 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
+                          "mail.failed",
                           "recipient.bounced",
                           "rule.matched"
                         ]
@@ -10501,6 +10674,7 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
+                          "mail.failed",
                           "recipient.bounced",
                           "rule.matched"
                         ]
@@ -10514,6 +10688,7 @@
                         "alias.deleted",
                         "mail.forwarded",
                         "mail.blocked",
+                        "mail.failed",
                         "recipient.bounced",
                         "rule.matched"
                       ]
@@ -10578,6 +10753,7 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
+                          "mail.failed",
                           "recipient.bounced",
                           "rule.matched"
                         ]
@@ -10666,6 +10842,7 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
+                          "mail.failed",
                           "recipient.bounced",
                           "rule.matched"
                         ]
@@ -10679,6 +10856,7 @@
                         "alias.deleted",
                         "mail.forwarded",
                         "mail.blocked",
+                        "mail.failed",
                         "recipient.bounced",
                         "rule.matched"
                       ]
@@ -10817,6 +10995,7 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
+                          "mail.failed",
                           "recipient.bounced",
                           "rule.matched"
                         ]
@@ -11191,6 +11370,8 @@
                           "aliases:write",
                           "contacts:read",
                           "contacts:write",
+                          "deliveries:read",
+                          "deliveries:write",
                           "domains:read",
                           "domains:write",
                           "inboxes:read",
@@ -11539,6 +11720,8 @@
                           "aliases:write",
                           "contacts:read",
                           "contacts:write",
+                          "deliveries:read",
+                          "deliveries:write",
                           "domains:read",
                           "domains:write",
                           "inboxes:read",
@@ -11812,6 +11995,8 @@
                         "aliases:write",
                         "contacts:read",
                         "contacts:write",
+                        "deliveries:read",
+                        "deliveries:write",
                         "domains:read",
                         "domains:write",
                         "inboxes:read",
@@ -11884,6 +12069,8 @@
                             "aliases:write",
                             "contacts:read",
                             "contacts:write",
+                            "deliveries:read",
+                            "deliveries:write",
                             "domains:read",
                             "domains:write",
                             "inboxes:read",
@@ -12033,6 +12220,173 @@
           }
         },
         "summary": "Disconnect an MCP client and revoke its tokens",
+        "description": "Session only: API tokens are refused."
+      }
+    },
+    "/v1/outbox": {
+      "post": {
+        "tags": [
+          "outbox"
+        ],
+        "operationId": "outbox.compose",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "contactName": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "clientName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "sent",
+                        "discarded",
+                        "expired"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "from",
+                    "to",
+                    "subject",
+                    "text",
+                    "clientName",
+                    "status",
+                    "createdAt",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ComposeRefused | SendFailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ComposeRefusedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SendFailedEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  }
+                },
+                "required": [
+                  "from",
+                  "to",
+                  "subject",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "summary": "Write and send an email from one of your aliases to any address",
         "description": "Session only: API tokens are refused."
       }
     },
@@ -12467,6 +12821,397 @@
         "summary": "Discard a drafted email",
         "description": "Session only: API tokens are refused."
       }
+    },
+    "/v1/failed-deliveries": {
+      "get": {
+        "tags": [
+          "failures"
+        ],
+        "operationId": "failures.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "deliveries:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "alias": {
+                        "type": "string"
+                      },
+                      "sender": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "enum": [
+                          "rejected",
+                          "recipient-bounced",
+                          "key-unusable",
+                          "too-large"
+                        ]
+                      },
+                      "receivedAt": {
+                        "type": "string"
+                      },
+                      "expiresAt": {
+                        "type": "string"
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "isKept": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "alias",
+                      "reason",
+                      "receivedAt",
+                      "expiresAt",
+                      "size",
+                      "isKept"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List mail that could not be forwarded",
+        "description": "API tokens need the `deliveries:read` scope."
+      }
+    },
+    "/v1/failed-deliveries/{failureId}/message": {
+      "get": {
+        "tags": [
+          "failures"
+        ],
+        "operationId": "failures.download",
+        "parameters": [
+          {
+            "name": "failureId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "deliveries:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "message/rfc822": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FailureNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ResendFailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResendFailedEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Download the kept copy of a failed delivery",
+        "description": "API tokens need the `deliveries:read` scope."
+      }
+    },
+    "/v1/failed-deliveries/{failureId}/resend": {
+      "post": {
+        "tags": [
+          "failures"
+        ],
+        "operationId": "failures.resend",
+        "parameters": [
+          {
+            "name": "failureId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "deliveries:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FailureNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ResendFailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResendFailedEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Send a failed delivery's kept copy to your forwarding address again",
+        "description": "API tokens need the `deliveries:write` scope."
+      }
+    },
+    "/v1/failed-deliveries/{failureId}": {
+      "delete": {
+        "tags": [
+          "failures"
+        ],
+        "operationId": "failures.remove",
+        "parameters": [
+          {
+            "name": "failureId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "deliveries:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "FailureNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a failed delivery and its kept copy",
+        "description": "API tokens need the `deliveries:write` scope."
+      }
     }
   },
   "components": {
@@ -12517,6 +13262,8 @@
               "aliases:write",
               "contacts:read",
               "contacts:write",
+              "deliveries:read",
+              "deliveries:write",
               "domains:read",
               "domains:write",
               "inboxes:read",
@@ -12550,6 +13297,61 @@
         },
         "required": [
           "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "FailureNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "FailureNotFound"
+            ]
+          },
+          "failureId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "failureId"
+        ],
+        "additionalProperties": false
+      },
+      "ResendFailedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ResendFailed"
+            ]
+          },
+          "failureId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "not-kept",
+              "inactive-alias",
+              "no-recipient",
+              "recipient-bounced",
+              "key-unusable",
+              "rejected",
+              "unavailable"
+            ]
+          },
+          "isRetryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "_tag",
+          "failureId",
+          "reason",
+          "isRetryable"
         ],
         "additionalProperties": false
       },
@@ -12619,7 +13421,9 @@
               "inactive-alias",
               "unknown-contact",
               "blocked-contact",
+              "blocked-address",
               "limit-reached",
+              "suppressed",
               "rejected",
               "unavailable"
             ]
@@ -12633,6 +13437,33 @@
           "draftId",
           "reason",
           "isRetryable"
+        ],
+        "additionalProperties": false
+      },
+      "ComposeRefusedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ComposeRefused"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unknown-alias",
+              "inactive-alias",
+              "invalid-address",
+              "blocked-address",
+              "blocked-contact",
+              "recipient-limit"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -13646,6 +14477,30 @@
         ],
         "additionalProperties": false
       },
+      "InvalidContactEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidContact"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid-address",
+              "blocked-address",
+              "recipient-limit"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
       "InvalidAliasRecipientEncoded": {
         "type": "object",
         "properties": {
@@ -13838,7 +14693,11 @@
     },
     {
       "name": "outbox",
-      "description": "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them. Session-only: no token sends mail."
+      "description": "Emails an MCP client drafted (`send_mail`), waiting for the signed-in person to send or discard them, and new mail the person writes from an alias. Session-only: no token sends mail."
+    },
+    {
+      "name": "failures",
+      "description": "Mail to your aliases that could not be forwarded for good, for 7 days: metadata, and with `isFailedMailKept` an encrypted copy to download or send again."
     }
   ]
 }

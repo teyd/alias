@@ -506,6 +506,7 @@ describe("api as a Lambda function URL handler (fakecloud DynamoDB)", () => {
         isOnTheFlyEnabled: false,
         imageProtection: "block-trackers",
         isLinkCleaningEnabled: false,
+        isFailedMailKept: false,
       };
 
       expect(yield* ada.browser.get("/v1/settings")).toMatchObject({ status: 200, body: defaults });

@@ -15,12 +15,17 @@ import * as Schema from "effect/Schema";
  *
  * `inboxes:read` and `inboxes:write` reach stored mail and temporary inboxes alone (PLAN.md
  * §20.22), so an assistant or a CI job can hold a "temp-only" token.
+ *
+ * `deliveries:read` lists failed deliveries and downloads their kept copies; `deliveries:write`
+ * sends one again (only ever to the owner's own forwarding address) or deletes it (PLAN.md §20.33).
  */
 export const Scope = Schema.Literals([
   "aliases:read",
   "aliases:write",
   "contacts:read",
   "contacts:write",
+  "deliveries:read",
+  "deliveries:write",
   "domains:read",
   "domains:write",
   "inboxes:read",

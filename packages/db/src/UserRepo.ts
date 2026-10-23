@@ -43,6 +43,12 @@ export interface UserSettings {
   readonly imageProtection: ImageProtection;
   /** Forwarding strips click-tracking parameters from links. Off by default: it may break some. */
   readonly isLinkCleaningEnabled: boolean;
+  /**
+   * A message that can't be forwarded for good is kept, sealed, for a week next to its failed
+   * delivery's metadata, so the user can download it or send it again (PLAN.md §20.33). Opt-in:
+   * by default only the metadata is recorded.
+   */
+  readonly isFailedMailKept: boolean;
 }
 
 const ImageProtection = Schema.Literals(["off", "block-trackers", "proxy-images"]);
@@ -52,6 +58,7 @@ const defaultSettings: UserSettings = {
   isOnTheFlyEnabled: false,
   imageProtection: "block-trackers",
   isLinkCleaningEnabled: false,
+  isFailedMailKept: false,
 };
 
 /** The username, or a lookalike of it (same `Username.skeleton`), already belongs to someone. */
@@ -108,6 +115,7 @@ const SettingsItem = Item.codec(
     isOnTheFlyEnabled: Schema.optionalKey(Attribute.BOOL),
     imageProtection: Schema.optionalKey(Attribute.S.pipe(Schema.decodeTo(ImageProtection))),
     isLinkCleaningEnabled: Schema.optionalKey(Attribute.BOOL),
+    isFailedMailKept: Schema.optionalKey(Attribute.BOOL),
   }),
   "UserSettings",
 );
@@ -117,6 +125,7 @@ const withDefaults = (stored: Partial<UserSettings>): UserSettings => ({
   isOnTheFlyEnabled: stored.isOnTheFlyEnabled ?? defaultSettings.isOnTheFlyEnabled,
   imageProtection: stored.imageProtection ?? defaultSettings.imageProtection,
   isLinkCleaningEnabled: stored.isLinkCleaningEnabled ?? defaultSettings.isLinkCleaningEnabled,
+  isFailedMailKept: stored.isFailedMailKept ?? defaultSettings.isFailedMailKept,
 });
 
 const UserItem = Item.codec(
@@ -221,6 +230,12 @@ const make = Effect.fn("UserRepo.make")(function* () {
         isLinkCleaningEnabled: Option.map(
           Option.fromUndefinedOr(changes.isLinkCleaningEnabled),
           (isEnabled) => ({ BOOL: isEnabled }),
+        ),
+        isFailedMailKept: Option.map(
+          Option.fromUndefinedOr(changes.isFailedMailKept),
+          (isKept) => ({
+            BOOL: isKept,
+          }),
         ),
       });
       const names = R.keys(values);

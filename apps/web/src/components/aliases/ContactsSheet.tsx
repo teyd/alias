@@ -3,10 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
-import { BanIcon, UsersIcon } from "lucide-react";
+import * as P from "effect/Predicate";
+import { BanIcon, SendIcon, UserPlusIcon, UsersIcon } from "lucide-react";
+import { CopyButton } from "@/components/CopyButton";
 import { LoadFailed, Problem } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -15,15 +19,17 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { contactsQuery, removeContact, setBlocked } from "@/lib/contacts";
+import { addContact, contactsQuery, removeContact, setBlocked } from "@/lib/contacts";
 import { blockSender, blocklistQuery } from "@/lib/rules";
 
 const ContactRow = ({
   aliasAddress,
   contact,
+  onWrite,
 }: {
   readonly aliasAddress: string;
   readonly contact: Contact;
+  readonly onWrite: () => void;
 }) => {
   const queryClient = useQueryClient();
   const refresh = () =>
@@ -66,6 +72,12 @@ const ContactRow = ({
             </span>
           </span>
         </div>
+        {!contact.isBlocked && (
+          <Button variant="ghost" size="sm" disabled={isBusy} onClick={onWrite}>
+            <SendIcon />
+            Write
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -91,7 +103,73 @@ const ContactRow = ({
   );
 };
 
-const ContactList = ({ aliasAddress }: { readonly aliasAddress: string }) => {
+/**
+ * Adds someone to write to first (PLAN.md §20.33) and shows their send-to address: the contact's
+ * reverse alias, which the owner mails from a verified destination to send as the alias.
+ */
+const AddContact = ({ aliasAddress }: { readonly aliasAddress: string }) => {
+  const queryClient = useQueryClient();
+  const add = useMutation({
+    mutationFn: (address: string) => addContact(aliasAddress, address),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: contactsQuery(aliasAddress).queryKey }),
+  });
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border p-3">
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const address = new FormData(event.currentTarget).get("address");
+          add.mutate(P.isString(address) ? address : "");
+        }}
+      >
+        <Field className="flex-1">
+          <FieldLabel htmlFor="contact-address">Contact address</FieldLabel>
+          <Input
+            id="contact-address"
+            name="address"
+            type="email"
+            className="data"
+            autoCapitalize="none"
+            autoComplete="off"
+            spellCheck={false}
+            required
+          />
+        </Field>
+        <Button type="submit" variant="outline" disabled={add.isPending}>
+          <UserPlusIcon />
+          Add contact
+        </Button>
+      </form>
+      <Problem error={add.error} />
+      {add.isSuccess && (
+        <div className="flex flex-col gap-1 rounded-lg bg-muted p-3">
+          <span className="text-xs text-muted-foreground">
+            Send-to address for <span className="data">{add.data.address}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="data truncate">{add.data.replyAddress}</span>
+            <CopyButton text={add.data.replyAddress} label="Copy send-to address" />
+          </span>
+          <FieldDescription>
+            Mail this address from your verified destination, and it goes out to{" "}
+            <span className="data">{add.data.address}</span> from the alias. Your mailbox isn't
+            shown.
+          </FieldDescription>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ContactList = ({
+  aliasAddress,
+  onWrite,
+}: {
+  readonly aliasAddress: string;
+  readonly onWrite: (to: string) => void;
+}) => {
   const contacts = useQuery(contactsQuery(aliasAddress));
 
   if (contacts.isPending) {
@@ -109,7 +187,9 @@ const ContactList = ({ aliasAddress }: { readonly aliasAddress: string }) => {
     onEmpty: () => (
       <div className="flex flex-col items-center gap-2 rounded-lg border bg-muted px-4 py-10 text-center">
         <UsersIcon className="size-4 text-muted-foreground" aria-hidden />
-        <p className="text-muted-foreground">Nobody has written to this alias yet.</p>
+        <p className="text-muted-foreground">
+          Nobody has written to this alias yet. Add someone above to write to them first.
+        </p>
       </div>
     ),
     onNonEmpty: (rows) => (
@@ -118,7 +198,12 @@ const ContactList = ({ aliasAddress }: { readonly aliasAddress: string }) => {
         className="flex flex-col gap-px overflow-hidden rounded-lg border bg-border"
       >
         {Arr.map(rows, (contact) => (
-          <ContactRow key={contact.id} aliasAddress={aliasAddress} contact={contact} />
+          <ContactRow
+            key={contact.id}
+            aliasAddress={aliasAddress}
+            contact={contact}
+            onWrite={() => onWrite(contact.address)}
+          />
         ))}
       </ul>
     ),
@@ -126,15 +211,18 @@ const ContactList = ({ aliasAddress }: { readonly aliasAddress: string }) => {
 };
 
 /**
- * Everyone who wrote to the alias named in `?contacts=`. Blocking drops their mail (counted as
- * blocked) and replies to them; removing one revokes its reverse alias for good.
+ * Everyone who wrote to the alias named in `?contacts=`, or whom the owner added to write to.
+ * Blocking drops their mail (counted as blocked) and replies to them; removing one revokes its
+ * reverse alias for good.
  */
 export const ContactsSheet = ({
   aliasAddress,
   onClose,
+  onWrite,
 }: {
   readonly aliasAddress: Option.Option<string>;
   readonly onClose: () => void;
+  readonly onWrite: (aliasAddress: string, to: string) => void;
 }) => (
   <Sheet open={Option.isSome(aliasAddress)} onOpenChange={(isOpen) => !isOpen && onClose()}>
     <SheetContent side="right" className="w-full sm:max-w-xl">
@@ -150,7 +238,8 @@ export const ContactsSheet = ({
               </SheetDescription>
             </SheetHeader>
             <div className="flex flex-col gap-4 overflow-auto px-4 pb-4">
-              <ContactList aliasAddress={address} />
+              <AddContact aliasAddress={address} />
+              <ContactList aliasAddress={address} onWrite={(to) => onWrite(address, to)} />
             </div>
           </>
         ),

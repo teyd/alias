@@ -1,4 +1,4 @@
-import { AwsClient, Parameters } from "@alias/aws";
+import { AwsClient, Parameters, ReverseKeys } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
 import { ReverseToken } from "@alias/core";
 import * as SSM from "@distilled.cloud/aws/ssm";
@@ -7,7 +7,6 @@ import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ReverseKeys } from "../src/index.ts";
 
 /**
  * Reverse-token keys from SSM Parameter Store, the way the inbound Lambda loads them at cold

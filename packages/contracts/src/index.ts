@@ -2,6 +2,7 @@ export * from "./Api.ts";
 export * from "./Auth.ts";
 export * from "./Device.ts";
 export * from "./Domains.ts";
+export * from "./Failures.ts";
 export * from "./OAuth.ts";
 export * from "./Outbox.ts";
 export * from "./Inboxes.ts";

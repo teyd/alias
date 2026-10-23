@@ -3,7 +3,6 @@ import { Address, Mail } from "@alias/core";
 import type { AliasRepo, RecipientRepo } from "@alias/db";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
 /**
@@ -52,6 +51,10 @@ export const DropReason = Schema.Literals([
   "unauthenticated-reply",
   // A reply from someone other than the alias owner's verified recipients.
   "foreign-reply-sender",
+  // A reply to a contact whose address is on the SES suppression list (PLAN.md §20.33).
+  "suppressed-recipient",
+  // Past the owner's daily allowance of mail sent from their aliases (PLAN.md §20.33).
+  "send-limited",
   // The spool no longer holds the message (processed earlier, or expired).
   "spool-missing",
   "malformed-message",
@@ -100,41 +103,9 @@ export const screen = (
 };
 
 /**
- * Where forwarded mail goes (PLAN.md §20.31, §20.34): the recipients the alias names that still
- * exist and are verified, in the alias's order; when it names none of those, the default
- * recipient of the additional username the alias lives under (`preferred`) while it is one of
- * the owner's verified recipients; else the owner's default recipient, which is always a
- * verified one. None when the owner has no verified recipient.
- */
-export const forwardTargets = (
-  alias: AliasRepo.Alias,
-  recipients: ReadonlyArray<RecipientRepo.Recipient>,
-  preferred: Option.Option<string>,
-): Option.Option<Arr.NonEmptyReadonlyArray<RecipientRepo.Recipient>> => {
-  const verified = (id: string) =>
-    Arr.findFirst(
-      recipients,
-      (recipient) => recipient.id === id && Option.isSome(recipient.verifiedAt),
-    );
-  const chosen = Arr.filterMap(alias.recipientIds, (id) =>
-    Result.fromOption(verified(id), () => undefined),
-  );
-  if (Arr.isReadonlyArrayNonEmpty(chosen)) return Option.some(chosen);
-  return Option.map(
-    Option.orElse(Option.flatMap(preferred, verified), () =>
-      Arr.findFirst(
-        recipients,
-        (recipient) => recipient.isDefault && Option.isSome(recipient.verifiedAt),
-      ),
-    ),
-    Arr.of,
-  );
-};
-
-/**
  * The destination a rule's `forward-to` chose (PLAN.md §20.32), while it is one of the owner's
  * recipients, verified and not bouncing. It replaces the alias's own recipients
- * ({@link forwardTargets}) for that message; otherwise those apply, so a stale rule loses no mail.
+ * (`Forwarding.forwardTargets` in `@alias/db`) for that message; otherwise those apply, so a stale rule loses no mail.
  */
 export const ruleTarget = (
   recipients: ReadonlyArray<RecipientRepo.Recipient>,

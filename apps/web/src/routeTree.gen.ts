@@ -18,6 +18,7 @@ import { Route as AppBlocklistRouteImport } from './routes/_app/blocklist'
 import { Route as AppDestinationsRouteImport } from './routes/_app/destinations'
 import { Route as AppDeviceRouteImport } from './routes/_app/device'
 import { Route as AppDomainsRouteImport } from './routes/_app/domains'
+import { Route as AppFailedRouteImport } from './routes/_app/failed'
 import { Route as AppInboxRouteImport } from './routes/_app/inbox'
 import { Route as AppRulesRouteImport } from './routes/_app/rules'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
@@ -68,6 +69,11 @@ const AppDomainsRoute = AppDomainsRouteImport.update({
   path: '/domains',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFailedRoute = AppFailedRouteImport.update({
+  id: '/failed',
+  path: '/failed',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppInboxRoute = AppInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/destinations': typeof AppDestinationsRoute
   '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
+  '/failed': typeof AppFailedRoute
   '/inbox': typeof AppInboxRoute
   '/rules': typeof AppRulesRoute
   '/settings': typeof AppSettingsRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/destinations': typeof AppDestinationsRoute
   '/device': typeof AppDeviceRoute
   '/domains': typeof AppDomainsRoute
+  '/failed': typeof AppFailedRoute
   '/inbox': typeof AppInboxRoute
   '/rules': typeof AppRulesRoute
   '/settings': typeof AppSettingsRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/_app/destinations': typeof AppDestinationsRoute
   '/_app/device': typeof AppDeviceRoute
   '/_app/domains': typeof AppDomainsRoute
+  '/_app/failed': typeof AppFailedRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/rules': typeof AppRulesRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/destinations'
     | '/device'
     | '/domains'
+    | '/failed'
     | '/inbox'
     | '/rules'
     | '/settings'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/destinations'
     | '/device'
     | '/domains'
+    | '/failed'
     | '/inbox'
     | '/rules'
     | '/settings'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/_app/destinations'
     | '/_app/device'
     | '/_app/domains'
+    | '/_app/failed'
     | '/_app/inbox'
     | '/_app/rules'
     | '/_app/settings'
@@ -263,6 +275,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDomainsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/failed': {
+      id: '/_app/failed'
+      path: '/failed'
+      fullPath: '/failed'
+      preLoaderRoute: typeof AppFailedRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/inbox': {
       id: '/_app/inbox'
       path: '/inbox'
@@ -307,6 +326,7 @@ interface AppRouteChildren {
   AppDestinationsRoute: typeof AppDestinationsRoute
   AppDeviceRoute: typeof AppDeviceRoute
   AppDomainsRoute: typeof AppDomainsRoute
+  AppFailedRoute: typeof AppFailedRoute
   AppInboxRoute: typeof AppInboxRoute
   AppRulesRoute: typeof AppRulesRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -319,6 +339,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDestinationsRoute: AppDestinationsRoute,
   AppDeviceRoute: AppDeviceRoute,
   AppDomainsRoute: AppDomainsRoute,
+  AppFailedRoute: AppFailedRoute,
   AppInboxRoute: AppInboxRoute,
   AppRulesRoute: AppRulesRoute,
   AppSettingsRoute: AppSettingsRoute,

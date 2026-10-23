@@ -1,7 +1,7 @@
 import event from "@alias/aws/fixtures/ses-lambda-event.json" with { type: "json" };
 import { SesEvent } from "@alias/aws";
 import type { Mail } from "@alias/core";
-import type { AliasRepo, RecipientRepo } from "@alias/db";
+import { type AliasRepo, Forwarding, type RecipientRepo } from "@alias/db";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
@@ -165,18 +165,18 @@ describe("Policy.screen", () => {
   );
 });
 
-describe("Policy.forwardTargets", () => {
+describe("Forwarding.forwardTargets", () => {
   it("picks the default recipient when the alias names none", () => {
     const target = recipient("b@mail.example", { isDefault: true });
     expect(
-      Policy.forwardTargets(alias, [recipient("a@mail.example"), target], Option.none()),
+      Forwarding.forwardTargets(alias, [recipient("a@mail.example"), target], Option.none()),
     ).toEqual(Option.some([target]));
   });
 
   it("finds none without a verified default", () => {
-    expect(Policy.forwardTargets(alias, [], Option.none())).toEqual(Option.none());
+    expect(Forwarding.forwardTargets(alias, [], Option.none())).toEqual(Option.none());
     expect(
-      Policy.forwardTargets(
+      Forwarding.forwardTargets(
         alias,
         [recipient("a@mail.example", { isVerified: false, isDefault: true })],
         Option.none(),
@@ -188,14 +188,14 @@ describe("Policy.forwardTargets", () => {
     const fallback = recipient("b@mail.example", { isDefault: true });
     const work = recipient("work@mail.example");
     const pending = recipient("new@mail.example", { isVerified: false });
-    expect(Policy.forwardTargets(alias, [fallback, work], Option.some(work.id))).toEqual(
+    expect(Forwarding.forwardTargets(alias, [fallback, work], Option.some(work.id))).toEqual(
       Option.some([work]),
     );
     // Unverified or removed since: the account's default again.
-    expect(Policy.forwardTargets(alias, [fallback, pending], Option.some(pending.id))).toEqual(
+    expect(Forwarding.forwardTargets(alias, [fallback, pending], Option.some(pending.id))).toEqual(
       Option.some([fallback]),
     );
-    expect(Policy.forwardTargets(alias, [fallback], Option.some("rcp_gone"))).toEqual(
+    expect(Forwarding.forwardTargets(alias, [fallback], Option.some("rcp_gone"))).toEqual(
       Option.some([fallback]),
     );
   });
@@ -207,7 +207,7 @@ describe("Policy.forwardTargets", () => {
     const pending = recipient("p@mail.example", { isVerified: false });
     const chosen = { ...alias, recipientIds: [b.id, "rcp_gone", pending.id, a.id] };
     // The alias's own choice overrides the username's default (PLAN.md §20.31, §20.34).
-    expect(Policy.forwardTargets(chosen, [a, b, pending, work], Option.some(work.id))).toEqual(
+    expect(Forwarding.forwardTargets(chosen, [a, b, pending, work], Option.some(work.id))).toEqual(
       Option.some([b, a]),
     );
   });
@@ -217,10 +217,12 @@ describe("Policy.forwardTargets", () => {
     const work = recipient("work@mail.example");
     const pending = recipient("p@mail.example", { isVerified: false });
     const chosen = { ...alias, recipientIds: ["rcp_gone", pending.id] };
-    expect(Policy.forwardTargets(chosen, [a, pending, work], Option.some(work.id))).toEqual(
+    expect(Forwarding.forwardTargets(chosen, [a, pending, work], Option.some(work.id))).toEqual(
       Option.some([work]),
     );
-    expect(Policy.forwardTargets(chosen, [a, pending], Option.none())).toEqual(Option.some([a]));
+    expect(Forwarding.forwardTargets(chosen, [a, pending], Option.none())).toEqual(
+      Option.some([a]),
+    );
   });
 
   it("lets a rule's destination replace the alias's while it is verified and not bouncing", () => {

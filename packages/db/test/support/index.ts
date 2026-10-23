@@ -17,3 +17,4 @@ export { messageRepoSuite } from "./messageRepoSuite.ts";
 export { proxyRepoSuite } from "./proxyRepoSuite.ts";
 export { sentRepoSuite } from "./sentRepoSuite.ts";
 export { usernameRepoSuite } from "./usernameRepoSuite.ts";
+export { failureRepoSuite } from "./failureRepoSuite.ts";

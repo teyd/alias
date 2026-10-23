@@ -16,8 +16,10 @@ type Handle = (
 
 interface Response {
   readonly status: number;
-  /** The parsed JSON body; `null` when the response had none (204). */
+  /** The parsed JSON body; `null` when the response had none (204) or isn't JSON. */
   readonly body: Schema.Json;
+  /** The body's bytes, whatever its type (binary responses come base64-encoded). */
+  readonly bytes: Uint8Array;
   readonly setCookies: ReadonlyArray<string>;
   readonly headers: Readonly<Record<string, string>>;
 }
@@ -95,9 +97,15 @@ export const make = (handle: Handle, options: Options = {}) => {
     const setCookies = result.cookies ?? [];
     Arr.map(setCookies, remember);
     const text = result.body ?? "";
+    const bytes =
+      result.isBase64Encoded === true
+        ? new Uint8Array(Buffer.from(text, "base64"))
+        : new TextEncoder().encode(text);
+    const isJson = (result.headers?.["content-type"] ?? "application/json").includes("json");
     const response: Response = {
       status: result.statusCode,
-      body: Str.isEmpty(text) ? null : JSON.parse(text),
+      body: Str.isEmpty(text) || !isJson ? null : JSON.parse(text),
+      bytes,
       setCookies,
       headers: result.headers ?? {},
     };

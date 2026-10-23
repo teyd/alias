@@ -4,6 +4,8 @@ import {
   type AliasView,
   CurrentUser,
   InvalidBlocklistEntry,
+  MailSubject,
+  MailText,
   type NewAlias,
   type Scope,
 } from "@alias/contracts";
@@ -286,10 +288,8 @@ const SendInput = Schema.Struct({
   contactId: Schema.String.annotate({
     description: "The recipient: a contact of that alias, by id from list_contacts",
   }),
-  subject: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
-  text: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20_000)).annotate({
-    description: "Plain-text body",
-  }),
+  subject: MailSubject,
+  text: MailText.annotate({ description: "Plain-text body" }),
 });
 
 const DraftOutput = Schema.Struct({

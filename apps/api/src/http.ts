@@ -8,6 +8,7 @@ import {
   DomainRepo,
   FilterRepo,
   type Dynamo,
+  FailureRepo,
   OAuthRepo,
   OutboxRepo,
   PasskeyRepo,
@@ -26,7 +27,7 @@ import * as Effect from "effect/Effect";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import * as Layer from "effect/Layer";
-import type { Identities, MessageQueue, Transport } from "@alias/aws";
+import type { Identities, MessageQueue, ReverseKeys, Transport } from "@alias/aws";
 import type { SharedDomains, TempDomains } from "@alias/core";
 import type { Doh } from "@alias/dns";
 import type { Inbox } from "@alias/inbox";
@@ -37,6 +38,7 @@ import { ContactsLive } from "./contacts.ts";
 import { LabelsLive } from "./labels.ts";
 import { DeviceLive, OAuthLive } from "./device.ts";
 import { DomainsLive } from "./domains.ts";
+import { FailuresLive } from "./failures.ts";
 import { InboxesLive } from "./inboxes.ts";
 import type { MailSettings } from "./MailSettings.ts";
 import { ConsentLive } from "./consent.ts";
@@ -83,13 +85,15 @@ const Repositories = Layer.mergeAll(
   TokenRepo.layer,
   WebhookRepo.layer,
   DomainRepo.layer,
+  FailureRepo.layer,
   FilterRepo.layer,
 );
 
 /**
  * What callers provide: the database, the WebAuthn relying party, the shared and temp-mail
  * domains, outgoing mail, the webhook queue, URL policy and secret keys, SES identities and a DNS
- * resolver (custom domains), the inbox store, and Turnstile (sign-up). They may also provide
+ * resolver (custom domains), the inbox store, Turnstile (sign-up) and the reverse-token keys
+ * (contacts the owner adds, PLAN.md §20.33). They may also provide
  * `SignupLimits`; the defaults apply otherwise.
  */
 export type Services =
@@ -105,7 +109,8 @@ export type Services =
   | Secrets.WebhookKeys
   | Identities.Identities
   | Doh.Resolver
-  | Turnstile.Turnstile;
+  | Turnstile.Turnstile
+  | ReverseKeys.ReverseKeys;
 
 /**
  * The full HTTP app. Callers provide {@link Services}: real DynamoDB and SES in Lambda, emulators
@@ -138,6 +143,7 @@ const ApiLive = Layer.mergeAll(
     ConsentLive,
     DeviceLive,
     DomainsLive,
+    FailuresLive,
   ]),
   Layer.provide(authenticationLayer),
   // Client metadata documents are fetched through the same SSRF guard as webhooks.

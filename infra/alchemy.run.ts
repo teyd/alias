@@ -921,10 +921,10 @@ export default Alchemy.Stack(
       bucket: web,
       sourcePath: webBuild,
       purge: true,
-      fileOptions: [
-        { files: "assets/**", cacheControl: "public, max-age=31536000, immutable" },
-        { files: "**", cacheControl: "no-cache" },
-      ],
+      // Alchemy's defaults already give hashed assets a year (`max-age=31536000,public,immutable`);
+      // `index.html` is revalidated each time. Exact paths only: Alchemy's glob matching
+      // (beta.83) never escapes `*`, so any pattern with one is an invalid RegExp.
+      fileOptions: [{ files: "index.html", cacheControl: "no-cache" }],
     });
     const webAccess = yield* AWS.CloudFront.OriginAccessControl("WebAccess", {
       originType: "s3",

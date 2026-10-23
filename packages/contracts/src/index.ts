@@ -10,5 +10,6 @@ export * from "./Scopes.ts";
 export * from "./Security.ts";
 export * from "./Settings.ts";
 export * from "./Tokens.ts";
+export * from "./Usernames.ts";
 export * from "./Webhooks.ts";
 export * from "./OpenApiDocument.ts";

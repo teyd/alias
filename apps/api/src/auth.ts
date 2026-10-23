@@ -20,6 +20,7 @@ import {
   type SessionRepo,
   SignupLimitRepo,
   UserRepo,
+  UsernameRepo,
 } from "@alias/db";
 import { Inbox } from "@alias/inbox";
 import { Turnstile } from "@alias/turnstile";
@@ -65,7 +66,7 @@ const reserveChallenge = Effect.fn("auth.reserveChallenge")(function* () {
 });
 
 /** The Turnstile token must prove a human solved the widget; we fail closed without an answer. */
-const checkHuman = Effect.fn("auth.checkHuman")(function* (token: string) {
+export const checkHuman = Effect.fn("auth.checkHuman")(function* (token: string) {
   const turnstile = yield* Turnstile.Turnstile;
   const verdict = yield* turnstile.verify(token).pipe(
     Effect.tapError((error) => Effect.logWarning("Turnstile unavailable", error.reason)),
@@ -76,9 +77,10 @@ const checkHuman = Effect.fn("auth.checkHuman")(function* (token: string) {
 
 /**
  * One more account for this client today and for everyone this hour. The client's own limit goes
- * first, so a script hitting it can't also use up everyone's.
+ * first, so a script hitting it can't also use up everyone's. An additional username counts as
+ * one too (PLAN.md §20.34): it claims a name and a subdomain just as a sign-up does.
  */
-const reserveSignup = Effect.fn("auth.reserveSignup")(function* () {
+export const reserveSignup = Effect.fn("auth.reserveSignup")(function* () {
   const limits = yield* SignupLimits;
   const source = yield* clientSource();
   const now = yield* DateTime.now;
@@ -341,11 +343,18 @@ const erase = Effect.fn("auth.erase")(function* (payload: {
   // Their aliases' ids, for the stored mail in S3: erasure removes the aliases from the table.
   const aliases = yield* Effect.orDie((yield* AliasRepo.AliasRepo).listByUser(user.userId));
   const shared = yield* SharedDomains.SharedDomains;
+  const additional = Arr.map(
+    yield* Effect.orDie((yield* UsernameRepo.UsernameRepo).listByUser(user.userId)),
+    (entry) => entry.username,
+  );
   yield* Effect.orDie(
     (yield* AccountRepo.AccountRepo).erase({
       userId: user.userId,
       username: user.username,
-      subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
+      additionalUsernames: additional,
+      subdomains: Arr.flatMap([user.username, ...additional], (username) =>
+        Arr.map(shared, (domain) => `${username}.${domain}`),
+      ),
       customDomains: Arr.map(domains, (domain) => domain.domain),
       sessionId: yield* Effect.orDie(Sessions.currentId()),
     }),
@@ -384,6 +393,7 @@ type AccountServices =
   | Transport.Transport
   | SharedDomains.SharedDomains
   | AliasRepo.AliasRepo
+  | UsernameRepo.UsernameRepo
   | Inbox.Inbox;
 
 export const AccountLive = HttpApiBuilder.group(Api, "account", (handlers) =>

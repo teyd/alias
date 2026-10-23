@@ -8,10 +8,11 @@ import {
   InvalidAlias,
   type NewAlias,
 } from "@alias/contracts";
-import { AliasRepo, DomainRepo } from "@alias/db";
+import { AliasRepo, DomainRepo, type UsernameRepo } from "@alias/db";
 import { Inbox } from "@alias/inbox";
 import { Publisher } from "@alias/webhooks";
 import { deleteWithMail } from "./inboxes.ts";
+import { callerSubdomains, isCallerUsername } from "./usernames.ts";
 import * as Arr from "effect/Array";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -102,9 +103,21 @@ const createOnCustom = Effect.fn("aliases.createOnCustom")(function* (
   return yield* insert(address, mode);
 });
 
-/** Any local part on the caller's own subdomain of a shared domain, or custom domain. */
+/** Any local part on a subdomain of one of the caller's usernames, except role mailboxes. */
+const createOnSubdomain = Effect.fn("aliases.createOnSubdomain")(function* (
+  address: Address.MailAddress,
+  username: string,
+  requested: string,
+  mode: Mode,
+) {
+  if (!(yield* isCallerUsername(username))) return yield* invalid(requested, "not-your-subdomain");
+  // The subdomain is the user's, but abuse@ and postmaster@ on it are about our domain.
+  if (Address.isRoleLocal(address.local)) return yield* invalid(requested, "role-address");
+  return yield* insert(address, mode);
+});
+
+/** Any local part on one of the caller's own subdomains of a shared domain, or custom domain. */
 const createAddress = Effect.fn("aliases.createAddress")(function* (requested: string, mode: Mode) {
-  const user = yield* CurrentUser;
   const shared = yield* SharedDomains.SharedDomains;
   const address = yield* Address.parse(requested).pipe(
     Effect.catchTag("InvalidAddress", () => invalid(requested, "invalid-address")),
@@ -115,12 +128,7 @@ const createAddress = Effect.fn("aliases.createAddress")(function* (requested: s
   }
   return yield* Address.Destination.$match(Address.classify(address, shared), {
     SharedRandom: () => invalid(requested, "random-only-on-shared-domain"),
-    UserSubdomain: ({ username }) => {
-      if (username !== user.username) return invalid(requested, "not-your-subdomain");
-      // The subdomain is the user's, but abuse@ and postmaster@ on it are about our domain.
-      if (Address.isRoleLocal(address.local)) return invalid(requested, "role-address");
-      return insert(address, mode);
-    },
+    UserSubdomain: ({ username }) => createOnSubdomain(address, username, requested, mode),
     Custom: () => createOnCustom(address, requested, mode),
   });
 });
@@ -130,6 +138,7 @@ type AliasServices =
   | Crypto.Crypto
   | AliasRepo.AliasRepo
   | DomainRepo.DomainRepo
+  | UsernameRepo.UsernameRepo
   | SharedDomains.SharedDomains
   | Publisher.Publisher
   | Inbox.Inbox;
@@ -184,7 +193,7 @@ export const domains = Effect.fn("aliases.domains")(function* () {
   const custom = yield* Effect.orDie(repo.listByUser(user.userId));
   return {
     shared,
-    subdomains: Arr.map(shared, (domain) => `${user.username}.${domain}`),
+    subdomains: yield* callerSubdomains(),
     custom: Arr.map(
       Arr.filter(custom, (domain) => domain.status === "verified"),
       (domain) => domain.domain,

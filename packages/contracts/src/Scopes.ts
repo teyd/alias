@@ -26,6 +26,8 @@ export const Scope = Schema.Literals([
   "recipients:write",
   "settings:read",
   "settings:write",
+  "usernames:read",
+  "usernames:write",
   "mail:send",
 ]);
 export type Scope = typeof Scope.Type;

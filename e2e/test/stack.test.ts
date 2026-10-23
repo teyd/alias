@@ -941,6 +941,68 @@ describe("emulated stack", () => {
       }),
     );
 
+    it.effect(
+      "forwards an additional username's mail to its own destination, until it is deleted",
+      () =>
+        Effect.gen(function* () {
+          yield* Transport.ensureIdentity("alias.test");
+          const gwen = yield* owner("gwen");
+          const work = "gwen@office.example";
+          const added = yield* call("/v1/recipients", {
+            cookie: gwen.cookie,
+            body: { address: work },
+          });
+          const [confirmation] = yield* sentTo(work);
+          const token = new URL(
+            /https:\/\/alias\.test\/destinations\?\S+/.exec(confirmation?.text ?? "")?.[0] ?? "x:",
+          ).searchParams.get("token");
+          yield* call(`/v1/recipients/${added.body.id}/confirm`, {
+            cookie: gwen.cookie,
+            body: { token },
+          });
+          const username = yield* call("/v1/usernames", {
+            cookie: gwen.cookie,
+            body: { username: "gwen-work", turnstileToken: TestKeys.DUMMY_TOKEN },
+          });
+          expect(username).toMatchObject({ status: 201, body: { username: "gwen-work" } });
+          const changed = yield* call("/v1/usernames/gwen-work", {
+            cookie: gwen.cookie,
+            method: "PATCH",
+            body: { isOnTheFlyEnabled: true, defaultRecipientId: added.body.id },
+          });
+          expect(changed).toMatchObject({ status: 200, body: { isOnTheFlyEnabled: true } });
+          // As for the primary's subdomain (PLAN.md §20.5): fakecloud needs it verified itself.
+          yield* Transport.ensureIdentity("gwen-work.alias.test");
+          const mail = (to: string) =>
+            smtp({ from: "hr@corp.example", to, subject: "Payslip", text: "Your payslip." });
+
+          expect(yield* invoke(yield* mail("payroll@gwen-work.alias.test"))).toEqual([
+            { _tag: "Forwarded" },
+          ]);
+          const forwarded = (yield* sentTo(work)).at(-1);
+          expect(forwarded?.from).toMatch(/^payroll\+r\.[a-z2-7]+@gwen-work\.alias\.test$/);
+          expect(forwarded?.text).toContain("Your payslip.");
+          // The primary's aliases still go to the account's default destination.
+          expect(yield* invoke(yield* mail(gwen.alias))).toEqual([{ _tag: "Forwarded" }]);
+          expect((yield* sentTo(gwen.mailbox)).at(-1)?.text).toContain("Your payslip.");
+
+          const deleted = yield* call("/v1/usernames/gwen-work", {
+            cookie: gwen.cookie,
+            method: "DELETE",
+          });
+          expect(deleted.status).toBe(204);
+          expect(yield* invoke(yield* mail("payroll@gwen-work.alias.test"))).toEqual([
+            { _tag: "Dropped", reason: "unknown-alias" },
+          ]);
+          // Only the delivery claims (keyed by message, expiring in a week) still name the
+          // subdomain; the username's tombstone is keyed by its skeleton.
+          const left = yield* itemsMentioning("gwen-work");
+          expect(Arr.filter(left, (item) => !String(item.pk?.S).startsWith("DELIVERY#"))).toEqual(
+            [],
+          );
+        }),
+    );
+
     it.effect("drops a blocked sender's mail, and replies to a deleted contact", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");

@@ -83,13 +83,6 @@ export class UserRepo extends Context.Service<
     readonly isUsernameTaken: (
       username: Username.Username,
     ) => Effect.Effect<boolean, DatabaseError>;
-    /**
-     * The user with exactly this username (lowercase, as subdomains carry it). A lookalike that
-     * merely shares its skeleton finds none, and neither does an erased username.
-     */
-    readonly findByUsername: (
-      username: string,
-    ) => Effect.Effect<Option.Option<User>, DatabaseError>;
     readonly settings: (userId: string) => Effect.Effect<UserSettings, DatabaseError>;
     /** Applies the given changes and returns the settings as stored afterwards. */
     readonly updateSettings: (
@@ -135,9 +128,6 @@ const UsernameItem = Item.codec(
   Schema.Struct({ userId: Attribute.S, username: Attribute.S }),
   "Username",
 );
-
-/** An erased account's username keeps its claim as a tombstone: `deletedAt`, no owner. */
-const isClaimed = (item: DynamoDB.AttributeMap) => P.hasProperty(item, "userId");
 
 const mustNotExist = "attribute_not_exists(pk)";
 
@@ -216,22 +206,6 @@ const make = Effect.fn("UserRepo.make")(function* () {
         Effect.map((result) => P.isNotUndefined(result.Item)),
         Effect.provide(client),
       ),
-
-    findByUsername: Effect.fn("UserRepo.findByUsername")(function* (username) {
-      const claim = yield* DynamoDB.getItem({
-        TableName: table.name,
-        Key: usernameKey(username),
-        ConsistentRead: true,
-      }).pipe(
-        Effect.mapError(databaseError("GetItem")),
-        Effect.flatMap((result) =>
-          UsernameItem.decodeOption(Option.filter(Option.fromUndefinedOr(result.Item), isClaimed)),
-        ),
-        Effect.provide(client),
-      );
-      const owner = Option.filter(claim, (found) => found.username === username);
-      return Option.isNone(owner) ? Option.none() : yield* findById(owner.value.userId);
-    }),
 
     settings,
 

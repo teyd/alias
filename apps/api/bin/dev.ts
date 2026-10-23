@@ -8,8 +8,8 @@
  * The demo alias belongs to a demo user with one verified forwarding address, so mail sent to it
  * over SMTP comes out forwarded in fakecloud's sent mail.
  *
- * Dev-only hook: when someone signs up, their subdomain of each shared domain is verified as its
- * own SES identity on fakecloud (see `verifySubdomains`).
+ * Dev-only hook: when someone signs up or adds a username, its subdomain of each shared domain is
+ * verified as its own SES identity on fakecloud (see `verifySubdomains`).
  *
  * Sign-up's Turnstile check goes to the Turnstile emulator (`tools/turnstile-emulator/bin/serve.ts`,
  * on `ALIAS_TURNSTILE_PORT`) with the always-passing test keys, so the web app's widget passes
@@ -87,14 +87,20 @@ const Registered = Schema.fromJsonString(Schema.Struct({ username: Schema.String
  * fakecloud doesn't let a verified domain cover its subdomains, while AWS does (PLAN.md §20.5).
  * Without this, mail to aliases on a new user's subdomain (`shop@ada.alias.test`) would be
  * forwarded by the pipeline and then refused by fakecloud's SES as an unverified sender. So,
- * in dev only, a successful sign-up verifies `<username>.<shared domain>` for every shared
- * domain. Production needs nothing of the kind: the shared domain's identity covers them all.
+ * in dev only, a successful sign-up or added username (PLAN.md §20.34) verifies
+ * `<username>.<shared domain>` for every shared domain. Production needs nothing of the kind:
+ * the shared domain's identity covers them all.
  */
 const verifySubdomains = Effect.fn("api.dev.verifySubdomains")(function* (
   event: FunctionUrl.FunctionUrlEvent,
   result: FunctionUrl.FunctionUrlResult,
 ) {
-  if (event.rawPath !== "/v1/auth/register" || result.statusCode !== 200) return;
+  const isSignup = event.rawPath === "/v1/auth/register" && result.statusCode === 200;
+  const isUsername =
+    event.rawPath === "/v1/usernames" &&
+    event.requestContext.http.method === "POST" &&
+    result.statusCode === 201;
+  if (!isSignup && !isUsername) return;
   const { username } = yield* Schema.decodeUnknownEffect(Registered)(result.body ?? "");
   const domains = yield* SharedDomains.SharedDomains;
   yield* Effect.forEach(domains, (domain) => Transport.ensureIdentity(`${username}.${domain}`), {

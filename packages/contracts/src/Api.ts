@@ -11,6 +11,7 @@ import { RecipientsGroup } from "./Recipients.ts";
 import { SecurityGroup } from "./Security.ts";
 import { SettingsGroup } from "./Settings.ts";
 import { TokensGroup } from "./Tokens.ts";
+import { UsernamesGroup } from "./Usernames.ts";
 import { WebhooksGroup } from "./Webhooks.ts";
 
 const Health = Schema.Struct({
@@ -52,8 +53,8 @@ const AliasChanges = Schema.Struct({
 });
 
 /**
- * Where the caller may create aliases: random ones on `shared`, any on `subdomains` and on their
- * verified `custom` domains.
+ * Where the caller may create aliases: random ones on `shared`, any on `subdomains` (those of
+ * every username of theirs, the primary one's first) and on their verified `custom` domains.
  */
 const AliasDomains = Schema.Struct({
   shared: Schema.Array(Schema.String),
@@ -221,6 +222,7 @@ export const Api = HttpApi.make("alias")
   .add(RecipientsGroup)
   .add(DomainsGroup)
   .add(SettingsGroup)
+  .add(UsernamesGroup)
   .add(SecurityGroup)
   .add(TokensGroup)
   .add(WebhooksGroup)

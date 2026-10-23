@@ -120,7 +120,7 @@ const CreateAliasForm = ({
                     <>
                       <SelectSeparator />
                       <SelectGroup>
-                        <SelectLabel>Your subdomain, any address</SelectLabel>
+                        <SelectLabel>Your subdomains, any address</SelectLabel>
                         {Arr.map(subdomains, (option) => (
                           <SelectItem key={option} value={option} className="data">
                             {option}

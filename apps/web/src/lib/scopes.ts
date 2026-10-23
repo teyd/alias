@@ -14,6 +14,8 @@ export const SCOPE_LABELS: Record<Scope, string> = {
   "recipients:write": "Add and remove forwarding addresses",
   "settings:read": "See your account settings",
   "settings:write": "Change your account settings",
+  "usernames:read": "See your usernames and their settings",
+  "usernames:write": "Change and delete your additional usernames, with their aliases",
   "mail:send":
     "Draft emails from your aliases to their contacts; each waits for you to send it in Alias",
 };

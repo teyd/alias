@@ -19,4 +19,5 @@ export * as SignupLimitRepo from "./SignupLimitRepo.ts";
 export * as Table from "./Table.ts";
 export * as TokenRepo from "./TokenRepo.ts";
 export * as UserRepo from "./UserRepo.ts";
+export * as UsernameRepo from "./UsernameRepo.ts";
 export * as WebhookRepo from "./WebhookRepo.ts";

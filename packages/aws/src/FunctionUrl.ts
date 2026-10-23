@@ -1,4 +1,6 @@
+import { ClientAddress, type Keyring, OriginSecret } from "@alias/core";
 import * as Arr from "effect/Array";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Base64 } from "effect/encoding";
 import { flow } from "effect/Function";
@@ -7,6 +9,7 @@ import * as R from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import * as CloudFront from "./CloudFront.ts";
 
 /**
  * Lambda function URL payloads (format 2.0), limited to the fields we read.
@@ -81,20 +84,81 @@ const requestBody = (event: FunctionUrlEvent) =>
   });
 
 /**
- * The header the built `Request` carries the caller's address in (`requestContext.http.sourceIp`),
- * since a web `Request` has no field for it. Whatever the client sent under this name is replaced,
- * so handlers may trust it. Behind CloudFront this is CloudFront's address, not the viewer's.
+ * The header the built `Request` carries the caller's address in, since a web `Request` has no
+ * field for it: `requestContext.http.sourceIp`, or behind CloudFront the viewer's address (see
+ * {@link Front}). Whatever the client sent under this name is replaced, so handlers may trust it.
  */
 export const SOURCE_IP_HEADER = "x-alias-source-ip";
 
-/** Builds the web `Request` the function URL received. Cookies arrive split out, as AWS sends them. */
-export const toRequest = Effect.fn("FunctionUrl.toRequest")(function* (event: FunctionUrlEvent) {
+/**
+ * Who stands in front of the function URL. `Direct`: nobody, the URL is the endpoint (`pnpm dev`,
+ * tests, and the image proxy, whose URL takes only CloudFront's signed requests anyway); the
+ * caller is `sourceIp`. `CloudFront`: the API behind our distribution (PLAN.md §20.26), whose URL
+ * stays public because OAC can't sign POST bodies for browsers. Only a request carrying one of
+ * `originSecrets` came through it; that one's caller is `CloudFront-Viewer-Address`, and every
+ * other request is refused, so nobody can skip the WAF or name their own address.
+ */
+export type Front = Data.TaggedEnum<{
+  // An empty variant is spelled `{}` in `Data.TaggedEnum`.
+  // oxlint-disable-next-line effect/avoid-object-type
+  Direct: {};
+  CloudFront: { readonly originSecrets: Keyring.Keyring };
+}>;
+const Front = Data.taggedEnum<Front>();
+
+export const direct: Front = Front.Direct();
+
+export const cloudFront = (originSecrets: Keyring.Keyring): Front =>
+  Front.CloudFront({ originSecrets });
+
+/** Why a request was refused before the handler saw it. Says nothing about the secret. */
+class NotFromFront extends Schema.TaggedError<NotFromFront>()("NotFromFront", {
+  reason: Schema.Literals(["no-origin-proof", "no-viewer-address"]),
+}) {}
+
+/** The canonical form of an address, or the text as it came if it isn't one. */
+const canonical = (address: string) =>
+  Option.match(ClientAddress.parse(address), {
+    onNone: () => address,
+    onSome: ClientAddress.format,
+  });
+
+/** The caller's address, as far as `front` lets us know it. */
+const callerOf = (event: FunctionUrlEvent, front: Front): Result.Result<string, NotFromFront> =>
+  Front.$match(front, {
+    Direct: () => Result.succeed(canonical(event.requestContext.http.sourceIp)),
+    CloudFront: ({ originSecrets }) => {
+      const presented = Option.fromUndefinedOr(event.headers[CloudFront.ORIGIN_SECRET_HEADER]);
+      if (!Option.exists(presented, (value) => OriginSecret.verify(originSecrets, value))) {
+        return Result.fail(new NotFromFront({ reason: "no-origin-proof" }));
+      }
+      return Option.match(
+        Option.flatMap(
+          Option.fromUndefinedOr(event.headers[CloudFront.VIEWER_ADDRESS_HEADER]),
+          CloudFront.viewerAddress,
+        ),
+        {
+          onNone: () => Result.fail(new NotFromFront({ reason: "no-viewer-address" })),
+          onSome: (address) => Result.succeed(ClientAddress.format(address)),
+        },
+      );
+    },
+  });
+
+/** Headers only the adapter reads; handlers never see them. */
+const FRONT_HEADERS = [CloudFront.ORIGIN_SECRET_HEADER, CloudFront.VIEWER_ADDRESS_HEADER];
+
+const buildRequest = Effect.fn("FunctionUrl.buildRequest")(function* (
+  event: FunctionUrlEvent,
+  caller: string,
+) {
   const query = Str.isEmpty(event.rawQueryString) ? "" : `?${event.rawQueryString}`;
   const headers = new Headers(event.headers);
   Option.map(Option.fromUndefinedOr(event.cookies), (cookies) =>
     headers.set("cookie", cookies.join("; ")),
   );
-  headers.set(SOURCE_IP_HEADER, event.requestContext.http.sourceIp);
+  Arr.map(FRONT_HEADERS, (name) => headers.delete(name));
+  headers.set(SOURCE_IP_HEADER, caller);
   const method = event.requestContext.http.method;
   const body = method === "GET" || method === "HEAD" ? {} : yield* requestBody(event);
   const url = `https://${event.requestContext.domainName}${event.rawPath}${query}`;
@@ -104,6 +168,13 @@ export const toRequest = Effect.fn("FunctionUrl.toRequest")(function* (event: Fu
       new InvalidFunctionUrlEvent({ reason: `cannot build a request: ${String(cause)}` }),
   });
 });
+
+/**
+ * Builds the web `Request` the function URL received, for a {@link direct} caller. Cookies arrive
+ * split out, as AWS sends them.
+ */
+export const toRequest = (event: FunctionUrlEvent) =>
+  buildRequest(event, canonical(event.requestContext.http.sourceIp));
 
 /** Turns a web `Response` into the result shape Lambda expects from a function URL handler. */
 export const fromResponse = Effect.fn("FunctionUrl.fromResponse")(function* (response: Response) {
@@ -127,10 +198,32 @@ export const fromResponse = Effect.fn("FunctionUrl.fromResponse")(function* (res
   return Arr.isArrayNonEmpty(cookies) ? { ...result, cookies } : result;
 });
 
-/** Serves a function URL event with any web-standard handler (e.g. `HttpRouter.toWebHandler`). */
-export const handle = (webHandler: (request: Request) => Promise<Response>) =>
+const refused: FunctionUrlResult = {
+  statusCode: 403,
+  headers: { "content-type": "application/json" },
+  body: '{"message":"Forbidden"}',
+  isBase64Encoded: false,
+};
+
+/**
+ * Serves a function URL event with any web-standard handler (e.g. `HttpRouter.toWebHandler`).
+ * Behind {@link cloudFront}, a request without the origin proof gets a 403 without reaching it.
+ */
+export const handle = (
+  webHandler: (request: Request) => Promise<Response>,
+  front: Front = direct,
+) =>
   Effect.fn("FunctionUrl.handle")(function* (event: FunctionUrlEvent) {
-    const request = yield* toRequest(event);
+    const caller = callerOf(event, front);
+    if (Result.isFailure(caller)) {
+      // Missing proof is someone calling the URL directly; a proven request without a viewer
+      // address means the distribution's origin request policy no longer forwards it.
+      yield* caller.failure.reason === "no-viewer-address"
+        ? Effect.logError("CloudFront request without CloudFront-Viewer-Address refused")
+        : Effect.logDebug("request without origin proof refused");
+      return refused;
+    }
+    const request = yield* buildRequest(event, caller.success);
     const response = yield* Effect.tryPromise({
       try: () => webHandler(request),
       catch: (cause) => new WebHandlerFailure({ reason: String(cause) }),

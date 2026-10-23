@@ -3,7 +3,7 @@ import { FunctionUrl, type LambdaHandler } from "@alias/aws";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { ServicesConfig } from "./config.ts";
+import { FrontConfig, ServicesConfig } from "./config.ts";
 import { makeFunctionUrlHandler } from "./lambda.ts";
 
 // Build the services, which reads the inbox keys from Parameter Store, during Lambda's init
@@ -13,7 +13,10 @@ const services = await Effect.runPromise(
   Layer.buildWithScope(Effect.runSync(ServicesConfig), Scope.makeUnsafe()),
 );
 
-const api = makeFunctionUrlHandler(Layer.succeedContext(services));
+// Behind CloudFront, the origin secrets come from Parameter Store at init too (PLAN.md §20.26).
+const front = await Effect.runPromise(Effect.runSync(FrontConfig));
+
+const api = makeFunctionUrlHandler(Layer.succeedContext(services), front);
 
 /** @public Alchemy bundles `main` and points the Lambda handler at the default export. */
 export default ((event) =>

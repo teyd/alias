@@ -5,9 +5,12 @@
  * The DynamoDB table comes from the same spec the emulators create (`@alias/db` Table.spec),
  * and the receipt rule matches the one `apps/inbound/bin/dev.ts` runs in the SES emulator.
  */
+import { AwsClient, CloudFront, Parameters } from "@alias/aws";
 import { RetentionDays } from "@alias/contracts";
+import { OriginSecret } from "@alias/core";
 import { Table } from "@alias/db";
 import { Inbox } from "@alias/inbox";
+import { securityHeaders } from "@alias/web/security-headers";
 import { WebhookQueue } from "@alias/webhooks";
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
@@ -15,6 +18,8 @@ import * as Output from "alchemy/Output";
 import { localState } from "alchemy/State";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 
 const stage = process.env.ALIAS_STAGE ?? "local";
 const sharedDomains = (process.env.ALIAS_SHARED_DOMAINS ?? "alias.test").split(",");
@@ -169,6 +174,137 @@ if (turnstileSiteKey === "") {
 /** Sign-ups everyone together may make in an hour before sign-up pauses (the circuit breaker). */
 const maxSignupsPerHour = process.env.ALIAS_MAX_SIGNUPS_PER_HOUR ?? "100";
 
+/**
+ * The secret CloudFront adds to every request it forwards to the API (PLAN.md §20.26), so the API
+ * knows a request came through the distribution (and its WAF) and may trust
+ * `CloudFront-Viewer-Address`. A keyring like the others, read by the API at cold start; unlike
+ * them, this stack reads it too, at deploy time, because the distribution's origin custom header
+ * must carry the current key: the value ends up in the distribution config and the Alchemy state.
+ * Put it once before the first deploy:
+ *
+ *   aws ssm put-parameter --region eu-west-1 --type SecureString \
+ *     --name /alias/<stage>/origin-secrets \
+ *     --value "1:$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+ *
+ * Rotate in three steps: append the new key (`1:<old>,2:<new>`) and update the API function (any
+ * configuration change starts fresh containers that accept both); put it first (`2:<new>,1:<old>`)
+ * and deploy, which sends the new key once the distribution has deployed everywhere; then drop the
+ * old key and update the API function again.
+ */
+const originSecretsParameter = `/alias/${stage}/origin-secrets`;
+
+/** The web app's production build (`pnpm --filter @alias/web build`), uploaded on deploy. */
+const webBucketName = `alias-web-${stage}`;
+const webBuild = new URL("../apps/web/dist", import.meta.url).pathname;
+
+/**
+ * The app domain's certificate (ACM, us-east-1, DNS-validated). DNS stays on Cloudflare, so the
+ * first deploy requests it and outputs the validation CNAME (`certificateValidation`), which goes
+ * into Cloudflare DNS (DNS only, not proxied) and stays there for renewals. Once ACM says
+ * `ISSUED`, deploy again with `ALIAS_APP_CERTIFICATE_ISSUED=true`: CloudFront refuses a pending
+ * certificate, so until then the distribution answers on its `*.cloudfront.net` name only.
+ */
+const isCertificateIssued = process.env.ALIAS_APP_CERTIFICATE_ISSUED === "true";
+
+/**
+ * The CloudFront Function on the app's viewer requests: paths without a file extension are the
+ * SPA's client-side routes (`/aliases`, `/oauth/authorize`, `/device`) and get `index.html`; the
+ * API's paths have their own behaviors and never reach it. A custom error response can't do
+ * this: it would also replace the API's own 403 and 404 answers.
+ */
+const spaRoutesCode = `function handler(event) {
+  var request = event.request;
+  var last = request.uri.substring(request.uri.lastIndexOf("/") + 1);
+  if (last.indexOf(".") === -1) request.uri = "/index.html";
+  return request;
+}`;
+
+/**
+ * The CloudFront Function on viewer responses of the app and the API: the security headers
+ * (`@alias/web/security-headers`, the ones the browser tests run under). A function, not a
+ * response headers policy: the flat-rate Free and Pro plans allow only managed policies, and the
+ * managed SecurityHeadersPolicy has no CSP. The image proxy sets its own (sandbox CSP, `nosniff`).
+ */
+const securityHeadersCode = `var HEADERS = ${JSON.stringify(securityHeaders())};
+function handler(event) {
+  var headers = event.response.headers;
+  Object.keys(HEADERS).forEach(function (name) {
+    headers[name] = { value: HEADERS[name] };
+  });
+  return event.response;
+}`;
+
+/** Paths whose requests WAF counts separately: sign-up, login, OAuth and device login. */
+const authPaths = ["/v1/auth/", "/v1/oauth/", "/v1/device/"];
+
+/** A WAF statement matching request paths that start with `prefix`. */
+const pathStartsWith = (prefix: string) => ({
+  ByteMatchStatement: {
+    SearchString: new TextEncoder().encode(prefix),
+    FieldToMatch: { UriPath: {} },
+    PositionalConstraint: "STARTS_WITH" as const,
+    TextTransformations: [{ Priority: 0, Type: "NONE" as const }],
+  },
+});
+
+const visibility = (name: string) => ({
+  SampledRequestsEnabled: true,
+  CloudWatchMetricsEnabled: true,
+  MetricName: `alias-${stage}-${name}`,
+});
+
+/** An AWS managed rule group, its own actions (block) unchanged. */
+const managedRules = (name: string, priority: number) => ({
+  Name: name,
+  Priority: priority,
+  Statement: { ManagedRuleGroupStatement: { VendorName: "AWS", Name: name } },
+  OverrideAction: { None: {} },
+  VisibilityConfig: visibility(name),
+});
+
+/**
+ * The web ACL's rules (PLAN.md §20.26), five at most so the flat-rate Free plan fits: AWS's IP
+ * reputation and known-bad-inputs groups, and two rate rules per viewer IP over 5 minutes as a
+ * second layer to the app's own limits. Left out on purpose: the core rule set (it blocks bodies
+ * over 8 KB, HTML and URLs in bodies, and long URI paths, so drafts, OpenPGP keys and image proxy
+ * URLs would trip it; the API decodes every payload with a schema and renders no HTML), the
+ * anonymous IP list (it blocks VPNs and Tor, which privacy users rely on), and a rate rule on
+ * `/img/*` (Gmail and Apple Mail fetch images for all their users from a few addresses).
+ */
+const wafRules = [
+  managedRules("AWSManagedRulesAmazonIpReputationList", 0),
+  managedRules("AWSManagedRulesKnownBadInputsRuleSet", 1),
+  {
+    Name: "auth-rate",
+    Priority: 2,
+    // Logins take two requests; `alias login` polls the token endpoint every 5 s (60 in 5 min).
+    Statement: {
+      RateBasedStatement: {
+        Limit: 300,
+        EvaluationWindowSec: 300,
+        AggregateKeyType: "IP" as const,
+        ScopeDownStatement: { OrStatement: { Statements: authPaths.map(pathStartsWith) } },
+      },
+    },
+    Action: { Block: {} },
+    VisibilityConfig: visibility("auth-rate"),
+  },
+  {
+    Name: "flood-rate",
+    Priority: 3,
+    Statement: {
+      RateBasedStatement: {
+        Limit: 3000,
+        EvaluationWindowSec: 300,
+        AggregateKeyType: "IP" as const,
+        ScopeDownStatement: { NotStatement: { Statement: pathStartsWith("/img/") } },
+      },
+    },
+    Action: { Block: {} },
+    VisibilityConfig: visibility("flood-rate"),
+  },
+];
+
 /** @public The stack Alchemy loads. */
 export default Alchemy.Stack(
   "alias",
@@ -188,6 +324,7 @@ export default Alchemy.Stack(
     const inboxKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${inboxKeysParameter}`;
     const webhookKeysParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${webhookKeysParameter}`;
     const turnstileSecretParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${turnstileSecretParameter}`;
+    const originSecretsParameterArn = `arn:aws:ssm:eu-west-1:${accountId}:parameter${originSecretsParameter}`;
     const inboxObjects = `arn:aws:s3:::${inboxBucketName}/*`;
     const configurationSetArn = `arn:aws:ses:eu-west-1:${accountId}:configuration-set/${configurationSetName}`;
     // The receipt rule, built from its fixed names: the bucket policy and the Lambda permission
@@ -404,12 +541,19 @@ export default Alchemy.Stack(
         ALIAS_TURNSTILE_SITE_KEY: turnstileSiteKey,
         ALIAS_TURNSTILE_SECRET_PARAMETER: turnstileSecretParameter,
         ALIAS_MAX_SIGNUPS_PER_HOUR: maxSignupsPerHour,
+        // Only requests through the distribution are served (PLAN.md §20.26).
+        ALIAS_ORIGIN_SECRETS_PARAMETER: originSecretsParameter,
       },
     });
     // Sign-up's Turnstile secret, read at cold start.
     yield* api.bind("TurnstileSecret", {
       policyStatements: [
         { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: turnstileSecretParameterArn },
+      ],
+    });
+    yield* api.bind("OriginSecrets", {
+      policyStatements: [
+        { Effect: "Allow", Action: ["ssm:GetParameter"], Resource: originSecretsParameterArn },
       ],
     });
     // Stored mail: read, delete one, and list an alias's objects to purge them with the alias or
@@ -543,14 +687,101 @@ export default Alchemy.Stack(
     });
     const functionUrlHost = (url: string | undefined) =>
       new URL(url ?? "https://missing.invalid").hostname;
-    // CachingOptimized keys the cache on the path alone and forwards no cookies, query or viewer
-    // headers, and honours the Lambda's `Cache-Control` (a day for images). No custom domain yet:
-    // mail points at the distribution's own `*.cloudfront.net` name until an ACM certificate
-    // (us-east-1, DNS-validated in Cloudflare) for `img.<app domain>` exists.
-    const images = yield* AWS.CloudFront.Distribution("Images", {
-      comment: `alias image proxy (${stage})`,
+
+    // The web app: a private bucket that only this distribution reads (OAC), with the build's
+    // hashed assets cached for a year and everything else (`index.html`) revalidated each time.
+    const web = yield* AWS.S3.Bucket("Web", { bucketName: webBucketName });
+    yield* AWS.Website.AssetDeployment("WebAssets", {
+      bucket: web,
+      sourcePath: webBuild,
+      purge: true,
+      fileOptions: [
+        { files: "assets/**", cacheControl: "public, max-age=31536000, immutable" },
+        { files: "**", cacheControl: "no-cache" },
+      ],
+    });
+    const webAccess = yield* AWS.CloudFront.OriginAccessControl("Web", {
+      originType: "s3",
+      signingBehavior: "always",
+      signingProtocol: "sigv4",
+    });
+
+    // What the API's origin custom header carries: the current origin secret, read now.
+    const originSecret = yield* Parameters.keyring(originSecretsParameter).pipe(
+      Effect.map((keys) => Redacted.value(OriginSecret.headerValue(keys))),
+      Effect.provide(AwsClient.layer({ region: AwsClient.region, endpoint: Option.none() })),
+      // Without it there's nothing to deploy: put the parameter first (above).
+      Effect.orDie,
+    );
+
+    const spaRoutes = yield* AWS.CloudFront.Function("SpaRoutes", {
+      comment: "SPA routes to index.html (PLAN.md §20.26)",
+      code: spaRoutesCode,
+    });
+    const headers = yield* AWS.CloudFront.Function("SecurityHeaders", {
+      comment: "Security headers of the app origin (PLAN.md §20.26)",
+      code: securityHeadersCode,
+    });
+    const withHeaders = [
+      { functionArn: headers.functionArn, eventType: "viewer-response" as const },
+    ];
+
+    const certificate = yield* AWS.ACM.Certificate("App", { domainName: appDomain });
+    const firewall = yield* AWS.WAFv2.WebACL("App", {
+      scope: "CLOUDFRONT",
+      description: `alias ${stage}: managed rules and rate limits (PLAN.md §20.26)`,
+      defaultAction: { Allow: {} },
+      rules: wafRules,
+      visibilityConfig: visibility("acl"),
+    });
+
+    // The API's behaviors: never cached; every viewer header but Host (function URLs expect
+    // their own) plus CloudFront's, among them CloudFront-Viewer-Address; every method.
+    const toApi = {
+      targetOriginId: "api",
+      viewerProtocolPolicy: "redirect-to-https" as const,
+      allowedMethods: ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"],
+      cachedMethods: ["GET", "HEAD"],
+      cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+      originRequestPolicyId: AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+      functionAssociations: withHeaders,
+    };
+
+    // One distribution for the app's origin (PLAN.md §20.26): a flat-rate plan covers exactly
+    // one, and the app, the API (passkeys, the OAuth issuer) and the image proxy share a domain.
+    // Five behaviors, the Free plan's maximum. The API stays behind its public function URL
+    // because OAC can't sign POST bodies for browsers; the origin secret stands in for it.
+    const app = yield* AWS.CloudFront.Distribution("App", {
+      comment: `alias (${stage})`,
+      ...(isCertificateIssued
+        ? {
+            aliases: [appDomain],
+            viewerCertificate: {
+              acmCertificateArn: certificate.certificateArn,
+              sslSupportMethod: "sni-only" as const,
+              minimumProtocolVersion: "TLSv1.2_2021" as const,
+            },
+          }
+        : {}),
       priceClass: "PriceClass_100",
+      httpVersion: "http2and3",
+      webAclId: firewall.webAclArn,
       origins: [
+        {
+          id: "web",
+          domainName: web.bucketRegionalDomainName,
+          s3Origin: true,
+          originAccessControlId: webAccess.originAccessControlId,
+        },
+        {
+          id: "api",
+          domainName: Output.map(functionUrlHost)(api.functionUrl),
+          customOriginConfig: { originProtocolPolicy: "https-only" },
+          // What tells the API a request came through here (above).
+          customHeaders: { [CloudFront.ORIGIN_SECRET_HEADER]: originSecret },
+          // The API Lambda runs up to 30 s (erasure); CloudFront's default waits 30 s too.
+          responseCompletionTimeout: "35 seconds",
+        },
         {
           id: "image-proxy",
           domainName: Output.map(functionUrlHost)(imageProxy.functionUrl),
@@ -559,13 +790,56 @@ export default Alchemy.Stack(
         },
       ],
       defaultCacheBehavior: {
-        targetOriginId: "image-proxy",
+        targetOriginId: "web",
         viewerProtocolPolicy: "redirect-to-https",
         allowedMethods: ["GET", "HEAD"],
         cachedMethods: ["GET", "HEAD"],
-        compress: false,
+        // Honours the objects' Cache-Control (above).
         cachePolicyId: AWS.CloudFront.MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        functionAssociations: [
+          { functionArn: spaRoutes.functionArn, eventType: "viewer-request" },
+          ...withHeaders,
+        ],
       },
+      orderedCacheBehaviors: [
+        { ...toApi, pathPattern: "/v1/*" },
+        // MCP and its OAuth metadata (PLAN.md §20.24); `/oauth/authorize` is the app's page.
+        { ...toApi, pathPattern: "/mcp" },
+        { ...toApi, pathPattern: "/.well-known/*" },
+        {
+          // CachingOptimized keys the cache on the path alone and forwards no cookies, query or
+          // viewer headers, and honours the Lambda's `Cache-Control` (a day for images). The
+          // proxy sets its own security headers, so no function here.
+          pathPattern: "/img/*",
+          targetOriginId: "image-proxy",
+          viewerProtocolPolicy: "redirect-to-https",
+          allowedMethods: ["GET", "HEAD"],
+          cachedMethods: ["GET", "HEAD"],
+          compress: false,
+          cachePolicyId: AWS.CloudFront.MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        },
+      ],
+    });
+    // Only this distribution reads the web bucket, and only over TLS. One policy, bound once the
+    // distribution exists (the bucket is its origin, so its ARN can't be in the bucket's props).
+    yield* web.bind("CloudFrontReads", {
+      policyStatements: [
+        {
+          Effect: "Deny",
+          Sid: "TlsOnly",
+          Principal: "*",
+          Action: ["s3:*"],
+          Resource: [`arn:aws:s3:::${webBucketName}`, `arn:aws:s3:::${webBucketName}/*`],
+          Condition: { Bool: { "aws:SecureTransport": "false" } },
+        },
+        {
+          Effect: "Allow",
+          Principal: { Service: "cloudfront.amazonaws.com" },
+          Action: ["s3:GetObject"],
+          Resource: `arn:aws:s3:::${webBucketName}/*`,
+          Condition: { StringEquals: { "AWS:SourceArn": app.distributionArn } },
+        },
+      ],
     });
     // OAC needs both: `InvokeFunctionUrl` for the URL and `InvokeFunction` for the call behind it,
     // each only for this distribution.
@@ -579,12 +853,17 @@ export default Alchemy.Stack(
           action,
           functionName: imageProxy.functionName,
           principal: "cloudfront.amazonaws.com",
-          sourceArn: images.distributionArn,
+          sourceArn: app.distributionArn,
           ...(action === "lambda:InvokeFunctionUrl"
             ? { functionUrlAuthType: "AWS_IAM" as const }
             : { invokedViaFunctionUrl: true }),
         }),
     );
+    // Proxied images point at the app domain once its certificate is live, before that at the
+    // distribution's own name (which keeps working for mail forwarded meanwhile).
+    const appOrigin = isCertificateIssued
+      ? Output.interpolate`https://${appDomain}`
+      : Output.interpolate`https://${app.domainName}`;
 
     // The inbound pipeline (`apps/inbound`), invoked by the receipt rule below. Raw mail is held in
     // memory (SES accepts up to 40 MB) and rewritten once, hence the memory size.
@@ -606,7 +885,7 @@ export default Alchemy.Stack(
         ALIAS_SHARED_DOMAINS: sharedDomains.join(","),
         ALIAS_REVERSE_TOKEN_KEYS_PARAMETER: reverseTokenKeysParameter,
         ALIAS_WEBHOOK_QUEUE_URL: webhookQueue.queueUrl,
-        ALIAS_IMAGE_PROXY_URL: Output.interpolate`https://${images.domainName}`,
+        ALIAS_IMAGE_PROXY_URL: appOrigin,
         ALIAS_IMAGE_PROXY_KEYS_PARAMETER: imageProxyKeysParameter,
         ALIAS_SES_CONFIGURATION_SET: configurationSetName,
         ALIAS_TEMP_DOMAINS: tempDomains.join(","),
@@ -997,7 +1276,11 @@ export default Alchemy.Stack(
       inboundFunction: inbound.functionName,
       feedbackFunction: feedback.functionName,
       webhookDeliveryFunction: delivery.functionName,
-      imageProxyUrl: Output.interpolate`https://${images.domainName}`,
+      appUrl: appOrigin,
+      distributionDomain: app.domainName,
+      // The CNAME to put into Cloudflare DNS for ACM (PLAN.md §20.26).
+      certificateValidation: certificate.domainValidationOptions,
+      webAclArn: firewall.webAclArn,
       verifyDomainsFunction: verifyDomains.functionName,
       asyncFailuresQueue: asyncFailures.queueUrl,
     };

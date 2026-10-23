@@ -758,15 +758,24 @@ importers:
 
   infra:
     dependencies:
+      '@alias/aws':
+        specifier: workspace:*
+        version: link:../packages/aws
       '@alias/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
+      '@alias/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@alias/db':
         specifier: workspace:*
         version: link:../packages/db
       '@alias/inbox':
         specifier: workspace:*
         version: link:../packages/inbox
+      '@alias/web':
+        specifier: workspace:*
+        version: link:../apps/web
       '@alias/webhooks':
         specifier: workspace:*
         version: link:../packages/webhooks
@@ -1100,6 +1109,9 @@ importers:
       '@alias/aws-emulators':
         specifier: workspace:*
         version: link:../aws-emulators
+      '@alias/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.3.0)

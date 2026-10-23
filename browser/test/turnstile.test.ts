@@ -48,7 +48,8 @@ describe("the Turnstile emulator's widget (contract: as Cloudflare's api.js beha
     it.effect.each(cases)("$siteKey", ({ siteKey, last, height }) =>
       Effect.gen(function* () {
         const { url } = yield* TurnstileServer.TurnstileServer;
-        const { page } = yield* openPage();
+        // The probe page has inline scripts the app's CSP refuses; it isn't the app.
+        const { page } = yield* openPage({ isCspBypassed: true });
         const scriptUrl = `${url}/turnstile/v0/api.js?render=explicit`;
         yield* ui(async () => {
           await page.goto("/");

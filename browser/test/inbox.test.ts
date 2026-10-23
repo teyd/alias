@@ -1,4 +1,4 @@
-import { smtp } from "@alias/e2e/stack";
+import { smtp, smtpRaw } from "@alias/e2e/stack";
 import { Pipeline } from "@alias/inbound";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -64,6 +64,67 @@ describe("inbox in the web app", () => {
           await page.getByRole("heading", { name: "No inboxes yet" }).waitFor();
         });
         expect(yield* api(page, "/v1/inboxes", Inboxes)).toEqual([]);
+      }),
+    );
+
+    it.effect("renders HTML mail with its styles and inline images under the app's CSP", () =>
+      Effect.gen(function* () {
+        const { page } = yield* openPage();
+        yield* signUp(page, "grace");
+        yield* ui(async () => {
+          await goTo(page, "Inbox");
+          await page.getByRole("button", { name: "New temporary inbox" }).first().click();
+          await page.getByRole("table", { name: "Inboxes" }).getByRole("row").nth(1).waitFor();
+        });
+        const [inbox] = yield* api(page, "/v1/inboxes", Inboxes);
+        const address = inbox?.address ?? "";
+        // A 1×1 PNG, inline: the frame allows `data:` images and nothing remote.
+        const pixel =
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        const raw = [
+          "From: News <news@letters.example>",
+          `To: ${address}`,
+          "Subject: Styled newsletter",
+          "MIME-Version: 1.0",
+          'Content-Type: multipart/alternative; boundary="b"',
+          "",
+          "--b",
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          "Styled",
+          "--b",
+          "Content-Type: text/html; charset=utf-8",
+          "",
+          `<p style="color: rgb(1, 2, 3)">Styled</p><img alt="pixel" src="data:image/png;base64,${pixel}">`,
+          "--b--",
+          "",
+        ].join("\r\n");
+        const stored = yield* smtpRaw({ from: "news@letters.example", to: address, raw }).pipe(
+          Effect.flatMap(Pipeline.handle),
+        );
+        expect(stored).toEqual([{ _tag: "Stored" }]);
+
+        const frame = page.frameLocator('iframe[title="Message"]');
+        const rendered = yield* ui(async () => {
+          await page
+            .getByRole("table", { name: "Messages" })
+            .getByRole("row", { name: /Styled newsletter/ })
+            .click({ timeout: 15_000 });
+          const styled = frame.getByText("Styled");
+          await styled.waitFor();
+          return {
+            color: await styled.evaluate((element) => getComputedStyle(element).color),
+            margin: await frame
+              .locator("body")
+              .evaluate((element) => getComputedStyle(element).margin),
+            imageWidth: await frame
+              .getByAltText("pixel")
+              .evaluate((element) => ("naturalWidth" in element ? element.naturalWidth : 0)),
+          };
+        });
+        // The mail's style attribute, the frame's own <style> (margin 0) and the data: image all
+        // apply; a CSP violation anywhere fails the test (`openPage`).
+        expect(rendered).toEqual({ color: "rgb(1, 2, 3)", margin: "0px", imageWidth: 1 });
       }),
     );
   });

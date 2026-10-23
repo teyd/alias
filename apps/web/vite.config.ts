@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite-plus";
+import { securityHeaders } from "./securityHeaders.ts";
 
 // Ports come from the per-worktree port block written by `pnpm agent:setup` (see scripts/lib/ports.ts).
 const webPort = Number(process.env.ALIAS_WEB_PORT ?? 5173);
@@ -24,4 +25,6 @@ export default defineConfig({
       "/.well-known": apiOrigin,
     },
   },
+  // The production bundle under production's headers (CloudFront adds them there).
+  preview: { headers: securityHeaders() },
 });

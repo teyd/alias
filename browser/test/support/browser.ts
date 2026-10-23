@@ -1,6 +1,9 @@
 import { apiHandler, layer as stackLayer } from "@alias/e2e/stack";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
+import { TurnstileServer } from "@alias/turnstile-emulator";
+import { securityHeaders } from "@alias/web/security-headers";
 import { NodeServices } from "@effect/platform-node";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -19,8 +22,9 @@ export class WebApp extends Context.Service<WebApp, { readonly origin: string }>
 class Chromium extends Context.Service<Chromium, Browser>()("@alias/browser/Chromium") {}
 
 /**
- * The production bundle of `apps/web`, built into a temp dir and served by `vite preview`, which
- * forwards `/v1` and `/health` to the API's function URL, as the planned CloudFront distribution would.
+ * The production bundle of `apps/web`, built into a temp dir and served by `vite preview` with
+ * production's security headers (`@alias/web/security-headers`), which forwards `/v1` and
+ * `/health` to the API's function URL, as the CloudFront distribution does with `/v1/*`.
  *
  * Browsers treat `http://localhost` as a secure context, so the API's `Secure` session cookie and
  * WebAuthn work there without TLS. The passkey's relying party is `localhost` and its origin the
@@ -40,6 +44,7 @@ const webApp = Layer.effectContext(
       build({ root, configFile, logLevel: "warn", build: { outDir, emptyOutDir: true } }),
     );
 
+    const turnstile = yield* TurnstileServer.TurnstileServer;
     const handler = yield* Deferred.make<Effect.Success<ReturnType<typeof apiHandler>>>();
     const api = yield* FunctionUrlServer.make({
       handler: (event) =>
@@ -62,6 +67,8 @@ const webApp = Layer.effectContext(
             port: 0,
             strictPort: true,
             proxy: { "/v1": api.url, "/health": api.url },
+            // Production's headers, with the Turnstile emulator where Cloudflare would be.
+            headers: securityHeaders(turnstile.url),
           },
         }),
       ),
@@ -101,15 +108,39 @@ export const layer = Layer.merge(stackLayer(webApp), chromiumLayer);
  * a platform authenticator (CTAP2, internal transport) that stores discoverable credentials and
  * verifies the user without a prompt, like Touch ID that always says yes.
  */
-export const openPage = Effect.fn("browser.openPage")(function* () {
+export const openPage = Effect.fn("browser.openPage")(function* (
+  options: {
+    /**
+     * For pages that aren't the app (an emulator's probe page put on the app's origin): ignore
+     * the app's CSP instead of failing on it.
+     */
+    readonly isCspBypassed?: boolean;
+  } = {},
+) {
   const browser = yield* Chromium;
   const { origin } = yield* WebApp;
+  // The app runs under production's CSP (`vite preview` sends it); a violation fails the test.
+  const violations: Array<string> = [];
   const context: BrowserContext = yield* Effect.acquireRelease(
-    Effect.promise(() => browser.newContext({ baseURL: origin })),
-    (opened) => Effect.promise(() => opened.close()),
+    Effect.promise(() =>
+      browser.newContext({ baseURL: origin, bypassCSP: options.isCspBypassed ?? false }),
+    ),
+    (opened) =>
+      Effect.promise(() => opened.close()).pipe(
+        Effect.andThen(
+          Arr.isReadonlyArrayEmpty(violations)
+            ? Effect.void
+            : Effect.die(`Content-Security-Policy violations: ${violations.join(" | ")}`),
+        ),
+      ),
   );
   context.setDefaultTimeout(10_000);
   const page: Page = yield* Effect.promise(() => context.newPage());
+  page.on("console", (message) => {
+    if (message.type() === "error" && /Content Security Policy/i.test(message.text())) {
+      violations.push(message.text());
+    }
+  });
   const cdp = yield* Effect.promise(() => context.newCDPSession(page));
   yield* Effect.promise(() => cdp.send("WebAuthn.enable"));
   const { authenticatorId } = yield* Effect.promise(() =>

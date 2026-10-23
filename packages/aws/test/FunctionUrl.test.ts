@@ -1,9 +1,13 @@
 import { describe, expect, it } from "@effect/vitest";
+import { ClientAddress, Keyring } from "@alias/core";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import documented from "../fixtures/function-url-request.json" with { type: "json" };
 import response from "../fixtures/function-url-response.json" with { type: "json" };
-import { FunctionUrl } from "../src/index.ts";
+import { CloudFront, FunctionUrl } from "../src/index.ts";
 
 // The documented sample uses placeholders like `<url-id>`; give it a domain AWS would really send.
 const request = {
@@ -122,4 +126,115 @@ describe("FunctionUrl (contract: AWS documentation payloads)", () => {
       expect(JSON.parse(result.body ?? "")).toEqual({ path: "/health" });
     }),
   );
+});
+
+const secret = (fill: number) => Buffer.alloc(32, fill).toString("base64url");
+const originSecrets = Keyring.parse(Redacted.make(`2:${secret(2)},1:${secret(1)}`));
+
+/** Echoes the caller address the handler sees, and whether any front header got through. */
+const echo = async (incoming: Request) =>
+  Response.json({
+    caller: incoming.headers.get(FunctionUrl.SOURCE_IP_HEADER),
+    leaked: [CloudFront.ORIGIN_SECRET_HEADER, CloudFront.VIEWER_ADDRESS_HEADER].filter((name) =>
+      incoming.headers.has(name),
+    ),
+  });
+
+const serveWith = (front: FunctionUrl.Front, headers: Record<string, string>) =>
+  Effect.gen(function* () {
+    const event = yield* FunctionUrl.decode({
+      ...request,
+      headers: { ...request.headers, ...headers },
+    });
+    const result = yield* FunctionUrl.handle(echo, front)(event);
+    return { status: result.statusCode, body: JSON.parse(result.body ?? "null") };
+  });
+
+describe("FunctionUrl behind CloudFront (PLAN.md §20.26)", () => {
+  // The documentation's example value.
+  const viewer = { [CloudFront.VIEWER_ADDRESS_HEADER]: "198.51.100.10:46532" };
+
+  it.effect("trusts CloudFront-Viewer-Address only with a valid origin secret", () =>
+    Effect.gen(function* () {
+      const front = FunctionUrl.cloudFront(yield* originSecrets);
+      const answers = yield* Effect.forEach(
+        [`2:${secret(2)}`, `1:${secret(1)}`],
+        (proof) => serveWith(front, { ...viewer, [CloudFront.ORIGIN_SECRET_HEADER]: proof }),
+        { concurrency: 1 },
+      );
+      expect(answers).toEqual(
+        Arr.replicate({ status: 200, body: { caller: "198.51.100.10", leaked: [] } }, 2),
+      );
+    }),
+  );
+
+  it.effect("refuses requests that skipped CloudFront, whatever they claim", () =>
+    Effect.gen(function* () {
+      const front = FunctionUrl.cloudFront(yield* originSecrets);
+      const attempts: ReadonlyArray<Record<string, string>> = [
+        {},
+        viewer,
+        { ...viewer, [FunctionUrl.SOURCE_IP_HEADER]: "198.51.100.10" },
+        { ...viewer, [CloudFront.ORIGIN_SECRET_HEADER]: `3:${secret(2)}` },
+        { ...viewer, [CloudFront.ORIGIN_SECRET_HEADER]: `2:${secret(1)}` },
+        { ...viewer, [CloudFront.ORIGIN_SECRET_HEADER]: secret(2) },
+      ];
+      const answers = yield* Effect.forEach(attempts, (headers) => serveWith(front, headers), {
+        concurrency: 1,
+      });
+      expect(answers.map((answer) => answer.status)).toEqual(Arr.replicate(403, attempts.length));
+    }),
+  );
+
+  it.effect("fails closed when a proven request has no usable viewer address", () =>
+    Effect.gen(function* () {
+      const front = FunctionUrl.cloudFront(yield* originSecrets);
+      const proof = { [CloudFront.ORIGIN_SECRET_HEADER]: `2:${secret(2)}` };
+      const viewers = ["198.51.100.10", "198.51.100.10:1,192.0.2.1:2", "x:1"];
+      const answers = yield* Effect.forEach(
+        [
+          proof,
+          ...viewers.map((value) => ({ ...proof, [CloudFront.VIEWER_ADDRESS_HEADER]: value })),
+        ],
+        (headers) => serveWith(front, headers),
+        { concurrency: 1 },
+      );
+      expect(answers.map((answer) => answer.status)).toEqual(Arr.replicate(403, 4));
+    }),
+  );
+
+  it.effect("ignores client-sent addresses and secrets when called directly", () =>
+    Effect.gen(function* () {
+      expect(
+        yield* serveWith(FunctionUrl.direct, {
+          ...viewer,
+          [FunctionUrl.SOURCE_IP_HEADER]: "10.0.0.1",
+          [CloudFront.ORIGIN_SECRET_HEADER]: `2:${secret(2)}`,
+        }),
+      ).toEqual({ status: 200, body: { caller: "123.123.123.123", leaked: [] } });
+    }),
+  );
+});
+
+describe("CloudFront.viewerAddress", () => {
+  it.each<readonly [string, string]>([
+    ["198.51.100.10:46532", "198.51.100.10"],
+    ["2001:db8:85a3::8a2e:370:7334:46532", "2001:db8:85a3::8a2e:370:7334"],
+    ["[2001:db8::1]:443", "2001:db8::1"],
+    ["::ffff:198.51.100.10:80", "198.51.100.10"],
+  ])("reads %j as %j", (value, address) => {
+    expect(Option.map(CloudFront.viewerAddress(value), ClientAddress.format)).toEqual(
+      Option.some(address),
+    );
+  });
+
+  it.each([
+    "198.51.100.10",
+    "198.51.100.10:",
+    "198.51.100.10:65536",
+    "198.51.100.10:1, 192.0.2.1:2",
+    "unknown:80",
+  ])("refuses %j", (value) => {
+    expect(Option.isNone(CloudFront.viewerAddress(value))).toBe(true);
+  });
 });

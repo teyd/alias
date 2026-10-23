@@ -16,8 +16,6 @@ export interface Limits {
   readonly signupsPerHour: number;
   /** Failed passkey assertions per account and hour; past them the account's logins wait. */
   readonly loginFailuresPerHour: number;
-  /** Invite codes per client and hour that redeemed nothing (PLAN.md §20.36). */
-  readonly inviteMissesPerHour: number;
 }
 
 const defaults: Limits = {
@@ -25,7 +23,6 @@ const defaults: Limits = {
   signupsPerDay: 5,
   signupsPerHour: 100,
   loginFailuresPerHour: 10,
-  inviteMissesPerHour: 5,
 };
 
 /** The limits in force; {@link defaults} unless a layer says otherwise. */

@@ -12,7 +12,6 @@ import * as Schema from "effect/Schema";
 import * as Attribute from "./Attribute.ts";
 import { type DatabaseError, databaseError } from "./DatabaseError.ts";
 import { type Database, DynamoTable } from "./Dynamo.ts";
-import { InviteNotRedeemable, redemption } from "./InviteRepo.ts";
 import * as Item from "./Item.ts";
 import { type Passkey, passkeyItem } from "./PasskeyRepo.ts";
 import { conditionFailedAt } from "./Transaction.ts";
@@ -77,15 +76,12 @@ export class UserRepo extends Context.Service<
   {
     /**
      * Creates the user, claims the username's skeleton and stores the first passkey in one
-     * transaction, so there is never a user without a passkey or two users per skeleton. With an
-     * invite (the hash of its code, PLAN.md §20.36), the same transaction redeems one of its uses
-     * as of `user.createdAt`, so an invite is never redeemed more often than it allows.
+     * transaction, so there is never a user without a passkey or two users per skeleton.
      */
     readonly register: (
       user: NewUser,
       passkey: Passkey,
-      invite: Option.Option<string>,
-    ) => Effect.Effect<void, UsernameTaken | CredentialTaken | InviteNotRedeemable | DatabaseError>;
+    ) => Effect.Effect<void, UsernameTaken | CredentialTaken | DatabaseError>;
     readonly findById: (userId: string) => Effect.Effect<Option.Option<User>, DatabaseError>;
     /**
      * True when the username or a lookalike of it is claimed, now or by an erased account: an
@@ -168,18 +164,13 @@ const make = Effect.fn("UserRepo.make")(function* () {
     );
 
   return UserRepo.of({
-    register: Effect.fn("UserRepo.register")(function* (user, passkey, invite) {
+    register: Effect.fn("UserRepo.register")(function* (user, passkey) {
       const userItem = yield* UserItem.encode(user);
       const usernameItem = yield* UsernameItem.encode({
         userId: user.id,
         username: user.username,
       });
       const credential = yield* passkeyItem(passkey);
-      const redeem = yield* Option.match(invite, {
-        onNone: () => Effect.succeed([]),
-        onSome: (hash) =>
-          Effect.map(redemption(table.name, hash, user.createdAt), (Update) => [{ Update }]),
-      });
       yield* DynamoDB.transactWriteItems({
         TransactItems: [
           {
@@ -197,11 +188,9 @@ const make = Effect.fn("UserRepo.make")(function* () {
             },
           },
           { Put: { TableName: table.name, Item: credential, ConditionExpression: mustNotExist } },
-          ...redeem,
         ],
       }).pipe(
         Effect.mapError((error) => {
-          if (conditionFailedAt(error, 3)) return new InviteNotRedeemable();
           if (conditionFailedAt(error, 1)) {
             return new UsernameTaken({ username: user.username });
           }

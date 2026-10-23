@@ -1,6 +1,5 @@
 import {
   FrontConfig,
-  Invites,
   MailSettings,
   RelyingParty,
   SignupLimits,
@@ -25,7 +24,7 @@ import {
 import bounceRecord from "@alias/aws/fixtures/ses-event-bounce.json" with { type: "json" };
 import { FakeCloud } from "@alias/aws-emulators";
 import { OriginSecret, SharedDomains, TempDomains } from "@alias/core";
-import { Dynamo, InviteRepo, ProxyRepo } from "@alias/db";
+import { Dynamo, ProxyRepo } from "@alias/db";
 import { freshTable } from "@alias/db/testing";
 import { Doh } from "@alias/dns";
 import { DohServer } from "@alias/doh-emulator";
@@ -47,7 +46,6 @@ import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as DateTime from "effect/DateTime";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -162,14 +160,12 @@ const turnstileSecretParameter = "/alias/e2e/turnstile-secret";
  * The real API Lambda handler on the stack's table, queue and SES, for passkeys bound to
  * `relyingParty`. Serve it with `FunctionUrlServer`; `front` puts CloudFront before it
  * ({@link behindCloudFront}). Every test in a file signs up from 127.0.0.1 into the one table, so
- * the sign-up limits are high unless `limits` says otherwise; `apps/api` tests them. Sign-up is
- * open unless `signupMode` asks for invite codes ({@link mintInvite}, PLAN.md §20.36).
+ * the sign-up limits are high unless `limits` says otherwise; `apps/api` tests them.
  */
 export const apiHandler = Effect.fn("stack.apiHandler")(function* (
   relyingParty: { readonly id: string; readonly origin: string },
   front: FunctionUrl.Front = FunctionUrl.direct,
   limits: Partial<SignupLimits.Limits> = { challengesPerHour: 1_000, signupsPerDay: 1_000 },
-  signupMode: Invites.SignupMode = "open",
 ) {
   const context = yield* Effect.context<Dynamo.Database>();
   const fakecloud = yield* FakeCloud.FakeCloud;
@@ -193,7 +189,6 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (
       Doh.layer(dns.url),
       RelyingParty.layer(relyingParty),
       SignupLimits.layer(limits),
-      Invites.layer(signupMode),
       Turnstile.layer({
         url: turnstileServer.url,
         siteKey: TestKeys.siteKeys.passes,
@@ -221,21 +216,6 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (
   yield* Effect.addFinalizer(() => Effect.promise(dispose));
   return (event: FunctionUrl.FunctionUrlEvent) => Effect.runPromise(handle(event));
 });
-
-/**
- * A single-use invite code on the stack's table, minted as the operator's `bin/invites.ts` does,
- * in real time like the Lambda that redeems it.
- */
-export const mintInvite = Invites.mint({
-  count: 1,
-  maxUses: 1,
-  validFor: Duration.days(1),
-  note: Option.none(),
-}).pipe(
-  Effect.map(([code]) => code ?? ""),
-  Effect.provide(Layer.merge(InviteRepo.layer, NodeCrypto.layer)),
-  TestClock.withLive,
-);
 
 /**
  * The API as production runs it behind CloudFront (PLAN.md §20.26): the origin secrets are a

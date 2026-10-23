@@ -11,10 +11,6 @@
  * Dev-only hook: when someone signs up or adds a username, its subdomain of each shared domain is
  * verified as its own SES identity on fakecloud (see `verifySubdomains`).
  *
- * Sign-up takes invite codes as in production (PLAN.md §20.36) unless `ALIAS_SIGNUP_MODE=open`; the
- * seed adds the dev code {@link DEV_INVITE} with plenty of uses, and the log names a sign-up link
- * that fills it in.
- *
  * Sign-up's Turnstile check goes to the Turnstile emulator (`tools/turnstile-emulator/bin/serve.ts`,
  * on `ALIAS_TURNSTILE_PORT`) with the always-passing test keys, so the web app's widget passes
  * by itself.
@@ -25,7 +21,7 @@
  */
 import { AwsClient, type FunctionUrl, Identities, ReverseKeys, Transport } from "@alias/aws";
 import { SharedDomains, TempDomains } from "@alias/core";
-import { AliasRepo, DomainRepo, Dynamo, InviteRepo, RecipientRepo, Table } from "@alias/db";
+import { AliasRepo, DomainRepo, Dynamo, RecipientRepo, Table } from "@alias/db";
 import { Doh } from "@alias/dns";
 import { Inbox } from "@alias/inbox";
 import { Turnstile } from "@alias/turnstile";
@@ -41,7 +37,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as DomainVerification from "../src/DomainVerification.ts";
-import { Invites, MailSettings, makeFunctionUrlHandler, RelyingParty } from "../src/index.ts";
+import { MailSettings, makeFunctionUrlHandler, RelyingParty } from "../src/index.ts";
 
 const port = Number(process.env.ALIAS_API_PORT ?? 8787);
 const fakecloudUrl = `http://127.0.0.1:${process.env.ALIAS_FAKECLOUD_PORT ?? 4566}`;
@@ -73,11 +69,10 @@ const inbox = Inbox.dev(fakecloudUrl, database);
 const tempDomains = TempDomains.layer(process.env.ALIAS_TEMP_DOMAINS ?? "tmp.test").pipe(
   Layer.provide(sharedDomains),
 );
-const webOrigin = `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`;
-const relyingParty = RelyingParty.layer({ id: "localhost", origin: webOrigin });
-const signupMode: Invites.SignupMode = process.env.ALIAS_SIGNUP_MODE === "open" ? "open" : "invite";
-/** The dev invite code: every consonant once, good for a million sign-ups. Dev only. */
-const DEV_INVITE = "BCDF-GHJK-LMNP-QRST-VWXZ";
+const relyingParty = RelyingParty.layer({
+  id: "localhost",
+  origin: `http://localhost:${process.env.ALIAS_WEB_PORT ?? 5173}`,
+});
 const turnstile = Turnstile.layer({
   url: `http://localhost:${process.env.ALIAS_TURNSTILE_PORT ?? 8054}`,
   siteKey: TestKeys.siteKeys.passes,
@@ -115,25 +110,8 @@ const verifySubdomains = Effect.fn("api.dev.verifySubdomains")(function* (
   yield* Effect.logInfo(`dev: verified ${username}'s subdomains as SES identities`);
 });
 
-/** The dev invite code, unless an earlier run stored it already (fakecloud keeps its state). */
-const seedInvite = Effect.fn("api.dev.seedInvite")(function* () {
-  const invites = yield* InviteRepo.InviteRepo;
-  const hash = yield* Invites.hashCode(DEV_INVITE.replaceAll("-", ""));
-  const now = yield* DateTime.now;
-  if (Option.isSome(yield* invites.findRedeemable(hash, now))) return;
-  yield* invites.revoke(hash);
-  yield* invites.create({
-    hash,
-    note: Option.some("pnpm dev"),
-    maxUses: 1_000_000,
-    createdAt: now,
-    expiresAt: DateTime.add(now, { days: 3650 }),
-  });
-});
-
 const seed = Effect.fn("api.dev.seed")(function* () {
   yield* Table.ensure();
-  yield* seedInvite();
   const repo = yield* AliasRepo.make();
   yield* repo
     .insert({
@@ -180,9 +158,7 @@ const seed = Effect.fn("api.dev.seed")(function* () {
 const serve = Effect.fn("api.dev")(function* () {
   yield* seed().pipe(
     Effect.retry({ times: 50, schedule: Schedule.spaced("100 millis") }),
-    Effect.provide(
-      Layer.merge(RecipientRepo.layer, InviteRepo.layer).pipe(Layer.provideMerge(database)),
-    ),
+    Effect.provide(RecipientRepo.layer.pipe(Layer.provideMerge(database))),
   );
   const { handle } = makeFunctionUrlHandler(
     Layer.mergeAll(
@@ -194,7 +170,6 @@ const serve = Effect.fn("api.dev")(function* () {
       inbox,
       tempDomains,
       turnstile,
-      Invites.layer(signupMode),
       // The keys `apps/inbound/bin/dev.ts` verifies replies with.
       ReverseKeys.dev(fakecloudUrl),
     ),
@@ -230,11 +205,6 @@ const serve = Effect.fn("api.dev")(function* () {
   yield* Effect.logInfo(
     `api (function URL emulator) on ${server.url}, DynamoDB and SES at ${fakecloudUrl}`,
   );
-  if (signupMode === "invite") {
-    yield* Effect.logInfo(
-      `sign-up takes invite codes; use ${DEV_INVITE}: ${webOrigin}/register?invite=${DEV_INVITE}`,
-    );
-  }
   yield* Effect.never;
 });
 

@@ -18,7 +18,6 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Invites from "./Invites.ts";
 import * as MailSettings from "./MailSettings.ts";
 import * as RelyingParty from "./RelyingParty.ts";
 import * as SignupLimits from "./SignupLimits.ts";
@@ -92,7 +91,6 @@ export const ServicesConfig = Config.all([
   Doh.config,
   TurnstileConfig,
   SignupLimits.config,
-  Invites.config,
   ReverseKeys.config,
 ]).pipe(Config.map((layers) => Layer.mergeAll(...layers)));
 

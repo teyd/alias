@@ -76,14 +76,10 @@
                         "scriptUrl"
                       ],
                       "additionalProperties": false
-                    },
-                    "isInviteRequired": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
-                    "turnstile",
-                    "isInviteRequired"
+                    "turnstile"
                   ],
                   "additionalProperties": false
                 }
@@ -305,18 +301,11 @@
             }
           },
           "403": {
-            "description": "InviteRejected | CrossSiteRequest",
+            "description": "CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/InviteRejectedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/CrossSiteRequestEncoded"
                 }
               }
             }
@@ -362,9 +351,6 @@
                     "type": "string"
                   },
                   "turnstileToken": {
-                    "type": "string"
-                  },
-                  "inviteCode": {
                     "type": "string"
                   }
                 },
@@ -424,18 +410,11 @@
             }
           },
           "403": {
-            "description": "InviteRejected | CrossSiteRequest",
+            "description": "CrossSiteRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/InviteRejectedEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/CrossSiteRequestEncoded"
                 }
               }
             }
@@ -14616,29 +14595,6 @@
               "unknown-credential",
               "credential-taken",
               "verification-failed"
-            ]
-          }
-        },
-        "required": [
-          "_tag",
-          "reason"
-        ],
-        "additionalProperties": false
-      },
-      "InviteRejectedEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "InviteRejected"
-            ]
-          },
-          "reason": {
-            "type": "string",
-            "enum": [
-              "missing",
-              "invalid"
             ]
           }
         },

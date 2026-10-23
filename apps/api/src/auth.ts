@@ -1,10 +1,11 @@
 import { Identities, Transport } from "@alias/aws";
-import { SharedDomains, Username } from "@alias/core";
+import { InviteCode, SharedDomains, Username } from "@alias/core";
 import {
   Api,
   CurrentUser,
   HumanCheckFailed,
   InvalidUsername,
+  InviteRejected,
   PasskeyRejected,
   SignupUnavailable,
   TooManyAttempts,
@@ -15,6 +16,7 @@ import {
   AliasRepo,
   ChallengeRepo,
   DomainRepo,
+  InviteRepo,
   PasskeyRepo,
   RecipientRepo,
   type SessionRepo,
@@ -36,6 +38,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { requireSameOrigin } from "./Authentication.ts";
 import { clientSource } from "./ClientSource.ts";
+import { SignupMode, hashCode } from "./Invites.ts";
 import * as Passkeys from "./Passkeys.ts";
 import { RelyingParty } from "./RelyingParty.ts";
 import * as Sessions from "./Sessions.ts";
@@ -73,6 +76,39 @@ export const checkHuman = Effect.fn("auth.checkHuman")(function* (token: string)
     Effect.mapError(() => new SignupUnavailable({ reason: "human-check-unavailable" })),
   );
   if (Turnstile.Verdict.guards.NotHuman(verdict)) return yield* new HumanCheckFailed();
+});
+
+/**
+ * While sign-up takes invites (PLAN.md §20.36), the hash of the code that came with it, once it is
+ * found redeemable; None when sign-up is open. A code that redeems nothing (malformed, unknown,
+ * revoked, expired, used up) counts against the client, and past the hourly limit every code is
+ * refused unread, so codes can't be guessed in bulk. The code is redeemed only when the account is
+ * created, in the same transaction (`register`).
+ */
+const checkInvite = Effect.fn("auth.checkInvite")(function* (typed: Option.Option<string>) {
+  if ((yield* SignupMode) === "open") return Option.none<string>();
+  const given = Option.filter(typed, (code) => code.trim() !== "");
+  if (Option.isNone(given)) return yield* new InviteRejected({ reason: "missing" });
+  const limits = yield* SignupLimits;
+  const source = yield* clientSource();
+  const now = yield* DateTime.now;
+  const repo = yield* SignupLimitRepo.SignupLimitRepo;
+  if ((yield* Effect.orDie(repo.inviteMisses(source, now))) >= limits.inviteMissesPerHour) {
+    return yield* new TooManyAttempts();
+  }
+  const invites = yield* InviteRepo.InviteRepo;
+  const found = yield* Option.match(InviteCode.normalize(given.value), {
+    onNone: () => Effect.succeedNone,
+    onSome: (code) =>
+      Effect.flatMap(hashCode(code), (hash) =>
+        Effect.map(Effect.orDie(invites.findRedeemable(hash, now)), Option.as(hash)),
+      ),
+  });
+  if (Option.isNone(found)) {
+    yield* Effect.orDie(repo.recordInviteMiss(source, now, limits.inviteMissesPerHour));
+    return yield* new InviteRejected({ reason: "invalid" });
+  }
+  return found;
 });
 
 /**
@@ -138,21 +174,27 @@ type AuthServices =
   | SessionRepo.SessionRepo
   | ChallengeRepo.ChallengeRepo
   | SignupLimitRepo.SignupLimitRepo
+  | InviteRepo.InviteRepo
   | Turnstile.Turnstile;
 
-/** Sign-up starts here: the Turnstile widget to solve first. */
+/** Sign-up starts here: the Turnstile widget to solve first, and whether to ask for an invite. */
 const signup = Effect.fn("auth.signup")(function* () {
   const turnstile = yield* Turnstile.Turnstile;
-  return { turnstile: { siteKey: turnstile.siteKey, scriptUrl: turnstile.scriptUrl } };
+  return {
+    turnstile: { siteKey: turnstile.siteKey, scriptUrl: turnstile.scriptUrl },
+    isInviteRequired: (yield* SignupMode) === "invite",
+  };
 });
 
 /**
- * A registration challenge for a free username, once a human solved the Turnstile widget. The
- * token is redeemed last, so a taken or invalid username doesn't use it up.
+ * A registration challenge for a free username, once a human solved the Turnstile widget and,
+ * during the beta, with a redeemable invite code. The token is redeemed last, so a taken or
+ * invalid username or a refused invite doesn't use it up.
  */
 const registerOptions = Effect.fn("auth.registerOptions")(function* (payload: {
   readonly username: string;
   readonly turnstileToken: string;
+  readonly inviteCode?: string;
 }) {
   yield* fromWebApp();
   yield* reserveChallenge();
@@ -164,10 +206,16 @@ const registerOptions = Effect.fn("auth.registerOptions")(function* (payload: {
   if (yield* Effect.orDie(users.isUsernameTaken(username))) {
     return yield* new UsernameTaken({ username });
   }
+  const invite = yield* checkInvite(Option.fromUndefinedOr(payload.inviteCode));
   yield* checkHuman(payload.turnstileToken);
   const crypto = yield* Crypto.Crypto;
   const userId = `usr_${(yield* Effect.orDie(crypto.randomULID)).toLowerCase()}`;
-  return yield* issueChallenge(ChallengeRepo.Registration({ userId, username }), (challenge) =>
+  const ceremony = ChallengeRepo.Registration({
+    userId,
+    username,
+    ...Option.match(invite, { onNone: () => ({}), onSome: (inviteHash) => ({ inviteHash }) }),
+  });
+  return yield* issueChallenge(ceremony, (challenge) =>
     Passkeys.registrationOptions({ userId, username, challenge }),
   ).pipe(Effect.orDie);
 });
@@ -181,6 +229,11 @@ const register = Effect.fn("auth.register")(function* (payload: {
     payload.challengeId,
     Option.liftPredicate(ChallengeRepo.isRegistration),
   );
+  // A challenge issued before sign-up started taking invites can't skip one.
+  const invite = Option.fromUndefinedOr(ceremony.inviteHash);
+  if ((yield* SignupMode) === "invite" && Option.isNone(invite)) {
+    return yield* new InviteRejected({ reason: "missing" });
+  }
   const credential = yield* Passkeys.verifyRegistration({
     credential: payload.credential,
     expectedChallenge: challenge,
@@ -192,16 +245,17 @@ const register = Effect.fn("auth.register")(function* (payload: {
   const user = { id: ceremony.userId, username, createdAt: now };
   const users = yield* UserRepo.UserRepo;
   yield* users
-    .register(user, {
-      ...credential,
-      userId: user.id,
-      createdAt: now,
-      lastUsedAt: Option.none(),
-    })
+    .register(
+      user,
+      { ...credential, userId: user.id, createdAt: now, lastUsedAt: Option.none() },
+      invite,
+    )
     .pipe(
       Effect.catchTags({
         UsernameTaken: (error) => Effect.fail(new UsernameTaken({ username: error.username })),
         CredentialTaken: () => Effect.fail(new PasskeyRejected({ reason: "credential-taken" })),
+        // Used up or revoked since the challenge was issued: the code is spent.
+        InviteNotRedeemable: () => Effect.fail(new InviteRejected({ reason: "invalid" })),
         DatabaseError: Effect.die,
       }),
     );

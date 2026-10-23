@@ -1,7 +1,8 @@
 import { useForm, useStore } from "@tanstack/react-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import { FingerprintIcon } from "lucide-react";
 import { AuthFrame } from "@/components/AuthFrame";
@@ -12,13 +13,26 @@ import { Input } from "@/components/ui/input";
 import { callApi } from "@/lib/api";
 import { signUp } from "@/lib/passkeys";
 import { meQuery } from "@/lib/session";
+import { signupQuery } from "@/lib/turnstile";
+
+/** `?invite=` fills in the invite code, so an invitation can be a link (PLAN.md §20.36). */
+const Search = Schema.Struct({ invite: Schema.optionalKey(Schema.String) });
 
 const Register = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { invite } = Route.useSearch();
+  // During the private beta sign-up takes an invite code; the API says whether it does.
+  const isInviteRequired = Option.exists(
+    Option.fromUndefinedOr(useQuery(signupQuery).data),
+    (config) => config.isInviteRequired,
+  );
   const register = useMutation({
-    mutationFn: (input: { readonly username: string; readonly turnstileToken: string }) =>
-      callApi((api) => signUp(api, input)),
+    mutationFn: (input: {
+      readonly username: string;
+      readonly turnstileToken: string;
+      readonly inviteCode: string;
+    }) => callApi((api) => signUp(api, input)),
     onSuccess: (me) => {
       queryClient.setQueryData(meQuery.queryKey, Option.some(me));
       void navigate({ to: "/" });
@@ -26,7 +40,7 @@ const Register = () => {
   });
   // The token is `""` until the Turnstile widget hands one out.
   const form = useForm({
-    defaultValues: { username: "", turnstileToken: "" },
+    defaultValues: { username: "", turnstileToken: "", inviteCode: invite ?? "" },
     onSubmit: ({ value }) => {
       // Single-use: the next attempt waits for the fresh widget's token.
       form.setFieldValue("turnstileToken", "");
@@ -70,6 +84,30 @@ const Register = () => {
             </Field>
           )}
         </form.Field>
+        {isInviteRequired ? (
+          <form.Field name="inviteCode">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor="invite-code">Invite code</FieldLabel>
+                <Input
+                  id="invite-code"
+                  name="invite-code"
+                  className="data"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  required
+                  placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+                <FieldDescription>
+                  Alias is in private beta, so sign-up needs an invite.
+                </FieldDescription>
+              </Field>
+            )}
+          </form.Field>
+        ) : null}
         {/* A new widget for every attempt, since each token is redeemed once. */}
         <HumanCheck
           key={register.submittedAt}
@@ -94,4 +132,7 @@ const Register = () => {
   );
 };
 
-export const Route = createFileRoute("/register")({ component: Register });
+export const Route = createFileRoute("/register")({
+  validateSearch: Schema.toStandardSchemaV1(Search),
+  component: Register,
+});

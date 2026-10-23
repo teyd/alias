@@ -53,6 +53,8 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Signups           | `AUTHLIMIT#<sha256(ip)>`     | `SIGNUPS#<date>`       |                            |                           | `expiresAt` |
  * | AllSignups        | `SIGNUPS`                    | `HOUR#<hour>`          |                            |                           | `expiresAt` |
  * | LoginFailures     | `USER#<userId>`              | `LOGIN-FAILURES#<hour>` |                           |                           | `expiresAt` |
+ * | Invite            | `INVITE#<sha256(code)>`      | `INVITE`               | `INVITES`                  | `<createdAt>#<sha256>`    | `expiresAt` |
+ * | InviteMisses      | `AUTHLIMIT#<sha256(ip)>`     | `INVITE-MISSES#<hour>` |                            |                           | `expiresAt` |
  * | Erasure           | `ERASURE#<sha256(userId)>`   | `ERASURE`              |                            |                           | `expiresAt` |
  * | Draft             | `USER#<userId>`              | `DRAFT#<id>`           |                            |                           | `expiresAt` |
  * | SendQuota         | `USER#<userId>`              | `SENDS#<date>`         |                            |                           | `expiresAt` |
@@ -212,6 +214,14 @@ import { DynamoTable } from "./Dynamo.ts";
  * AllSignups (accounts per hour for everyone, the circuit breaker; one hot item, written once per
  * sign-up) and LoginFailures (failed passkey assertions per account and hour, in the user's
  * partition like DeviceMisses).
+ *
+ * An Invite is an invite code for sign-up during the private beta (PLAN.md §20.36), stored under
+ * the SHA-256 of the code, so checking one costs one strongly consistent GetItem and a table dump
+ * yields no usable code. It counts `uses` up to `maxUses`; the transaction that creates the user
+ * (`UserRepo.register`) increments it on the condition that the invite exists, is not used up and
+ * has not expired, so a race can't redeem it twice. It records no user. Every invite shares the
+ * gsi1 partition `INVITES`, sorted by creation, so the operator lists them with one Query.
+ * InviteMisses counts invite codes per hashed client address and hour that redeemed nothing.
  *
  * `expiresAt` (epoch seconds) is the TTL attribute. TTL deletion runs late and DynamoDB Local
  * doesn't run it at all, so readers must still ignore expired items.

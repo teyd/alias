@@ -9,6 +9,7 @@ import {
   FilterRepo,
   type Dynamo,
   FailureRepo,
+  InviteRepo,
   OAuthRepo,
   OutboxRepo,
   PasskeyRepo,
@@ -87,14 +88,15 @@ const Repositories = Layer.mergeAll(
   DomainRepo.layer,
   FailureRepo.layer,
   FilterRepo.layer,
+  InviteRepo.layer,
 );
 
 /**
  * What callers provide: the database, the WebAuthn relying party, the shared and temp-mail
  * domains, outgoing mail, the webhook queue, URL policy and secret keys, SES identities and a DNS
  * resolver (custom domains), the inbox store, Turnstile (sign-up) and the reverse-token keys
- * (contacts the owner adds, PLAN.md §20.33). They may also provide
- * `SignupLimits`; the defaults apply otherwise.
+ * (contacts the owner adds, PLAN.md §20.33). They may also provide `SignupLimits` and the
+ * `SignupMode` (PLAN.md §20.36); the defaults apply otherwise (invite-only sign-up).
  */
 export type Services =
   | Dynamo.Database

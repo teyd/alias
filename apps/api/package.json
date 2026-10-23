@@ -11,7 +11,8 @@
   "scripts": {
     "test": "vp test",
     "test:unit": "vp test",
-    "dev": "node bin/dev.ts"
+    "dev": "node bin/dev.ts",
+    "invites": "node bin/invites.ts"
   },
   "dependencies": {
     "@alias/aws": "workspace:*",

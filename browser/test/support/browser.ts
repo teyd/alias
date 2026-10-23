@@ -1,4 +1,4 @@
-import { apiHandler, sentTo, layer as stackLayer } from "@alias/e2e/stack";
+import { apiHandler, mintInvite, sentTo, layer as stackLayer } from "@alias/e2e/stack";
 import { FunctionUrlServer } from "@alias/lambda-emulator";
 import { TurnstileServer } from "@alias/turnstile-emulator";
 import { securityHeaders } from "@alias/web/security-headers";
@@ -15,10 +15,14 @@ import * as Schema from "effect/Schema";
 import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
 import { build, preview } from "vite-plus";
 
-/** The web app as a browser reaches it: `http://localhost:<port>`, a secure context. */
-export class WebApp extends Context.Service<WebApp, { readonly origin: string }>()(
-  "@alias/browser/WebApp",
-) {}
+/**
+ * The web app as a browser reaches it: `http://localhost:<port>`, a secure context. While sign-up
+ * takes invite codes (PLAN.md §20.36), `inviteCode` is a single-use one minted for the file.
+ */
+export class WebApp extends Context.Service<
+  WebApp,
+  { readonly origin: string; readonly inviteCode: Option.Option<string> }
+>()("@alias/browser/WebApp") {}
 
 class Chromium extends Context.Service<Chromium, Browser>()("@alias/browser/Chromium") {}
 
@@ -31,62 +35,73 @@ class Chromium extends Context.Service<Chromium, Browser>()("@alias/browser/Chro
  * WebAuthn work there without TLS. The passkey's relying party is `localhost` and its origin the
  * preview server's, which is only known once it listens; the function URL server starts first and
  * waits for the handler, so every listener still binds port 0.
+ *
+ * Sign-up is open unless `signupMode` is `invite`.
  */
-const webApp = Layer.effectContext(
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const root = path.dirname(
-      yield* path.fromFileUrl(new URL(import.meta.resolve("@alias/web/package.json"))),
-    );
-    const configFile = path.join(root, "vite.config.ts");
-    const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "alias-web-" });
-    yield* Effect.promise(() =>
-      build({ root, configFile, logLevel: "warn", build: { outDir, emptyOutDir: true } }),
-    );
+const webApp = (signupMode: "open" | "invite") =>
+  Layer.effectContext(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = path.dirname(
+        yield* path.fromFileUrl(new URL(import.meta.resolve("@alias/web/package.json"))),
+      );
+      const configFile = path.join(root, "vite.config.ts");
+      const outDir = yield* fs.makeTempDirectoryScoped({ prefix: "alias-web-" });
+      yield* Effect.promise(() =>
+        build({ root, configFile, logLevel: "warn", build: { outDir, emptyOutDir: true } }),
+      );
 
-    const turnstile = yield* TurnstileServer.TurnstileServer;
-    const handler = yield* Deferred.make<Effect.Success<ReturnType<typeof apiHandler>>>();
-    const api = yield* FunctionUrlServer.make({
-      handler: (event) =>
-        Effect.runPromise(
-          Deferred.await(handler).pipe(
-            Effect.flatMap((handle) => Effect.promise(() => handle(event))),
+      const turnstile = yield* TurnstileServer.TurnstileServer;
+      const handler = yield* Deferred.make<Effect.Success<ReturnType<typeof apiHandler>>>();
+      const api = yield* FunctionUrlServer.make({
+        handler: (event) =>
+          Effect.runPromise(
+            Deferred.await(handler).pipe(
+              Effect.flatMap((handle) => Effect.promise(() => handle(event))),
+            ),
           ),
+      });
+
+      const server = yield* Effect.acquireRelease(
+        Effect.promise(() =>
+          preview({
+            root,
+            configFile,
+            logLevel: "warn",
+            build: { outDir },
+            preview: {
+              host: "127.0.0.1",
+              port: 0,
+              strictPort: true,
+              // As CloudFront routes them; `/.well-known` has the OAuth metadata (§20.24).
+              proxy: { "/v1": api.url, "/health": api.url, "/.well-known": api.url },
+              // Production's headers, with the Turnstile emulator where Cloudflare would be.
+              headers: securityHeaders(turnstile.url),
+            },
+          }),
         ),
-    });
+        (running) => Effect.promise(() => running.close()),
+      );
+      const { port } = yield* Schema.decodeUnknownEffect(Schema.Struct({ port: Schema.Number }))(
+        server.httpServer.address(),
+      );
+      const origin = `http://localhost:${port}`;
 
-    const server = yield* Effect.acquireRelease(
-      Effect.promise(() =>
-        preview({
-          root,
-          configFile,
-          logLevel: "warn",
-          build: { outDir },
-          preview: {
-            host: "127.0.0.1",
-            port: 0,
-            strictPort: true,
-            // As CloudFront routes them; `/.well-known` has the OAuth metadata (§20.24).
-            proxy: { "/v1": api.url, "/health": api.url, "/.well-known": api.url },
-            // Production's headers, with the Turnstile emulator where Cloudflare would be.
-            headers: securityHeaders(turnstile.url),
-          },
-        }),
-      ),
-      (running) => Effect.promise(() => running.close()),
-    );
-    const { port } = yield* Schema.decodeUnknownEffect(Schema.Struct({ port: Schema.Number }))(
-      server.httpServer.address(),
-    );
-    const origin = `http://localhost:${port}`;
-
-    yield* Deferred.succeed(handler, yield* apiHandler({ id: "localhost", origin }));
-    return Context.make(WebApp, WebApp.of({ origin })).pipe(
-      Context.add(FunctionUrlServer.FunctionUrlServer, FunctionUrlServer.FunctionUrlServer.of(api)),
-    );
-  }),
-).pipe(Layer.provide(NodeServices.layer));
+      yield* Deferred.succeed(
+        handler,
+        yield* apiHandler({ id: "localhost", origin }, undefined, undefined, signupMode),
+      );
+      const inviteCode =
+        signupMode === "invite" ? Option.some(yield* mintInvite) : Option.none<string>();
+      return Context.make(WebApp, WebApp.of({ origin, inviteCode })).pipe(
+        Context.add(
+          FunctionUrlServer.FunctionUrlServer,
+          FunctionUrlServer.FunctionUrlServer.of(api),
+        ),
+      );
+    }),
+  ).pipe(Layer.provide(NodeServices.layer));
 
 /**
  * Headless Chromium, one per test file. `vp run` (behind `pnpm test`) traces the files a task
@@ -103,10 +118,13 @@ const chromiumLayer = Layer.effect(
 );
 
 /** The emulated stack (`@alias/e2e/stack`) with the web app in front. */
-export const stack = stackLayer(webApp);
+export const stack = stackLayer(webApp("open"));
 
 /** {@link stack} and a browser to drive it. */
 export const layer = Layer.merge(stack, chromiumLayer);
+
+/** {@link layer} with sign-up taking invite codes, as in the private beta (PLAN.md §20.36). */
+export const inviteLayer = Layer.merge(stackLayer(webApp("invite")), chromiumLayer);
 
 /**
  * A virtual WebAuthn authenticator on `page`, attached over CDP: a platform authenticator

@@ -30,6 +30,7 @@ const signUp = Effect.fn("signUp")(function* (userId: string, name: string) {
       createdAt: at(1_000),
       lastUsedAt: Option.none(),
     },
+    Option.none(),
   );
 });
 

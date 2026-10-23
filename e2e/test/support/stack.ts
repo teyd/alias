@@ -158,11 +158,13 @@ const turnstileSecretParameter = "/alias/e2e/turnstile-secret";
 /**
  * The real API Lambda handler on the stack's table, queue and SES, for passkeys bound to
  * `relyingParty`. Serve it with `FunctionUrlServer`; `front` puts CloudFront before it
- * ({@link behindCloudFront}).
+ * ({@link behindCloudFront}). Every test in a file signs up from 127.0.0.1 into the one table, so
+ * the sign-up limits are high unless `limits` says otherwise; `apps/api` tests them.
  */
 export const apiHandler = Effect.fn("stack.apiHandler")(function* (
   relyingParty: { readonly id: string; readonly origin: string },
   front: FunctionUrl.Front = FunctionUrl.direct,
+  limits: Partial<SignupLimits.Limits> = { challengesPerHour: 1_000, signupsPerDay: 1_000 },
 ) {
   const context = yield* Effect.context<Dynamo.Database>();
   const fakecloud = yield* FakeCloud.FakeCloud;
@@ -185,9 +187,7 @@ export const apiHandler = Effect.fn("stack.apiHandler")(function* (
       Identities.layer.pipe(Layer.provide(AwsClient.emulator(fakecloud.url))),
       Doh.layer(dns.url),
       RelyingParty.layer(relyingParty),
-      // Every test in a file signs up from 127.0.0.1 into the one table; `apps/api` tests the
-      // limits themselves.
-      SignupLimits.layer({ challengesPerHour: 1_000, signupsPerDay: 1_000 }),
+      SignupLimits.layer(limits),
       Turnstile.layer({
         url: turnstileServer.url,
         siteKey: TestKeys.siteKeys.passes,

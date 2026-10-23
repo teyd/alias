@@ -225,7 +225,7 @@ const spaRoutesCode = `function handler(event) {
  * response headers policy: the flat-rate Free and Pro plans allow only managed policies, and the
  * managed SecurityHeadersPolicy has no CSP. The image proxy sets its own (sandbox CSP, `nosniff`).
  */
-const securityHeadersCode = `var HEADERS = ${JSON.stringify(securityHeaders)};
+const securityHeadersCode = `var HEADERS = ${JSON.stringify(securityHeaders())};
 function handler(event) {
   var headers = event.response.headers;
   Object.keys(HEADERS).forEach(function (name) {

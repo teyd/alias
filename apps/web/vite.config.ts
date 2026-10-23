@@ -26,5 +26,5 @@ export default defineConfig({
     },
   },
   // The production bundle under production's headers (CloudFront adds them there).
-  preview: { headers: securityHeaders },
+  preview: { headers: securityHeaders() },
 });

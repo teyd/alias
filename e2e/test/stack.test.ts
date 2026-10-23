@@ -1459,7 +1459,9 @@ const cloudFrontStack = layer(
     Edges,
     Effect.gen(function* () {
       const { front, customHeaders } = yield* behindCloudFront();
-      const handler = yield* apiHandler({ id: "alias.test", origin }, front);
+      const handler = yield* apiHandler({ id: "alias.test", origin }, front, {
+        challengesPerHour: CHALLENGES_PER_HOUR,
+      });
       const functionUrl = yield* FunctionUrlServer.make({ handler });
       const edge = (host: string) =>
         CloudFrontServer.make({ origin: functionUrl.url, customHeaders, host });
@@ -1473,13 +1475,29 @@ const cloudFrontStack = layer(
 );
 
 const BAD_TOKEN = `alias_pat_${"B".repeat(43)}`;
+/** Sign-up and login challenges one client may ask for in an hour, low enough to reach. */
+const CHALLENGES_PER_HOUR = 5;
 /** Public, and one of the paths the distribution routes to the API. */
 const metadata = "/.well-known/oauth-authorization-server";
 
-const statusAt = (base: string, path: string, headers: Record<string, string> = {}) =>
+const statusAt = (
+  base: string,
+  path: string,
+  headers: Record<string, string> = {},
+  method: "GET" | "POST" = "GET",
+) =>
   Effect.map(
-    Effect.promise(() => fetch(`${base}${path}`, { headers: { origin, ...headers } })),
+    Effect.promise(() => fetch(`${base}${path}`, { method, headers: { origin, ...headers } })),
     (response) => response.status,
+  );
+
+/** A login challenge as the web app asks for one: same-origin, JSON. */
+const loginOptions = (base: string, headers: Record<string, string> = {}) =>
+  statusAt(
+    base,
+    "/v1/auth/login/options",
+    { "content-type": "application/json", "sec-fetch-site": "same-origin", ...headers },
+    "POST",
   );
 
 describe("emulated stack behind CloudFront (PLAN.md §20.26)", () => {
@@ -1527,6 +1545,29 @@ describe("emulated stack behind CloudFront (PLAN.md §20.26)", () => {
         // The IPv6 viewer reaches the same function URL from the same edge address, and isn't
         // locked out: the limit counts CloudFront-Viewer-Address.
         expect(yield* statusAt(v6, "/v1/aliases", bad)).toBe(401);
+      }),
+    );
+
+    it.effect("counts sign-up and login challenges per viewer, from the app's origin only", () =>
+      Effect.gen(function* () {
+        const { v4, v6 } = yield* Edges;
+        // CloudFront forwards Origin and Sec-Fetch-Site, so the same-origin check (§20.30) sees
+        // the app's origin; another site's page gets 403 before anything is counted.
+        expect(
+          yield* loginOptions(v4, {
+            origin: "https://evil.example",
+            "sec-fetch-site": "cross-site",
+          }),
+        ).toBe(403);
+        const issued = yield* Effect.forEach(
+          Arr.range(1, CHALLENGES_PER_HOUR),
+          (i) => loginOptions(v4, { [CloudFront.VIEWER_ADDRESS_HEADER]: `198.51.100.${i}:443` }),
+          { concurrency: 1 },
+        );
+        expect(issued).toEqual(Arr.replicate(200, CHALLENGES_PER_HOUR));
+        expect(yield* loginOptions(v4)).toBe(429);
+        // Another viewer on the same edge still gets its own allowance.
+        expect(yield* loginOptions(v6)).toBe(200);
       }),
     );
   });

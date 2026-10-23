@@ -6,6 +6,7 @@ export * from "./DatabaseError.ts";
 export * as DeliveryRepo from "./DeliveryRepo.ts";
 export * as DeviceRepo from "./DeviceRepo.ts";
 export * as DomainRepo from "./DomainRepo.ts";
+export * as FilterRepo from "./FilterRepo.ts";
 export * as Dynamo from "./Dynamo.ts";
 export * as OAuthRepo from "./OAuthRepo.ts";
 export * as OutboxRepo from "./OutboxRepo.ts";

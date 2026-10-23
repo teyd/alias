@@ -12,6 +12,7 @@ export { webhookRepoSuite } from "./webhookRepoSuite.ts";
 export { deviceRepoSuite } from "./deviceRepoSuite.ts";
 
 export { domainRepoSuite } from "./domainRepoSuite.ts";
+export { filterRepoSuite } from "./filterRepoSuite.ts";
 export { messageRepoSuite } from "./messageRepoSuite.ts";
 export { proxyRepoSuite } from "./proxyRepoSuite.ts";
 export { sentRepoSuite } from "./sentRepoSuite.ts";

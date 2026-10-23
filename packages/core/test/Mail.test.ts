@@ -23,9 +23,14 @@ const owner: Mail.Owner = { addresses: ["jane.doe@gmail.example"], name: Option.
 const unprotected: Mail.Protection = { images: "off", isLinkCleaningEnabled: false };
 
 const forwardWith = (raw: Uint8Array, sender: Mail.Sender = cafe) =>
-  Mail.forward(raw, { alias, sender, token, protection: unprotected, imageProxy: signer }).pipe(
-    Effect.provide(NodeCrypto.layer),
-  );
+  Mail.forward(raw, {
+    alias,
+    sender,
+    token,
+    protection: unprotected,
+    imageProxy: signer,
+    edits: Mail.noEdits,
+  }).pipe(Effect.provide(NodeCrypto.layer));
 
 /** Right-to-left override and pop directional formatting, written out so they stay visible. */
 const RLO = String.fromCodePoint(0x202e);
@@ -464,6 +469,7 @@ layer(NodeCrypto.layer)((it) => {
         token: minted,
         protection: unprotected,
         imageProxy: signer,
+        edits: Mail.noEdits,
       });
 
       // The owner's client replies to the Reply-To address; the inbound side parses it back.
@@ -660,5 +666,107 @@ describe("Mail.parseSender", () => {
     (value) => {
       expect(Mail.parseSender(value)).toEqual(Option.none());
     },
+  );
+});
+
+/** An unstructured field as a reader sees it: plain words, or UTF-8 B-words (our encoder's). */
+const readText = (value: string) =>
+  value.startsWith("=?UTF-8?B?")
+    ? new TextDecoder().decode(
+        new Uint8Array(
+          value.split(/\s+/).flatMap((word) => {
+            const encoded = /^=\?UTF-8\?B\?([^?]*)\?=$/.exec(word);
+            return Array.from(Buffer.from(encoded?.[1] ?? "", "base64"));
+          }),
+        ),
+      )
+    : value;
+
+const forwardEdited = (raw: Uint8Array, edits: Mail.Edits) =>
+  Mail.forward(raw, {
+    alias,
+    sender: cafe,
+    token,
+    protection: unprotected,
+    imageProxy: signer,
+    edits,
+  }).pipe(Effect.provide(NodeCrypto.layer));
+
+describe("Mail.forward with rule edits", () => {
+  it.effect("prefixes the decoded subject, whatever its charsets, and keeps the body", () =>
+    Effect.gen(function* () {
+      const raw = newsletter("\r\n");
+      const out = yield* forwardEdited(raw, {
+        subject: Option.some({ replacement: Option.none(), prefix: "[Rezepte]" }),
+        displayName: Option.none(),
+      });
+      const subjects = values(out, "Subject");
+      expect(subjects).toHaveLength(1);
+      expect(readText(subjects[0] ?? "")).toBe(
+        "[Rezepte] 🍰 Die Kuchen-Woche ist da: neue Rezepte und Äpfel",
+      );
+      expect(split(out).rest).toEqual(split(raw).rest);
+    }),
+  );
+
+  it.effect("replaces every Subject field with one, and adds one where there was none", () =>
+    Effect.gen(function* () {
+      const replaced = yield* forwardEdited(bytes("Subject: one\r\nSubject: two\r\n\r\nbody"), {
+        subject: Option.some({ replacement: Option.some("Receipt"), prefix: "" }),
+        displayName: Option.none(),
+      });
+      expect(values(replaced, "Subject")).toEqual(["Receipt"]);
+      const added = yield* forwardEdited(bytes("To: x@y.example\r\n\r\nbody"), {
+        subject: Option.some({ replacement: Option.none(), prefix: "[x]" }),
+        displayName: Option.none(),
+      });
+      expect(values(added, "Subject")).toEqual(["[x]"]);
+    }),
+  );
+
+  it.effect("reads a raw UTF-8 subject (RFC 6532) as UTF-8, and writes encoded-words", () =>
+    Effect.gen(function* () {
+      const out = yield* forwardEdited(bytes("Subject: Grüße\r\n\r\nbody"), {
+        subject: Option.some({ replacement: Option.none(), prefix: "→" }),
+        displayName: Option.none(),
+      });
+      const [subject] = values(out, "Subject");
+      expect(subject).toMatch(/^=\?UTF-8\?B\?/);
+      expect(readText(subject ?? "")).toBe("→ Grüße");
+    }),
+  );
+
+  it.effect("keeps a rule's text on one line: no header can be injected", () =>
+    Effect.gen(function* () {
+      const out = yield* forwardEdited(bytes("Subject: x\r\n\r\nbody"), {
+        subject: Option.some({ replacement: Option.some("a\r\nBcc: evil@x.example"), prefix: "" }),
+        displayName: Option.some("Shop\r\nBcc: evil@x.example"),
+      });
+      expect(values(out, "Bcc")).toEqual([]);
+      expect(values(out, "Subject")).toEqual(["a Bcc: evil@x.example"]);
+      expect(mailbox(values(out, "From")[0] ?? "").display).toBe("Shop Bcc: evil@x.example");
+    }),
+  );
+
+  it.effect("shows the rule's display name in From and Reply-To, on the reverse alias", () =>
+    Effect.gen(function* () {
+      const out = yield* forwardEdited(newsletter("\r\n"), {
+        subject: Option.none(),
+        displayName: Option.some("Bäckerei"),
+      });
+      expect(mailbox(values(out, "From")[0] ?? "")).toEqual({
+        display: "Bäckerei",
+        address: reverse,
+      });
+      expect(values(out, "Reply-To")).toEqual(values(out, "From"));
+    }),
+  );
+
+  it.effect("changes nothing else: without edits the subject bytes stay as they came", () =>
+    Effect.gen(function* () {
+      const raw = newsletter("\r\n");
+      const plain = yield* forwardEdited(raw, Mail.noEdits);
+      expect(binary(plain)).toContain("Subject: =?UTF-8?B?8J+NsCBEaWUgS3VjaGVuLVdvY2hl?= ist da:");
+    }),
   );
 });

@@ -7083,6 +7083,2462 @@
         "description": "API tokens need the `usernames:write` scope."
       }
     },
+    "/v1/blocklist": {
+      "get": {
+        "tags": [
+          "blocklist"
+        ],
+        "operationId": "blocklist.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "address",
+                          "domain"
+                        ]
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "isSubdomainIncluded": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "value",
+                      "isSubdomainIncluded"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `rules:read` scope."
+      },
+      "post": {
+        "tags": [
+          "blocklist"
+        ],
+        "operationId": "blocklist.add",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:write"
+            ]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "address",
+                        "domain"
+                      ]
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "isSubdomainIncluded": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "value",
+                    "isSubdomainIncluded"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidBlocklistEntry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidBlocklistEntryEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "BlocklistFull",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlocklistFullEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "address",
+                      "domain"
+                    ]
+                  },
+                  "value": {
+                    "type": "string"
+                  },
+                  "isSubdomainIncluded": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `rules:write` scope."
+      }
+    },
+    "/v1/blocklist/{entryId}": {
+      "delete": {
+        "tags": [
+          "blocklist"
+        ],
+        "operationId": "blocklist.remove",
+        "parameters": [
+          {
+            "name": "entryId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "BlocklistEntryNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlocklistEntryNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `rules:write` scope."
+      }
+    },
+    "/v1/rules": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rules.list",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "isEnabled": {
+                        "type": "boolean"
+                      },
+                      "match": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "any"
+                        ]
+                      },
+                      "conditions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string",
+                              "enum": [
+                                "sender",
+                                "sender-domain",
+                                "subject",
+                                "alias",
+                                "alias-label"
+                              ]
+                            },
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "equals",
+                                "contains",
+                                "starts-with",
+                                "ends-with"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "isNegated": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "match",
+                            "value",
+                            "isNegated"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "block"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "set-subject"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "prefix-subject"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "set-display-name"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "skip-tracker-removal"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "skip-encryption"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "forward-to"
+                                  ]
+                                },
+                                "recipientId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "recipientId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "webhook"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "isEnabled",
+                      "match",
+                      "conditions",
+                      "actions"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `rules:read` scope."
+      },
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rules.create",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:write"
+            ]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "isEnabled": {
+                      "type": "boolean"
+                    },
+                    "match": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "any"
+                      ]
+                    },
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "sender",
+                              "sender-domain",
+                              "subject",
+                              "alias",
+                              "alias-label"
+                            ]
+                          },
+                          "match": {
+                            "type": "string",
+                            "enum": [
+                              "equals",
+                              "contains",
+                              "starts-with",
+                              "ends-with"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "isNegated": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "match",
+                          "value",
+                          "isNegated"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 5
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "block"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "set-subject"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "prefix-subject"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "set-display-name"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "skip-tracker-removal"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "skip-encryption"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "forward-to"
+                                ]
+                              },
+                              "recipientId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "recipientId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "webhook"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 5
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "isEnabled",
+                    "match",
+                    "conditions",
+                    "actions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UnknownRecipient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownRecipientEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "TooManyRules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyRulesEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "isEnabled": {
+                    "type": "boolean"
+                  },
+                  "match": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "any"
+                    ]
+                  },
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "field": {
+                          "type": "string",
+                          "enum": [
+                            "sender",
+                            "sender-domain",
+                            "subject",
+                            "alias",
+                            "alias-label"
+                          ]
+                        },
+                        "match": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "contains",
+                            "starts-with",
+                            "ends-with"
+                          ]
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "isNegated": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "match",
+                        "value",
+                        "isNegated"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "block"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "set-subject"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "prefix-subject"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "set-display-name"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "skip-tracker-removal"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "skip-encryption"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "forward-to"
+                              ]
+                            },
+                            "recipientId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "recipientId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "webhook"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "name",
+                  "isEnabled",
+                  "match",
+                  "conditions",
+                  "actions"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `rules:write` scope."
+      }
+    },
+    "/v1/rules/{ruleId}": {
+      "put": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rules.update",
+        "parameters": [
+          {
+            "name": "ruleId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "isEnabled": {
+                      "type": "boolean"
+                    },
+                    "match": {
+                      "type": "string",
+                      "enum": [
+                        "all",
+                        "any"
+                      ]
+                    },
+                    "conditions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "sender",
+                              "sender-domain",
+                              "subject",
+                              "alias",
+                              "alias-label"
+                            ]
+                          },
+                          "match": {
+                            "type": "string",
+                            "enum": [
+                              "equals",
+                              "contains",
+                              "starts-with",
+                              "ends-with"
+                            ]
+                          },
+                          "value": {
+                            "type": "string"
+                          },
+                          "isNegated": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "match",
+                          "value",
+                          "isNegated"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 5
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "block"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "set-subject"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "prefix-subject"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "set-display-name"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "skip-tracker-removal"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "skip-encryption"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "forward-to"
+                                ]
+                              },
+                              "recipientId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "recipientId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "webhook"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "minItems": 1,
+                      "maxItems": 5
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "isEnabled",
+                    "match",
+                    "conditions",
+                    "actions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UnknownRecipient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownRecipientEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RuleNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "isEnabled": {
+                    "type": "boolean"
+                  },
+                  "match": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "any"
+                    ]
+                  },
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "field": {
+                          "type": "string",
+                          "enum": [
+                            "sender",
+                            "sender-domain",
+                            "subject",
+                            "alias",
+                            "alias-label"
+                          ]
+                        },
+                        "match": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "contains",
+                            "starts-with",
+                            "ends-with"
+                          ]
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "isNegated": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "match",
+                        "value",
+                        "isNegated"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "block"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "set-subject"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "prefix-subject"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "set-display-name"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "skip-tracker-removal"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "skip-encryption"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "forward-to"
+                              ]
+                            },
+                            "recipientId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "recipientId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "webhook"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
+                  }
+                },
+                "required": [
+                  "name",
+                  "isEnabled",
+                  "match",
+                  "conditions",
+                  "actions"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `rules:write` scope."
+      },
+      "delete": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rules.remove",
+        "parameters": [
+          {
+            "name": "ruleId",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RuleNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "API tokens need the `rules:write` scope."
+      }
+    },
+    "/v1/rules/order": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rules.reorder",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:write"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "isEnabled": {
+                        "type": "boolean"
+                      },
+                      "match": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "any"
+                        ]
+                      },
+                      "conditions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string",
+                              "enum": [
+                                "sender",
+                                "sender-domain",
+                                "subject",
+                                "alias",
+                                "alias-label"
+                              ]
+                            },
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "equals",
+                                "contains",
+                                "starts-with",
+                                "ends-with"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "isNegated": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "match",
+                            "value",
+                            "isNegated"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "block"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "set-subject"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "prefix-subject"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "set-display-name"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "skip-tracker-removal"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "skip-encryption"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "forward-to"
+                                  ]
+                                },
+                                "recipientId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "recipientId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "webhook"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "isEnabled",
+                      "match",
+                      "conditions",
+                      "actions"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRuleOrder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRuleOrderEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ruleIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "ruleIds"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `rules:write` scope."
+      }
+    },
+    "/v1/rules/test": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rules.test",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": [
+              "rules:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "blockedBy": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "blocklist"
+                              ]
+                            },
+                            "entryId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "entryId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "rule"
+                              ]
+                            },
+                            "ruleId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "ruleId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "matched": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "recipientId": {
+                      "type": "string"
+                    },
+                    "isTrackerRemovalSkipped": {
+                      "type": "boolean"
+                    },
+                    "isEncryptionSkipped": {
+                      "type": "boolean"
+                    },
+                    "notify": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "matched",
+                    "isTrackerRemovalSkipped",
+                    "isEncryptionSkipped",
+                    "notify"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden | CrossSiteRequest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CrossSiteRequestEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "TooManyAttempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TooManyAttemptsEncoded"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sample": {
+                    "type": "object",
+                    "properties": {
+                      "sender": {
+                        "type": "string"
+                      },
+                      "subject": {
+                        "type": "string"
+                      },
+                      "alias": {
+                        "type": "string"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "alias"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "rule": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "isEnabled": {
+                        "type": "boolean"
+                      },
+                      "match": {
+                        "type": "string",
+                        "enum": [
+                          "all",
+                          "any"
+                        ]
+                      },
+                      "conditions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string",
+                              "enum": [
+                                "sender",
+                                "sender-domain",
+                                "subject",
+                                "alias",
+                                "alias-label"
+                              ]
+                            },
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "equals",
+                                "contains",
+                                "starts-with",
+                                "ends-with"
+                              ]
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "isNegated": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "match",
+                            "value",
+                            "isNegated"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "block"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "set-subject"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "prefix-subject"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "set-display-name"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "skip-tracker-removal"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "skip-encryption"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "forward-to"
+                                  ]
+                                },
+                                "recipientId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "recipientId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "webhook"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 5
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "isEnabled",
+                      "match",
+                      "conditions",
+                      "actions"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "sample"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "description": "API tokens need the `rules:read` scope."
+      }
+    },
     "/v1/sessions": {
       "get": {
         "tags": [
@@ -7453,6 +9909,8 @@
                             "inboxes:write",
                             "recipients:read",
                             "recipients:write",
+                            "rules:read",
+                            "rules:write",
                             "settings:read",
                             "settings:write",
                             "usernames:read",
@@ -7568,6 +10026,8 @@
                           "inboxes:write",
                           "recipients:read",
                           "recipients:write",
+                          "rules:read",
+                          "rules:write",
                           "settings:read",
                           "settings:write",
                           "usernames:read",
@@ -7668,6 +10128,8 @@
                           "inboxes:write",
                           "recipients:read",
                           "recipients:write",
+                          "rules:read",
+                          "rules:write",
                           "settings:read",
                           "settings:write",
                           "usernames:read",
@@ -7690,6 +10152,8 @@
                         "inboxes:write",
                         "recipients:read",
                         "recipients:write",
+                        "rules:read",
+                        "rules:write",
                         "settings:read",
                         "settings:write",
                         "usernames:read",
@@ -7832,7 +10296,8 @@
                             "alias.deleted",
                             "mail.forwarded",
                             "mail.blocked",
-                            "recipient.bounced"
+                            "recipient.bounced",
+                            "rule.matched"
                           ]
                         }
                       },
@@ -7931,7 +10396,8 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
-                          "recipient.bounced"
+                          "recipient.bounced",
+                          "rule.matched"
                         ]
                       }
                     },
@@ -8035,7 +10501,8 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
-                          "recipient.bounced"
+                          "recipient.bounced",
+                          "rule.matched"
                         ]
                       }
                     ],
@@ -8047,7 +10514,8 @@
                         "alias.deleted",
                         "mail.forwarded",
                         "mail.blocked",
-                        "recipient.bounced"
+                        "recipient.bounced",
+                        "rule.matched"
                       ]
                     }
                   }
@@ -8110,7 +10578,8 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
-                          "recipient.bounced"
+                          "recipient.bounced",
+                          "rule.matched"
                         ]
                       }
                     },
@@ -8197,7 +10666,8 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
-                          "recipient.bounced"
+                          "recipient.bounced",
+                          "rule.matched"
                         ]
                       }
                     ],
@@ -8209,7 +10679,8 @@
                         "alias.deleted",
                         "mail.forwarded",
                         "mail.blocked",
-                        "recipient.bounced"
+                        "recipient.bounced",
+                        "rule.matched"
                       ]
                     }
                   },
@@ -8346,7 +10817,8 @@
                           "alias.deleted",
                           "mail.forwarded",
                           "mail.blocked",
-                          "recipient.bounced"
+                          "recipient.bounced",
+                          "rule.matched"
                         ]
                       }
                     },
@@ -8725,6 +11197,8 @@
                           "inboxes:write",
                           "recipients:read",
                           "recipients:write",
+                          "rules:read",
+                          "rules:write",
                           "settings:read",
                           "settings:write",
                           "usernames:read",
@@ -9071,6 +11545,8 @@
                           "inboxes:write",
                           "recipients:read",
                           "recipients:write",
+                          "rules:read",
+                          "rules:write",
                           "settings:read",
                           "settings:write",
                           "usernames:read",
@@ -9342,6 +11818,8 @@
                         "inboxes:write",
                         "recipients:read",
                         "recipients:write",
+                        "rules:read",
+                        "rules:write",
                         "settings:read",
                         "settings:write",
                         "usernames:read",
@@ -9412,6 +11890,8 @@
                             "inboxes:write",
                             "recipients:read",
                             "recipients:write",
+                            "rules:read",
+                            "rules:write",
                             "settings:read",
                             "settings:write",
                             "usernames:read",
@@ -10043,6 +12523,8 @@
               "inboxes:write",
               "recipients:read",
               "recipients:write",
+              "rules:read",
+              "rules:write",
               "settings:read",
               "settings:write",
               "usernames:read",
@@ -10365,6 +12847,163 @@
         "required": [
           "_tag",
           "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidRuleOrderEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidRuleOrder"
+            ]
+          }
+        },
+        "required": [
+          "_tag"
+        ],
+        "additionalProperties": false
+      },
+      "RuleNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RuleNotFound"
+            ]
+          },
+          "ruleId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "ruleId"
+        ],
+        "additionalProperties": false
+      },
+      "UnknownRecipientEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "UnknownRecipient"
+            ]
+          },
+          "recipientId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "recipientId"
+        ],
+        "additionalProperties": false
+      },
+      "TooManyRulesEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "TooManyRules"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "BlocklistEntryNotFoundEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "BlocklistEntryNotFound"
+            ]
+          },
+          "entryId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "entryId"
+        ],
+        "additionalProperties": false
+      },
+      "BlocklistFullEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "BlocklistFull"
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "InvalidBlocklistEntryEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "InvalidBlocklistEntry"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid-address",
+              "invalid-domain"
+            ]
+          }
+        },
+        "required": [
+          "_tag",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -11167,6 +13806,12 @@
     },
     {
       "name": "usernames"
+    },
+    {
+      "name": "blocklist"
+    },
+    {
+      "name": "rules"
     },
     {
       "name": "security"

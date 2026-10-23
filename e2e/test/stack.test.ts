@@ -1126,6 +1126,53 @@ describe("emulated stack", () => {
       }),
     );
 
+    it.effect("blocks a domain on every alias and tags mail by rule, both set over the API", () =>
+      Effect.gen(function* () {
+        yield* Transport.ensureIdentity("alias.test");
+        const ned = yield* owner("ned");
+        const write = (from: string, subject: string) =>
+          smtp({ from, to: ned.alias, subject, text: "Hi" });
+        const blocked = yield* call("/v1/blocklist", {
+          cookie: ned.cookie,
+          method: "POST",
+          body: { kind: "domain", value: "pushy.example", isSubdomainIncluded: true },
+        });
+        expect(blocked).toMatchObject({ status: 201, body: { id: "*.pushy.example" } });
+        const rule = yield* call("/v1/rules", {
+          cookie: ned.cookie,
+          method: "POST",
+          body: {
+            name: "Invoices",
+            isEnabled: true,
+            match: "all",
+            conditions: [
+              { field: "subject", match: "starts-with", value: "invoice", isNegated: false },
+            ],
+            actions: [
+              { type: "prefix-subject", value: "[€]" },
+              { type: "set-display-name", value: "Billing" },
+            ],
+          },
+        });
+        expect(rule.status).toBe(201);
+
+        expect(yield* invoke(yield* write("x@eu.pushy.example", "Buy now"))).toEqual([
+          { _tag: "Dropped", reason: "blocked-sender" },
+        ]);
+        expect(yield* invoke(yield* write("billing@shop.example", "Invoice 42"))).toEqual([
+          { _tag: "Forwarded" },
+        ]);
+        const forwarded = (yield* sentTo(ned.mailbox)).at(-1)?.text ?? "";
+        // The prefix is not ASCII, so the subject goes out as an encoded-word.
+        const subject = /^Subject: (.*)$/m.exec(forwarded)?.[1]?.trim() ?? "";
+        const word = /^=\?UTF-8\?B\?([^?]*)\?=$/.exec(subject)?.[1] ?? "";
+        expect(Buffer.from(word, "base64").toString("utf8")).toBe("[€] Invoice 42");
+        expect(forwarded).toMatch(/^From: "Billing"\r\n <shop\+r\./m);
+        // The confirmation mail and the one forward; the blocked mail never left.
+        expect(yield* sentTo(ned.mailbox)).toHaveLength(2);
+      }),
+    );
+
     it.effect("stops forwarding to a mailbox that hard-bounces, and says so in the API", () =>
       Effect.gen(function* () {
         yield* Transport.ensureIdentity("alias.test");

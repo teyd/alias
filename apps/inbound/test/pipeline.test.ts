@@ -1,11 +1,20 @@
 import { AwsClient, Inbound, Objects, type SesEvent, Transport } from "@alias/aws";
 import { FakeCloud } from "@alias/aws-emulators";
-import { ImageProxy, Keyring, Pgp, SharedDomains, TempDomains, Username } from "@alias/core";
+import {
+  ImageProxy,
+  Keyring,
+  Pgp,
+  type Rules,
+  SharedDomains,
+  TempDomains,
+  Username,
+} from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
   DeliveryRepo,
   DomainRepo,
+  FilterRepo,
   RecipientRepo,
   SentRepo,
   UserRepo,
@@ -28,6 +37,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import * as openpgp from "openpgp";
 import { ImageProxySigner, Limits, Pipeline, ReverseKeys, Spool } from "../src/index.ts";
@@ -1904,6 +1914,294 @@ describe("inbound pipeline: inbox mode (fakecloud)", () => {
         });
         expect(yield* Pipeline.handle(spam.event)).toEqual([{ _tag: "Dropped", reason: "spam" }]);
         expect(yield* storedObjects()).toEqual([]);
+      }),
+    ),
+  );
+});
+
+/** Saves `rules` as the owner's (usr_1), in order. */
+const saveRules = (rules: ReadonlyArray<Omit<Rules.Rule, "id" | "isEnabled" | "match">>) =>
+  FilterRepo.FilterRepo.use((repo) =>
+    repo.updateRules("usr_1", () =>
+      Result.succeed(
+        Arr.map(rules, (rule, index) => ({
+          id: `rl_${index}`,
+          isEnabled: true,
+          match: "all" as const,
+          ...rule,
+        })),
+      ),
+    ),
+  ).pipe(Effect.provide(FilterRepo.layer));
+
+const blockSender = (entryId: string) =>
+  FilterRepo.FilterRepo.use((repo) => repo.block("usr_1", entryId, 500)).pipe(
+    Effect.provide(FilterRepo.layer),
+  );
+
+const fromShop: Rules.Condition = {
+  field: "sender-domain",
+  match: "equals",
+  value: "store.example",
+  isNegated: false,
+};
+
+describe("blocklist and rules in the inbound pipeline (fakecloud)", () => {
+  it.effect("drops a blocked sender's mail on every alias, counted, and replies to it", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* alias({ id: "al_news", localPart: "news" });
+        yield* recipient("ada@mail.example");
+        const { reverse } = yield* forwardFrom("orders@store.example");
+        yield* blockSender("orders@store.example");
+
+        const both = yield* receive({
+          from: "Orders@Store.example",
+          recipients: ["shop@alias.test", "news@alias.test"],
+        });
+        expect(yield* Pipeline.handle(both.event)).toEqual([
+          { _tag: "Dropped", reason: "blocked-sender" },
+          { _tag: "Dropped", reason: "blocked-sender" },
+        ]);
+        expect(yield* counters).toEqual(Option.some([1, 1]));
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([
+          { _tag: "Dropped", reason: "blocked-sender" },
+        ]);
+        // Someone else at the same domain still gets through.
+        expect((yield* forwardFrom("support@store.example")).outcomes).toEqual([
+          { _tag: "Forwarded" },
+        ]);
+        expect(yield* sent).toHaveLength(2);
+      }),
+    ),
+  );
+
+  it.effect("blocks a domain with its subdomains, for inbox aliases too", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias({ mode: "inbox" });
+        yield* recipient("ada@mail.example");
+        yield* blockSender("*.store.example");
+        const { event } = yield* receive({
+          from: "x@mail.eu.store.example",
+          recipients: ["shop@alias.test"],
+        });
+        expect(yield* Pipeline.handle(event)).toEqual([
+          { _tag: "Dropped", reason: "blocked-sender" },
+        ]);
+        const other = yield* receive({
+          from: "x@notstore.example",
+          recipients: ["shop@alias.test"],
+        });
+        expect(yield* Pipeline.handle(other.event)).toEqual([{ _tag: "Stored" }]);
+      }),
+    ),
+  );
+
+  it.effect("rewrites the subject and the display name, and announces the match", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* WebhookRepo.WebhookRepo.use((repo) =>
+          repo.create({
+            id: "wh_1",
+            userId: "usr_1",
+            url: "https://hooks.example.com/",
+            eventTypes: ["rule.matched"],
+            sealedSecret: new TextEncoder().encode("sealed"),
+            createdAt: DateTime.makeUnsafe(0),
+          }),
+        ).pipe(Effect.provide(WebhookRepo.layer));
+        yield* saveRules([
+          {
+            name: "Shop",
+            conditions: [fromShop],
+            actions: [
+              { type: "prefix-subject", value: "[shop]" },
+              { type: "set-display-name", value: "My Shop" },
+              { type: "webhook" },
+            ],
+          },
+          {
+            name: "Never",
+            conditions: [{ ...fromShop, value: "elsewhere.example" }],
+            actions: [{ type: "block" }],
+          },
+        ]);
+        const { event } = yield* receive({ recipients: ["shop@alias.test"] });
+        expect(yield* Pipeline.handle(event)).toEqual([{ _tag: "Forwarded" }]);
+        // A redelivery announces nothing again.
+        yield* Pipeline.handle(event);
+
+        const [email] = yield* sent;
+        const raw = text(email?.raw ?? Option.none());
+        expect(header(raw, "Subject")).toEqual(Option.some("[shop] Order confirmed"));
+        expect(header(raw, "From")).toEqual(Option.some(`"My Shop" <${email?.from}>`));
+        const events = Arr.map(yield* queuedJobs(), (body) => JSON.parse(body).event);
+        expect(events).toEqual([
+          {
+            type: "rule.matched",
+            timestamp: expect.any(String),
+            data: { aliasId: "al_shop", address: "shop@alias.test", ruleId: "rl_0" },
+          },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("blocks by rule, counted, and only block reaches the reply path", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const { reverse } = yield* forwardFrom("orders@store.example");
+        yield* saveRules([
+          {
+            name: "Tag replies too?",
+            conditions: [fromShop],
+            actions: [{ type: "set-subject", value: "changed" }],
+          },
+        ]);
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([{ _tag: "Replied" }]);
+        expect(
+          Arr.last(yield* sent).pipe(Option.map((email) => header(text(email.raw), "Subject"))),
+        ).toEqual(Option.some(Option.some("Order confirmed")));
+
+        yield* saveRules([
+          {
+            name: "Orders",
+            conditions: [{ field: "subject", match: "contains", value: "ORDER", isNegated: false }],
+            actions: [{ type: "block" }],
+          },
+        ]);
+        expect((yield* forwardFrom("orders@store.example")).outcomes).toEqual([
+          { _tag: "Dropped", reason: "rule-blocked" },
+        ]);
+        expect(yield* counters).toEqual(Option.some([1, 1]));
+        expect(yield* replyTo(Option.getOrElse(reverse, () => ""))).toEqual([
+          { _tag: "Dropped", reason: "rule-blocked" },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("lets a rule's destination replace the alias's own recipients, else uses them", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* recipient("home@mail.example");
+        yield* recipient("work@mail.example");
+        yield* recipient("pending@mail.example", { isPending: true });
+        yield* alias({ recipientIds: ["rcp_home@mail.example", "rcp_ada@mail.example"] });
+        yield* saveRules([
+          {
+            name: "Work",
+            conditions: [fromShop],
+            actions: [{ type: "forward-to", recipientId: "rcp_work@mail.example" }],
+          },
+        ]);
+        yield* forwardFrom("orders@store.example");
+        yield* saveRules([
+          {
+            name: "Pending",
+            conditions: [fromShop],
+            actions: [{ type: "forward-to", recipientId: "rcp_pending@mail.example" }],
+          },
+        ]);
+        yield* forwardFrom("orders@store.example");
+        // The rule's one destination, then (it can't take mail) the alias's own two.
+        expect(Arr.map(yield* sent, (email) => email.to)).toEqual([
+          ["work@mail.example"],
+          ["home@mail.example"],
+          ["ada@mail.example"],
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("matches rules on the alias's labels", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* recipient("ada@mail.example");
+        yield* alias({ labels: ["Shopping"] });
+        yield* alias({ id: "al_work", localPart: "work" });
+        yield* saveRules([
+          {
+            name: "Shopping",
+            conditions: [
+              { field: "alias-label", match: "equals", value: "shopping", isNegated: false },
+            ],
+            actions: [{ type: "block" }],
+          },
+        ]);
+        const both = yield* receive({ recipients: ["shop@alias.test", "work@alias.test"] });
+        expect(yield* Pipeline.handle(both.event)).toEqual([
+          { _tag: "Dropped", reason: "rule-blocked" },
+          { _tag: "Forwarded" },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("forwards to the rule's destination when it is verified, else to the default", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        yield* recipient("work@mail.example");
+        yield* recipient("pending@mail.example", { isPending: true });
+        yield* saveRules([
+          {
+            name: "Work",
+            conditions: [fromShop],
+            actions: [{ type: "forward-to", recipientId: "rcp_work@mail.example" }],
+          },
+        ]);
+        yield* forwardFrom("orders@store.example");
+        yield* saveRules([
+          {
+            name: "Pending",
+            conditions: [fromShop],
+            actions: [{ type: "forward-to", recipientId: "rcp_pending@mail.example" }],
+          },
+        ]);
+        yield* forwardFrom("orders@store.example");
+        expect(Arr.map(yield* sent, (email) => email.to)).toEqual([
+          ["work@mail.example"],
+          ["ada@mail.example"],
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("skips tracker removal for the mail a rule names", () =>
+    withPipeline(
+      Effect.gen(function* () {
+        yield* alias();
+        yield* recipient("ada@mail.example");
+        const pixel = new TextEncoder().encode(
+          [
+            'From: "Shop" <shop@store.example>',
+            "To: shop@alias.test",
+            "Subject: Order confirmed",
+            "Content-Type: text/html; charset=utf-8",
+            "",
+            '<p>Hi</p><img src="https://t.store.example/open.gif" width="1" height="1">',
+            "",
+          ].join("\r\n"),
+        );
+        const forwardPixel = Effect.fn("forwardPixel")(function* () {
+          const { event } = yield* receive({ recipients: ["shop@alias.test"], raw: pixel });
+          yield* Pipeline.handle(event);
+          return text(Option.flatMap(Arr.last(yield* sent), (email) => email.raw));
+        });
+        expect(yield* forwardPixel()).not.toContain("open.gif");
+        yield* saveRules([
+          { name: "Keep", conditions: [fromShop], actions: [{ type: "skip-tracker-removal" }] },
+        ]);
+        expect(yield* forwardPixel()).toContain("open.gif");
       }),
     ),
   );

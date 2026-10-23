@@ -222,6 +222,22 @@ describe("Policy.forwardTargets", () => {
     );
     expect(Policy.forwardTargets(chosen, [a, pending], Option.none())).toEqual(Option.some([a]));
   });
+
+  it("lets a rule's destination replace the alias's while it is verified and not bouncing", () => {
+    const work = recipient("work@mail.example");
+    const pending = recipient("pending@mail.example", { isVerified: false });
+    const bounced = {
+      ...recipient("gone@mail.example"),
+      bouncedAt: Option.some(DateTime.makeUnsafe(2)),
+    };
+    const all = [recipient("a@mail.example", { isDefault: true }), work, pending, bounced];
+    const pick = (recipientId: string) => Policy.ruleTarget(all, Option.some(recipientId));
+    expect(pick(work.id)).toEqual(Option.some(work));
+    expect(pick(pending.id)).toEqual(Option.none());
+    expect(pick(bounced.id)).toEqual(Option.none());
+    expect(pick("rcp_unknown")).toEqual(Option.none());
+    expect(Policy.ruleTarget(all, Option.none())).toEqual(Option.none());
+  });
 });
 
 describe("Policy.sender", () => {

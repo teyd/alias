@@ -321,6 +321,31 @@ describe("alias CLI against the API on the function URL emulator", () => {
       }),
     );
 
+    it.effect("blocks senders everywhere, lists and unblocks them, and lists rules", () =>
+      Effect.gen(function* () {
+        const { run } = yield* loggedIn();
+        expect((yield* run(["blocklist", "list"])).text).toBe("Nobody is blocked.");
+        expect((yield* run(["blocklist", "add", "Spam@Mail.example"])).text).toBe(
+          "Blocked spam@mail.example: its mail to any of your aliases is dropped.",
+        );
+        yield* run(["blocklist", "add", "ads.example", "--subdomains"]);
+        expect(JSON.parse((yield* run(["blocklist", "ls", "--json"])).text)).toEqual([
+          { entry: "*.ads.example", kind: "domain" },
+          { entry: "spam@mail.example", kind: "address" },
+        ]);
+        expect((yield* run(["blocklist", "rm", "*.ads.example"])).text).toBe(
+          "Unblocked *.ads.example.",
+        );
+        const again = yield* run(["blocklist", "rm", "*.ads.example"]);
+        expect(Arr.join(again.err, "\n")).toContain("*.ads.example isn't blocked.");
+        const bad = yield* run(["blocklist", "add", "localhost"]);
+        expect(Arr.join(bad.err, "\n")).toContain("That isn't a domain like shop.example.");
+        expect((yield* run(["rules", "list"])).text).toBe(
+          "No rules yet: write them in the web app.",
+        );
+      }),
+    );
+
     it.effect("creates a temporary inbox, and waits for the code with --wait --otp", () =>
       Effect.gen(function* () {
         const { api, ada, run } = yield* loggedIn();

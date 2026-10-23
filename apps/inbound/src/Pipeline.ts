@@ -6,7 +6,16 @@ import {
   Transport,
 } from "@alias/aws";
 import type { WebhookEvent } from "@alias/contracts";
-import { Address, Mail, Pgp, ReverseToken, SharedDomains, TempDomains } from "@alias/core";
+import {
+  Address,
+  Blocklist,
+  Mail,
+  Pgp,
+  ReverseToken,
+  Rules,
+  SharedDomains,
+  TempDomains,
+} from "@alias/core";
 import {
   AliasRepo,
   ContactRepo,
@@ -14,6 +23,7 @@ import {
   DeliveryRepo,
   DomainRepo,
   type Dynamo,
+  FilterRepo,
   MessageRepo,
   RecipientRepo,
   SentRepo,
@@ -29,6 +39,7 @@ import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HashSet from "effect/HashSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
@@ -80,6 +91,8 @@ type Record = SesEvent.SesEvent["Records"][number];
 interface Send {
   readonly kind: "forward" | "reply";
   readonly alias: AliasRepo.Alias;
+  /** Rules whose `webhook` action matched (PLAN.md §20.32), announced once the mail is claimed. */
+  readonly notify?: ReadonlyArray<string>;
   /**
    * The checks that need the message's header block (loops, auto-replies, bounces) or spend an
    * allowance, run once it is read, then what goes out. Anything written for the message (a new
@@ -121,9 +134,17 @@ interface Copy {
 type Plan = Data.TaggedEnum<{
   Send: Send;
   /** Keep the message in the alias's inbox, then forward it too when `forward` says so (`both`). */
-  Store: { readonly alias: AliasRepo.Alias; readonly forward: Option.Option<Send> };
+  Store: {
+    readonly alias: AliasRepo.Alias;
+    readonly forward: Option.Option<Send>;
+    readonly notify?: ReadonlyArray<string>;
+  };
   /** Refused mail to an existing alias: counted as blocked. */
-  Block: { readonly alias: AliasRepo.Alias; readonly reason: Policy.DropReason };
+  Block: {
+    readonly alias: AliasRepo.Alias;
+    readonly reason: Policy.DropReason;
+    readonly notify?: ReadonlyArray<string>;
+  };
   Drop: { readonly reason: Policy.DropReason };
 }>;
 const Plan = Data.taggedEnum<Plan>();
@@ -201,12 +222,52 @@ const usernameRecipient = Effect.fn("Pipeline.usernameRecipient")(function* (
   return Option.flatMap(entry, (found) => found.defaultRecipientId);
 });
 
+/** Mail the blocklist or a rule blocks, and the rules whose webhooks still fire. */
+interface Filtered {
+  readonly reason: Extract<Policy.DropReason, "blocked-sender" | "rule-blocked">;
+  readonly notify: ReadonlyArray<string>;
+}
+
+/**
+ * The owner's blocklist and rules for mail between `sender` and the alias (PLAN.md §20.32): one
+ * GetItem. A blocked sender fails with the reason and the rules whose webhooks fire; otherwise
+ * the rules' outcome.
+ */
+const filter = Effect.fn("Pipeline.filter")(function* (
+  record: Record,
+  alias: AliasRepo.Alias,
+  sender: Option.Option<string>,
+): Effect.fn.Return<Result.Result<Rules.Outcome, Filtered>, DatabaseError, FilterRepo.FilterRepo> {
+  const filters = yield* (yield* FilterRepo.FilterRepo).find(alias.userId);
+  const listed = Option.flatMap(sender, (address) =>
+    Blocklist.match(HashSet.fromIterable(filters.blocklist), address),
+  );
+  if (Option.isSome(listed)) {
+    return Result.fail({ reason: "blocked-sender", notify: [] });
+  }
+  const outcome = Rules.evaluate(filters.rules, {
+    sender,
+    subject: Option.fromUndefinedOr(record.ses.mail.commonHeaders.subject),
+    alias: Address.format(aliasAddress(alias)),
+    labels: alias.labels,
+  });
+  return Option.isSome(outcome.blockedBy)
+    ? Result.fail({ reason: "rule-blocked", notify: outcome.notify })
+    : Result.succeed(outcome);
+});
+
 const planForward = Effect.fn("Pipeline.planForward")(function* (
   record: Record,
   alias: AliasRepo.Alias,
+  ruled: Rules.Outcome,
 ) {
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
-  const targets = Policy.forwardTargets(alias, recipients, yield* usernameRecipient(alias));
+  // A rule's destination, while it can take mail, replaces the alias's (PLAN.md §20.32).
+  const preferred = yield* usernameRecipient(alias);
+  const targets = Option.match(Policy.ruleTarget(recipients, ruled.recipientId), {
+    onSome: (target) => Option.some(Arr.of(target)),
+    onNone: () => Policy.forwardTargets(alias, recipients, preferred),
+  });
   if (Option.isNone(targets)) return Plan.Drop({ reason: "no-recipient" });
   // Paused recipients get nothing; mail goes on to the others.
   const live = Arr.filter(targets.value, (target) => Option.isNone(target.bouncedAt));
@@ -228,17 +289,17 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
   const address = aliasAddress(alias);
   const reverseKeys = yield* ReverseKeys;
   const settings = yield* (yield* UserRepo.UserRepo).settings(alias.userId);
-  const protection: Mail.Protection = {
-    images: settings.imageProtection,
-    isLinkCleaningEnabled: settings.isLinkCleaningEnabled,
-  };
+  const protection: Mail.Protection = ruled.isTrackerRemovalSkipped
+    ? { images: "off", isLinkCleaningEnabled: false }
+    : { images: settings.imageProtection, isLinkCleaningEnabled: settings.isLinkCleaningEnabled };
+  const edits: Mail.Edits = { subject: ruled.subject, displayName: ruled.displayName };
   const imageProxy = yield* ImageProxySigner;
   const aliases = yield* AliasRepo.AliasRepo;
   const { forwardsPerHour } = yield* Limits.Limits;
   // Encryption comes after every other rewrite: what is encrypted is exactly what the owner
   // would otherwise have received.
   const encrypt = (target: RecipientRepo.Recipient) => (forwarded: Uint8Array) =>
-    Option.match(target.encryption, {
+    Option.match(ruled.isEncryptionSkipped ? Option.none() : target.encryption, {
       onNone: () => Effect.succeed(forwarded),
       onSome: (key) =>
         Effect.flatMap(DateTime.now, (now) =>
@@ -290,6 +351,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
           protection,
           // Proxied images spend the alias owner's fetch budget (PLAN.md §20.29).
           imageProxy: { ...imageProxy, owner: { aliasId: alias.id, userId: alias.userId } },
+          edits,
           // Signing image URLs needs a working SHA-256; without one nothing can run.
         }).pipe(Effect.catchTag("PlatformError", Effect.die)),
       copies: Arr.map(live, (target) => ({
@@ -299,7 +361,7 @@ const planForward = Effect.fn("Pipeline.planForward")(function* (
       })),
     });
   });
-  return Plan.Send({ kind: "forward", alias, admit });
+  return Plan.Send({ kind: "forward", alias, admit, notify: ruled.notify });
 });
 
 const planReply = Effect.fn("Pipeline.planReply")(function* (
@@ -313,6 +375,10 @@ const planReply = Effect.fn("Pipeline.planReply")(function* (
   const target = yield* replyTarget(alias, claims.value);
   if (Result.isFailure(target)) return Plan.Drop({ reason: target.failure });
   const contact = target.success;
+  // The blocklist and a rule's `block` work both ways, like a blocked contact; nothing else of
+  // a rule touches a reply (PLAN.md §20.32).
+  const filtered = yield* filter(record, alias, Option.some(contact));
+  if (Result.isFailure(filtered)) return Plan.Drop({ reason: filtered.failure.reason });
   const recipients = yield* (yield* RecipientRepo.RecipientRepo).list(alias.userId);
   const sender = Option.fromUndefinedOr(record.ses.mail.commonHeaders.from).pipe(
     Option.flatMap(Arr.head),
@@ -508,13 +574,26 @@ const plan = Effect.fn("Pipeline.plan")(function* (record: Record, recipient: st
   const screened = Policy.screen(record.ses.receipt, Policy.spamAction(alias));
   if (Option.isSome(screened)) return Plan.Block({ alias, reason: screened.value });
   if (Route.$is("Reply")(routed)) return yield* planReply(record, alias, routed.token);
-  if (alias.mode === "inbox") return Plan.Store({ alias, forward: Option.none() });
-  const forwarding = yield* planForward(record, alias);
+  const filtered = yield* filter(
+    record,
+    alias,
+    Option.map(Policy.sender(record.ses.mail), (sender) => sender.address),
+  );
+  if (Result.isFailure(filtered)) {
+    return Plan.Block({ alias, reason: filtered.failure.reason, notify: filtered.failure.notify });
+  }
+  const ruled = filtered.success;
+  // Inbox mode keeps mail as it came: only a rule's block and webhook apply.
+  if (alias.mode === "inbox") {
+    return Plan.Store({ alias, forward: Option.none(), notify: ruled.notify });
+  }
+  const forwarding = yield* planForward(record, alias, ruled);
   if (alias.mode === "forward" || Plan.$is("Block")(forwarding)) return forwarding;
   // Both: kept in any case, forwarded when it can be.
   return Plan.Store({
     alias,
     forward: Plan.$is("Send")(forwarding) ? Option.some(forwarding) : Option.none(),
+    notify: ruled.notify,
   });
 });
 
@@ -553,6 +632,29 @@ const announce = Effect.fn("Pipeline.announce")(function* (
     `${delivery.messageId}:${delivery.recipient}`,
   );
 });
+
+/** One `rule.matched` event per rule whose `webhook` action matched, keyed by message and rule. */
+const announceRules = (
+  delivery: DeliveryRepo.Delivery,
+  alias: AliasRepo.Alias,
+  ruleIds: ReadonlyArray<string>,
+) =>
+  Effect.forEach(
+    ruleIds,
+    Effect.fnUntraced(function* (ruleId) {
+      const event: WebhookEvent = {
+        type: "rule.matched",
+        timestamp: DateTime.formatIso(yield* DateTime.now),
+        data: { aliasId: alias.id, address: Address.format(aliasAddress(alias)), ruleId },
+      };
+      yield* (yield* Publisher.Publisher).publish(
+        alias.userId,
+        event,
+        `${delivery.messageId}:${delivery.recipient}:${ruleId}`,
+      );
+    }),
+    { concurrency: 1, discard: true },
+  );
 
 /** Counts a refusal of mail to an existing alias as blocked; plain drops count nothing. */
 const refuse = (
@@ -724,6 +826,7 @@ const execute = Effect.fn("Pipeline.execute")(function* (
   const deliveries = yield* DeliveryRepo.DeliveryRepo;
   const expiresAt = DateTime.addDuration(yield* DateTime.now, CLAIM_LIFETIME);
   if (!(yield* deliveries.claim(delivery, expiresAt))) return duplicate;
+  yield* announceRules(delivery, planned.alias, planned.notify ?? []);
   if (Plan.$is("Block")(planned)) return yield* refuse(delivery, planned);
   // Temporary failures give the claim back so Lambda's retry can send it.
   const defer = (code: string) => Effect.as(deliveries.release(delivery), deferred(code));
@@ -828,6 +931,7 @@ export const layer = <E, R>(
     SentRepo.layer,
     DeliveryRepo.layer,
     DomainRepo.layer,
+    FilterRepo.layer,
     MessageRepo.layer,
     UserRepo.layer,
     UsernameRepo.layer,

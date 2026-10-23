@@ -30,6 +30,7 @@ import { DynamoTable } from "./Dynamo.ts";
  * | Sent              | `USER#<userId>`              | `SENT#<sesMessageId>`  |                            |                           | `expiresAt` |
  * | Webhook           | `USER#<userId>`              | `WEBHOOK#<id>`         |                            |                           |             |
  * | LabelColor        | `USER#<userId>`              | `LABEL#<label>`        |                            |                           |             |
+ * | Filters           | `USER#<userId>`              | `FILTERS`              |                            |                           |             |
 
  * | UsernameEntry     | `USER#<userId>`              | `USERNAME#<username>`  |                            |                           |             |
  * | UsernameCount     | `USER#<userId>`              | `USERNAMES`            |                            |                           |             |
@@ -191,6 +192,12 @@ import { DynamoTable } from "./Dynamo.ts";
  * A Webhook is one of the user's webhook endpoints, in their partition: every published event
  * lists the user's webhooks with one strongly consistent Query (`begins_with(sk, "WEBHOOK#")`),
  * and a delivery reads its endpoint (URL, secrets) with one GetItem.
+ *
+ * Filters holds the user's blocklist (a string set `blocked` of sender addresses, domains and
+ * `*.domain` entries) and their rules (`rules`, JSON, with `rulesVersion` for optimistic
+ * concurrency), PLAN.md §20.32. The inbound Lambda reads it with one strongly consistent GetItem
+ * per message; adding or removing an entry is one `ADD`/`DELETE` UpdateItem, so no entry is lost
+ * to a concurrent change, and both lists are bounded so the item stays small.
  *
  * A DeviceGrant is a device login in progress (OAuth 2.0 device authorization grant, PLAN.md
  * §20.23), stored under the SHA-256 of its device code, so each poll costs one strongly

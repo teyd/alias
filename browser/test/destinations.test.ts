@@ -64,13 +64,15 @@ describe("destinations and contacts in the web app", () => {
           const link = new RegExp(`${origin}/destinations\\?\\S+`).exec(confirmation?.text ?? "");
           expect(link).not.toBeNull();
           yield* ui(async () => {
+            // Opening the link while signed in confirms it, without another click.
             await page.goto(link?.[0] ?? "/");
-            const confirm = page.getByRole("button", { name: "Confirm this address" });
-            await confirm.click();
-            await confirm.waitFor({ state: "detached" });
+            await page
+              .getByRole("status", { name: "Confirmation link" })
+              .getByText(`${mailbox} is confirmed`)
+              .waitFor();
             await page.getByRole("button", { name: "Resend link" }).waitFor({ state: "detached" });
           });
-          expect(new URL(page.url()).search).toBe("");
+          expect([...new URL(page.url()).searchParams.keys()]).toEqual(["confirmed"]);
           expect(yield* api(page, "/v1/recipients", Recipients)).toEqual([
             { address: mailbox, isVerified: true, isDefault: true },
           ]);
@@ -176,6 +178,54 @@ describe("destinations and contacts in the web app", () => {
           await row.getByText("Paused", { exact: true }).waitFor();
           await row.getByText("its mail server says the mailbox doesn't exist").waitFor();
           await row.getByRole("button", { name: "Resume" }).waitFor();
+        });
+      }),
+    );
+
+    it.effect("confirms a link opened while signed out once its owner signs in", () =>
+      Effect.gen(function* () {
+        const { origin } = yield* WebApp;
+        const { page } = yield* openPage();
+        const mailbox = "finn@mailbox.example";
+        yield* signUp(page, "finn");
+        yield* ui(async () => {
+          await goTo(page, "Destinations");
+          await page.getByRole("button", { name: "Add destination" }).first().click();
+          const dialog = page.getByRole("dialog", { name: "Add destination" });
+          await dialog.getByRole("textbox", { name: "Mailbox address" }).fill(mailbox);
+          await dialog.getByRole("button", { name: "Send confirmation" }).click();
+          await page
+            .getByRole("dialog", { name: "Check your inbox" })
+            .getByRole("button", { name: "Done" })
+            .click();
+          await page.getByRole("button", { name: "Log out" }).click();
+          await page.getByRole("button", { name: "Log in with a passkey" }).waitFor();
+        });
+        const [confirmation] = yield* sentTo(mailbox);
+        const link = new RegExp(`${origin}/destinations\\?\\S+`).exec(confirmation?.text ?? "");
+        const href = link?.[0] ?? "/";
+
+        // Signed out, the link shows the login in place and keeps its query.
+        yield* ui(async () => {
+          await page.goto(href);
+          await page.getByRole("button", { name: "Log in with a passkey" }).click();
+          await page
+            .getByRole("status", { name: "Confirmation link" })
+            .getByText(`${mailbox} is confirmed`)
+            .waitFor();
+        });
+        expect([...new URL(page.url()).searchParams.keys()]).toEqual(["confirmed"]);
+        expect(yield* api(page, "/v1/recipients", Recipients)).toEqual([
+          { address: mailbox, isVerified: true, isDefault: true },
+        ]);
+
+        // The link works once; opened again, it only says there is nothing left to do.
+        yield* ui(async () => {
+          await page.goto(href);
+          await page
+            .getByRole("status", { name: "Confirmation link" })
+            .getByText(`${mailbox} is already confirmed`)
+            .waitFor();
         });
       }),
     );

@@ -11,7 +11,7 @@ import { meQuery } from "@/lib/session";
 
 /**
  * Passkey login. Signing in keeps the current URL, so a confirmation link opened while signed
- * out still confirms afterwards.
+ * out confirms on its own right after.
  */
 export const SignIn = ({ onSignedIn }: { readonly onSignedIn?: () => void }) => {
   const queryClient = useQueryClient();

@@ -233,8 +233,9 @@ export const confirmDestination = Effect.fn("browser.confirmDestination")(functi
   );
   yield* ui(async () => {
     await page.goto(link?.[0] ?? "/");
-    const confirm = page.getByRole("button", { name: "Confirm this address" });
-    await confirm.click();
-    await confirm.waitFor({ state: "detached" });
+    await page
+      .getByRole("status", { name: "Confirmation link" })
+      .getByText(`${mailbox} is confirmed`)
+      .waitFor();
   });
 });
